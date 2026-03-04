@@ -1,3 +1,4 @@
+import json
 from db_manager import get_db
 from google.cloud import firestore
 from firebase_admin import storage
@@ -9,9 +10,18 @@ import os
 import shutil
 import requests
 
-# --- CONFIGURATIE ---
-DOCUMENT_ID = "gbox-001"
+# --- CONFIGURATIE (Template-stijl) ---
 BUCKET_NAME = "gridbox-platform.firebasestorage.app"
+
+# Laad de configuratie uit het lokale JSON bestand
+try:
+    with open('box_config.json', 'r') as f:
+        config_data = json.load(f)
+        DOCUMENT_ID = config_data.get('deviceId')
+        print(f"✅ Config geladen voor: {DOCUMENT_ID}")
+except FileNotFoundError:
+    print("❌ FOUT: 'box_config.json' niet gevonden. Kan niet opstarten zonder ID.")
+    exit(1) # Stop het script als we niet weten welke box dit is
 
 # --- Hardware Setup ---
 if platform.system() == "Windows":
@@ -41,22 +51,17 @@ camera_monitoring_active = False
 
 # --- Camera Functie ---
 def capture_snapshot():
-    """Haalt snapshot op met authenticatie en upload naar specifieke Firebase Storage bucket."""
     config = get_hardware_config().get('camera', {})
     if not config.get('enabled', False): return None
     
-    # URL en inloggegevens uit de Firestore config
     camera_url = config.get('snapshotUrl', 'http://192.168.10.100/cgi-bin/snapshot.cgi')
     username = config.get('username', '')
     password = config.get('password', '')
     
     try:
-        # Authenticatie toevoegen
         response = requests.get(camera_url, auth=(username, password), timeout=5)
-        
         if response.status_code == 200:
             filename = f"snapshots/{DOCUMENT_ID}_{int(time.time())}.jpg"
-            # Hier gebruiken we de bucket-naam specifiek
             bucket = storage.bucket(BUCKET_NAME)
             blob = bucket.blob(filename)
             blob.upload_from_string(response.content, content_type='image/jpeg')
@@ -69,7 +74,6 @@ def capture_snapshot():
     return None
 
 def camera_loop():
-    """Thread: Blijft foto's maken zolang camera_monitoring_active True is."""
     global camera_monitoring_active
     print("🎥 Camera monitoring gestart.")
     while camera_monitoring_active:
