@@ -1,0 +1,13 @@
+[Unit]
+Description=Gridbox IoT Service
+After=network.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/Projects/dijkmans-gridbox-platform-next2
+ExecStart=/usr/bin/python3 src/listener.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
