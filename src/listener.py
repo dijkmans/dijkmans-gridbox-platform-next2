@@ -1,6 +1,7 @@
 import json
 from db_manager import get_db
 from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 from firebase_admin import storage
 from datetime import datetime, timedelta, timezone
 import platform
@@ -153,11 +154,15 @@ def auto_close_task():
 # --- Commando Afhandeling ---
 def handle_command(doc_ref, data):
     global auto_close_timer, camera_monitoring_active
+    
+    # FILTER: Negeer alles wat niet voor deze specifieke box is
+    if data.get('boxId') != DOCUMENT_ID: return
+
     command = data.get('command', '').upper()
     phone = data.get('phone') 
     
     if not is_authorized(phone):
-        log_audit(phone, command, False, "Unauthorized access attempt")
+        log_audit(phone, command, False, "Unauthorized access")
         doc_ref.update({'status': 'denied'})
         return
 
@@ -167,7 +172,7 @@ def handle_command(doc_ref, data):
             if not camera_monitoring_active:
                 camera_monitoring_active = True
                 threading.Thread(target=camera_loop, daemon=True).start()
-            
+                
             GPIO.output(DOOR_PIN, True)
             if config.get('lighting', {}).get('onWhenOpen', True): GPIO.output(LIGHT_PIN, GPIO.HIGH)
             
@@ -176,16 +181,15 @@ def handle_command(doc_ref, data):
                 if auto_close_timer: auto_close_timer.cancel()
                 auto_close_timer = threading.Timer(auto_close.get('delayMs', 60000)/1000, auto_close_task)
                 auto_close_timer.start()
-            
-            msg = "Command executed successfully"
-            log_audit(phone, command, True, msg)
+                
+            log_audit(phone, command, True, "Command executed")
             
         elif command == "CLOSE":
             camera_monitoring_active = False
             if auto_close_timer: auto_close_timer.cancel()
             GPIO.output(DOOR_PIN, False)
             GPIO.output(LIGHT_PIN, GPIO.LOW)
-            log_audit(phone, command, True, "Command executed successfully")
+            log_audit(phone, command, True, "Command executed")
             
         elif command == "SNAPSHOT":
             link = capture_snapshot()
@@ -198,8 +202,11 @@ def handle_command(doc_ref, data):
 
 # --- Start ---
 update_pi_status()
-print("👂 Luisterend naar commando's...")
-query_watch = db.collection('boxCommands').on_snapshot(lambda col, chg, read: [handle_command(c.document.reference, c.document.to_dict()) for c in chg if c.type.name in ['ADDED', 'MODIFIED'] and c.document.to_dict().get('status') == 'pending'])
+print(f"👂 Luisterend naar commando's voor: {DOCUMENT_ID}...")
+
+# FILTER: Gebruikt nu FieldFilter om waarschuwingen te voorkomen
+query = db.collection('boxCommands').where(filter=FieldFilter('boxId', '==', DOCUMENT_ID)).where(filter=FieldFilter('status', '==', 'pending'))
+query_watch = query.on_snapshot(lambda col, chg, read: [handle_command(c.document.reference, c.document.to_dict()) for c in chg if c.type.name in ['ADDED', 'MODIFIED']])
 
 try: input()
 except KeyboardInterrupt:
