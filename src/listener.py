@@ -10,8 +10,10 @@ import sys
 import os
 
 # --- CONFIGURATIE ---
-VERSION = "1.0.5"
+VERSION = "1.0.9"
 cached_config = {}
+light_timer = None 
+processed_commands = set() # Het geheugen van het script
 
 try:
     with open('box_config.json', 'r') as f:
@@ -62,9 +64,8 @@ def get_git_revision_hash():
 
 def get_latest_git_tag():
     try:
-        # Haal de meest recente tag op (bijv. v1.0.5)
         tag = subprocess.check_output(['git', 'describe', '--tags', '--abbrev=0']).decode('ascii').strip()
-        return tag.replace('v', '') # We willen alleen "1.0.5"
+        return tag.replace('v', '') 
     except Exception:
         return VERSION
 
@@ -93,17 +94,14 @@ def check_for_updates(data):
     target_version = software.get('targetVersion', VERSION)
     update_status = software.get('updateStatus', 'IDLE')
     
-    # 1. Update de 'latestAvailable' in Firestore (Rapportage)
     latest_git = get_latest_git_tag()
     if software.get('latestAvailable') != latest_git:
         db.collection('boxes').document(DOCUMENT_ID).update({'software.latestAvailable': latest_git})
 
-    # 2. Handrem-logica: Update ALLEEN als status 'READY_TO_UPDATE' is
     if update_status == 'READY_TO_UPDATE' and target_version != VERSION:
         print(f"📡 Update commando ontvangen! Van {VERSION} naar {target_version}")
         perform_update(target_version)
     elif update_status == 'READY_TO_UPDATE' and target_version == VERSION:
-        # Als we al op de juiste versie zijn, reset de status naar IDLE
         db.collection('boxes').document(DOCUMENT_ID).update({'software.updateStatus': 'IDLE'})
 
 # --- Sync Functies ---
@@ -138,7 +136,8 @@ def update_pi_status():
             doc_ref.update({
                 'software.lastHeartbeat': hours_now,
                 'software.currentVersion': VERSION,
-                'software.gitCommit': get_git_revision_hash()
+                'software.gitCommit': get_git_revision_hash(),
+                'software.error': '' 
             })
         except Exception as e: print(f"⚠️ Fout bij heartbeat: {e}")
 
@@ -151,17 +150,26 @@ def update_pi_status():
 
 # --- Hardware & Commando's ---
 def turn_light_off():
+    global light_timer
     GPIO.output(LIGHT_PIN, GPIO.LOW)
     print("💡 [STATUS] Licht is nu uitgeschakeld.")
+    light_timer = None
 
 def close_box(trigger_source="SMS"):
+    global light_timer
     print(f"🔒 Box aan het sluiten... (Trigger: {trigger_source})")
     GPIO.output(DOOR_PIN, False)
+    
+    if light_timer is not None:
+        light_timer.cancel()
+
     hw_config = cached_config.get('hardware', {})
     lighting = hw_config.get('lighting', {})
     delay = lighting.get('lightOffDelaySeconds', 60)
+    
     print(f"💡 [STATUS] Licht blijft aan voor {delay} seconden.")
-    threading.Timer(float(delay), turn_light_off).start()
+    light_timer = threading.Timer(float(delay), turn_light_off)
+    light_timer.start()
 
 def is_authorized(phone_number):
     try:
@@ -171,34 +179,70 @@ def is_authorized(phone_number):
     except Exception as e: return False
 
 def handle_command(doc_ref, data):
+    # 1. Geheugencheck (Hebben we dit document al behandeld?)
+    if doc_ref.id in processed_commands:
+        return
+
+    # 2. Statuscheck
+    if data.get('status') != 'pending':
+        return 
+
+    # 3. Markering
+    processed_commands.add(doc_ref.id) 
+    doc_ref.update({'status': 'processing'})
+    
     command = data.get('command', '').upper()
     phone = data.get('phone') 
+    
     if not is_authorized(phone):
-        doc_ref.update({'operation.lastCommandStatus': 'denied'})
+        doc_ref.update({'status': 'denied', 'lastCommandStatus': 'denied'})
         return
+
     try:
+        hw_config = cached_config.get('hardware', {})
+        
         if command == "OPEN":
+            print(f"🔓 Box openen (ID: {doc_ref.id})...")
             GPIO.output(DOOR_PIN, True)
-            hw_config = cached_config.get('hardware', {})
-            if hw_config.get('lighting', {}).get('onWhenOpen', True): GPIO.output(LIGHT_PIN, GPIO.HIGH)
+            
+            if hw_config.get('lighting', {}).get('onWhenOpen', True):
+                GPIO.output(LIGHT_PIN, GPIO.HIGH)
+                
             auto_close = hw_config.get('autoClose', {})
             if auto_close.get('enabled', False):
                 delay = auto_close.get('delaySeconds', 60)
+                print(f"⏳ AutoClose geactiveerd ({delay}s).")
                 threading.Timer(float(delay), lambda: close_box("AutoClose")).start()
-            doc_ref.update({'operation.lastCommandStatus': 'completed'})
+            
+            doc_ref.update({'status': 'completed', 'lastCommandStatus': 'completed'})
+            
         elif command == "CLOSE":
+            print(f"🔒 Box sluiten (ID: {doc_ref.id})...")
             close_box(trigger_source="SMS")
-            doc_ref.update({'operation.lastCommandStatus': 'completed'})
+            doc_ref.update({'status': 'completed', 'lastCommandStatus': 'completed'})
+            
     except Exception as e:
-        doc_ref.update({'operation.lastCommandStatus': 'error', 'error': str(e)})
+        print(f"❌ Fout bij commando: {e}")
+        doc_ref.update({'status': 'error', 'error': str(e)})
 
-# --- Start ---
+# --- Start & Interactieve Console ---
 update_pi_status()
-print(f"👂 Luisterend naar {DOCUMENT_ID} (Versie {VERSION})...")
+print(f"\n👂 Luisterend naar {DOCUMENT_ID} (Versie {VERSION})...")
+print("⌨️  Typ 'c' en druk op Enter om de 'Fysieke Sluit-knop' (GPIO 27) te simuleren.")
+print("⌨️  Typ 'exit' om te stoppen.")
+
 query = db.collection('boxes').document(DOCUMENT_ID).collection('commands').where(filter=FieldFilter('status', '==', 'pending'))
 query_watch = query.on_snapshot(lambda col, chg, read: [handle_command(c.document.reference, c.document.to_dict()) for c in chg if c.type.name in ['ADDED', 'MODIFIED']])
 
-try: input()
+try:
+    while True:
+        cmd = input("> ")
+        if cmd.lower() == 'c':
+            physical_close_callback(CLOSE_BTN_PIN)
+        elif cmd.lower() == 'exit':
+            break
 except KeyboardInterrupt:
+    print("\n👋 Handmatige stop.")
+finally:
     GPIO.cleanup()
-    print("\n👋 Luisteraar gestopt.")
+    print("🧹 GPIO opgeschoond. Tot ziens!")
