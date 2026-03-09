@@ -10,7 +10,7 @@ import sys
 import os
 
 # --- CONFIGURATIE ---
-VERSION = "1.0.2" 
+VERSION = "1.0.3" 
 cached_config = {}
 
 try:
