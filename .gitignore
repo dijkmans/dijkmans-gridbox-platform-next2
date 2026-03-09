@@ -1,18 +1,28 @@
 # Python cache bestanden
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
-# Firebase en andere geheime configuratie-bestanden (Cruciaal!)
-*.json
-*.env
+# Geheime configuratie (Niet uploaden!)
+# Specifiek de paden die in je foutmelding stonden
+box_config.json
+config/serviceAccountKey.json
 service-account-key.json
+*.env
 
-# Omgevingen
+# Node Modules (De oorzaak van je enorme lijst)
+node_modules/
+functions/node_modules/
+
+# Omgevingen (Virtual Environments)
 venv/
 env/
 .env
+.venv/
 
-# Windows systeem bestanden
+# Windows systeem & IDE bestanden
 .DS_Store
 .vscode/
+.idea/
 Thumbs.db
