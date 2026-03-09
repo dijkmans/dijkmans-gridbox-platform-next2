@@ -1,4 +1,4 @@
-# release.ps1 - Geautomatiseerde release workflow
+# release.ps1 - Geautomatiseerde release workflow (VEILIGE VERSIE)
 # Bron van waarheid: src/listener.py
 Write-Host "--- Gridbox Release Script ---" -ForegroundColor Cyan
 
@@ -34,9 +34,12 @@ if ($confirm -ne 'y') {
     exit 
 }
 
-# 4. Git acties
+# 4. Git acties (VEILIG: Voeg alleen expliciete bestanden toe)
 Write-Host "Bezig met Git commits..." -ForegroundColor Cyan
-git add .
+
+# Hier voegen we alleen de bestanden toe die we in Git willen hebben
+git add src/listener.py src/db_manager.py .gitignore release.ps1 README.md
+
 git commit -m "Release v$version"
 git tag -a "v$version" -m "Release v$version"
 

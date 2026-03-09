@@ -11,7 +11,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from db_manager import get_db
 
 # --- CONFIGURATIE ---
-VERSION = "1.0.25-FIXED"
+VERSION = "1.0.25"
 KEY_PATH = "service-account.json"
 BUCKET_NAME = "gridbox-platform.firebasestorage.app"
 door_is_open = False 
