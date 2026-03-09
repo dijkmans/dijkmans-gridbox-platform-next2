@@ -10,7 +10,7 @@ import sys
 import os
 
 # --- CONFIGURATIE ---
-VERSION = "1.0.1" 
+VERSION = "1.0.2" 
 cached_config = {}
 
 try:
@@ -37,12 +37,11 @@ else:
 
 DOOR_PIN = 17
 LIGHT_PIN = 22
-CLOSE_BTN_PIN = 27 # Nieuwe fysieke knop
+CLOSE_BTN_PIN = 27 
 
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(DOOR_PIN, GPIO.OUT)
 GPIO.setup(LIGHT_PIN, GPIO.OUT)
-# Configureer Close-knop met interne pull-up weerstand
 GPIO.setup(CLOSE_BTN_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
 db = get_db()
@@ -52,7 +51,7 @@ def physical_close_callback(channel):
     print("🔘 [PHYSICAL] Fysieke sluit-knop ingedrukt!")
     close_box(trigger_source="PhysicalButton")
 
-# Detecteer indrukken (FALLING edge omdat pull-up weerstand gebruikt wordt)
+# Event detectie voor de fysieke knop
 GPIO.add_event_detect(CLOSE_BTN_PIN, GPIO.FALLING, callback=physical_close_callback, bouncetime=300)
 
 # --- Utility & OTA Functies ---
@@ -111,7 +110,6 @@ def update_pi_status():
     else:
         data = doc.to_dict()
         check_for_updates(data)
-        software = data.get('software', {})
         try:
             doc_ref.update({
                 'software.lastHeartbeat': hours_now,
