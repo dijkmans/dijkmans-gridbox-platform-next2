@@ -10,7 +10,7 @@ import sys
 import os
 
 # --- CONFIGURATIE ---
-VERSION = "1.0.4" 
+VERSION = "1.0.5"
 cached_config = {}
 
 try:
@@ -60,30 +60,30 @@ def get_git_revision_hash():
     except Exception:
         return "unknown"
 
+def get_latest_git_tag():
+    try:
+        # Haal de meest recente tag op (bijv. v1.0.5)
+        tag = subprocess.check_output(['git', 'describe', '--tags', '--abbrev=0']).decode('ascii').strip()
+        return tag.replace('v', '') # We willen alleen "1.0.5"
+    except Exception:
+        return VERSION
+
 def perform_update(target_version):
     print(f"🚀 [OTA] Update proces gestart naar versie {target_version}...")
     doc_ref = db.collection('boxes').document(DOCUMENT_ID)
     try:
         doc_ref.update({'software.updateStatus': 'UPDATING'})
-        
-        # 1. Haal alle nieuwste tags op van GitHub
         subprocess.check_call(['git', 'fetch', '--tags'])
-        
-        # 2. Check de specifieke versie (tag) uit
         tag_name = f"v{target_version}"
         subprocess.check_call(['git', 'checkout', tag_name])
         
         print(f"✅ Succesvol gewisseld naar {tag_name}")
-        
         doc_ref.update({
             'software.updateStatus': 'SUCCESS', 
             'software.currentVersion': target_version
         })
-        
-        # 3. Herstart het script
         print("🔄 Herstarten...")
         os.execv(sys.executable, ['python'] + sys.argv)
-        
     except Exception as e:
         print(f"❌ Update gefaald: {e}")
         doc_ref.update({'software.updateStatus': 'FAILED', 'software.error': str(e)})
@@ -93,10 +93,18 @@ def check_for_updates(data):
     target_version = software.get('targetVersion', VERSION)
     update_status = software.get('updateStatus', 'IDLE')
     
-    # Check of we moeten updaten (versie is anders en we zijn niet al bezig)
-    if target_version != VERSION and update_status != 'UPDATING':
-        print(f"📡 Update gevonden! Van {VERSION} naar {target_version}")
+    # 1. Update de 'latestAvailable' in Firestore (Rapportage)
+    latest_git = get_latest_git_tag()
+    if software.get('latestAvailable') != latest_git:
+        db.collection('boxes').document(DOCUMENT_ID).update({'software.latestAvailable': latest_git})
+
+    # 2. Handrem-logica: Update ALLEEN als status 'READY_TO_UPDATE' is
+    if update_status == 'READY_TO_UPDATE' and target_version != VERSION:
+        print(f"📡 Update commando ontvangen! Van {VERSION} naar {target_version}")
         perform_update(target_version)
+    elif update_status == 'READY_TO_UPDATE' and target_version == VERSION:
+        # Als we al op de juiste versie zijn, reset de status naar IDLE
+        db.collection('boxes').document(DOCUMENT_ID).update({'software.updateStatus': 'IDLE'})
 
 # --- Sync Functies ---
 def get_box_full_doc():
@@ -110,7 +118,6 @@ def update_pi_status():
     global cached_config
     doc_ref = db.collection('boxes').document(DOCUMENT_ID)
     doc = doc_ref.get()
-    
     hours_now = round(time.time() / 3600, 2)
     
     if not doc.exists:
@@ -120,7 +127,8 @@ def update_pi_status():
                 "currentVersion": VERSION,
                 "gitCommit": get_git_revision_hash(),
                 "updateStatus": "IDLE",
-                "targetVersion": VERSION
+                "targetVersion": VERSION,
+                "latestAvailable": VERSION
             }
         })
     else:
@@ -141,7 +149,7 @@ def update_pi_status():
 
     threading.Timer(300, update_pi_status).start()
 
-# --- Centrale Hardware Functies ---
+# --- Hardware & Commando's ---
 def turn_light_off():
     GPIO.output(LIGHT_PIN, GPIO.LOW)
     print("💡 [STATUS] Licht is nu uitgeschakeld.")
@@ -162,15 +170,12 @@ def is_authorized(phone_number):
         return is_share or is_auth
     except Exception as e: return False
 
-# --- Commando Afhandeling ---
 def handle_command(doc_ref, data):
     command = data.get('command', '').upper()
     phone = data.get('phone') 
-    
     if not is_authorized(phone):
         doc_ref.update({'operation.lastCommandStatus': 'denied'})
         return
-
     try:
         if command == "OPEN":
             GPIO.output(DOOR_PIN, True)
@@ -181,11 +186,9 @@ def handle_command(doc_ref, data):
                 delay = auto_close.get('delaySeconds', 60)
                 threading.Timer(float(delay), lambda: close_box("AutoClose")).start()
             doc_ref.update({'operation.lastCommandStatus': 'completed'})
-            
         elif command == "CLOSE":
             close_box(trigger_source="SMS")
             doc_ref.update({'operation.lastCommandStatus': 'completed'})
-            
     except Exception as e:
         doc_ref.update({'operation.lastCommandStatus': 'error', 'error': str(e)})
 
