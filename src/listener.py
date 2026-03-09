@@ -10,7 +10,7 @@ import sys
 import os
 
 # --- CONFIGURATIE ---
-VERSION = "1.0.3" 
+VERSION = "1.0.4" 
 cached_config = {}
 
 try:
@@ -51,7 +51,6 @@ def physical_close_callback(channel):
     print("🔘 [PHYSICAL] Fysieke sluit-knop ingedrukt!")
     close_box(trigger_source="PhysicalButton")
 
-# Event detectie voor de fysieke knop
 GPIO.add_event_detect(CLOSE_BTN_PIN, GPIO.FALLING, callback=physical_close_callback, bouncetime=300)
 
 # --- Utility & OTA Functies ---
@@ -61,15 +60,32 @@ def get_git_revision_hash():
     except Exception:
         return "unknown"
 
-def perform_update():
-    print("🚀 [OTA] Update proces gestart...")
+def perform_update(target_version):
+    print(f"🚀 [OTA] Update proces gestart naar versie {target_version}...")
     doc_ref = db.collection('boxes').document(DOCUMENT_ID)
     try:
         doc_ref.update({'software.updateStatus': 'UPDATING'})
-        result = subprocess.check_output(['git', 'pull', 'origin', 'main']).decode('utf-8')
-        doc_ref.update({'software.updateStatus': 'SUCCESS', 'software.currentVersion': VERSION})
+        
+        # 1. Haal alle nieuwste tags op van GitHub
+        subprocess.check_call(['git', 'fetch', '--tags'])
+        
+        # 2. Check de specifieke versie (tag) uit
+        tag_name = f"v{target_version}"
+        subprocess.check_call(['git', 'checkout', tag_name])
+        
+        print(f"✅ Succesvol gewisseld naar {tag_name}")
+        
+        doc_ref.update({
+            'software.updateStatus': 'SUCCESS', 
+            'software.currentVersion': target_version
+        })
+        
+        # 3. Herstart het script
+        print("🔄 Herstarten...")
         os.execv(sys.executable, ['python'] + sys.argv)
+        
     except Exception as e:
+        print(f"❌ Update gefaald: {e}")
         doc_ref.update({'software.updateStatus': 'FAILED', 'software.error': str(e)})
 
 def check_for_updates(data):
@@ -77,10 +93,10 @@ def check_for_updates(data):
     target_version = software.get('targetVersion', VERSION)
     update_status = software.get('updateStatus', 'IDLE')
     
-    if target_version != VERSION and update_status == 'IDLE':
-        db.collection('boxes').document(DOCUMENT_ID).update({'software.updateStatus': 'AVAILABLE'})
-    elif update_status == 'READY_TO_UPDATE':
-        perform_update()
+    # Check of we moeten updaten (versie is anders en we zijn niet al bezig)
+    if target_version != VERSION and update_status != 'UPDATING':
+        print(f"📡 Update gevonden! Van {VERSION} naar {target_version}")
+        perform_update(target_version)
 
 # --- Sync Functies ---
 def get_box_full_doc():
