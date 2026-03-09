@@ -1,248 +1,141 @@
 import json
-from db_manager import get_db
-from google.cloud import firestore
-from google.cloud.firestore_v1.base_query import FieldFilter
 import platform
 import threading
 import time
-import subprocess
-import sys
 import os
+import requests
+from requests.auth import HTTPBasicAuth
+from google.cloud import firestore, storage
+from google.oauth2 import service_account
+from google.cloud.firestore_v1.base_query import FieldFilter
+from db_manager import get_db
 
 # --- CONFIGURATIE ---
-VERSION = "1.0.9"
-cached_config = {}
-light_timer = None 
-processed_commands = set() # Het geheugen van het script
+VERSION = "1.0.25-FIXED"
+KEY_PATH = "service-account.json"
+BUCKET_NAME = "gridbox-platform.firebasestorage.app"
+door_is_open = False 
 
-try:
-    with open('box_config.json', 'r') as f:
-        config_data = json.load(f)
-        DOCUMENT_ID = config_data.get('deviceId')
-except FileNotFoundError:
-    print("❌ FOUT: 'box_config.json' niet gevonden.")
-    exit(1)
+# --- Authenticatie ---
+if not os.path.exists(KEY_PATH): exit("❌ Sleutelbestand niet gevonden!")
+creds = service_account.Credentials.from_service_account_file(KEY_PATH)
+storage_client = storage.Client(credentials=creds)
+db = get_db(creds) 
 
-# --- Hardware Setup ---
-if platform.system() == "Windows":
-    class MockGPIO:
-        BCM = "BCM"; OUT = "OUT"; IN = "IN"; HIGH = True; LOW = False
-        PUD_UP = "PUD_UP"; FALLING = "FALLING"
-        def setmode(self, mode): pass
-        def setup(self, pin, mode, pull_up_down=None): pass
-        def output(self, pin, state): print(f"  [SIMULATIE] GPIO pin {pin} is nu {'HIGH' if state else 'LOW'}")
-        def add_event_detect(self, pin, edge, callback, bouncetime): pass
-        def cleanup(self): pass
-    GPIO = MockGPIO()
-else:
-    import RPi.GPIO as GPIO
+# --- Hardware Setup (Verbose Simulator) ---
+class MockGPIO:
+    BCM, OUT, IN, HIGH, LOW = "BCM", "OUT", "IN", True, False
+    PUD_UP, FALLING = "PUD_UP", "FALLING"
+    def setmode(self, mode): pass
+    def setup(self, pin, mode, pull_up_down=None): pass
+    def output(self, pin, state): print(f"  [HARDWARE] Pin {pin} -> {'ON' if state else 'OFF'}")
+    def add_event_detect(self, pin, edge, callback, bouncetime): pass
+    def cleanup(self): pass
 
-DOOR_PIN = 17
-LIGHT_PIN = 22
-CLOSE_BTN_PIN = 27 
-
+GPIO = MockGPIO() if platform.system() == "Windows" else __import__('RPi.GPIO').GPIO
+DOOR_PIN, LIGHT_PIN, CLOSE_BTN_PIN = 17, 22, 27
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(DOOR_PIN, GPIO.OUT)
 GPIO.setup(LIGHT_PIN, GPIO.OUT)
 GPIO.setup(CLOSE_BTN_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
-db = get_db()
+# --- Config & Init ---
+try:
+    with open('box_config.json', 'r') as f:
+        DOCUMENT_ID = json.load(f).get('deviceId')
+except: exit("❌ box_config.json ontbreekt")
 
-# --- Callback voor Fysieke Knop ---
-def physical_close_callback(channel):
-    print("🔘 [PHYSICAL] Fysieke sluit-knop ingedrukt!")
-    close_box(trigger_source="PhysicalButton")
+def get_hw_config():
+    doc = db.collection('boxes').document(DOCUMENT_ID).get().to_dict()
+    return doc.get('hardware', {})
 
-GPIO.add_event_detect(CLOSE_BTN_PIN, GPIO.FALLING, callback=physical_close_callback, bouncetime=300)
-
-# --- Utility & OTA Functies ---
-def get_git_revision_hash():
+# --- Camera & Opslag (Direct Geheugen) ---
+def take_snapshot():
+    cam_cfg = get_hw_config().get('camera', {})
+    if not cam_cfg.get('enabled', False): return
     try:
-        return subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('ascii').strip()
-    except Exception:
-        return "unknown"
+        auth = HTTPBasicAuth(cam_cfg.get('username'), cam_cfg.get('password'))
+        resp = requests.get(cam_cfg.get('snapshotUrl'), auth=auth, timeout=10)
+        if resp.status_code == 200:
+            filename = f"snapshot_{int(time.time())}.jpg"
+            bucket = storage_client.bucket(BUCKET_NAME)
+            blob = bucket.blob(f"snapshots/{DOCUMENT_ID}/{filename}")
+            blob.upload_from_string(resp.content, content_type='image/jpeg')
+            print(f"☁️ [CLOUD] Geüpload: {filename}")
+    except Exception as e: print(f"❌ FOUT in take_snapshot: {e}")
 
-def get_latest_git_tag():
-    try:
-        tag = subprocess.check_output(['git', 'describe', '--tags', '--abbrev=0']).decode('ascii').strip()
-        return tag.replace('v', '') 
-    except Exception:
-        return VERSION
+def snapshot_loop():
+    global door_is_open
+    hw = get_hw_config()
+    cam = hw.get('camera', {})
+    interval = cam.get('snapshotIntervalSeconds', 5)
+    duration = cam.get('postCloseSnapshotDurationSeconds', 30)
 
-def perform_update(target_version):
-    print(f"🚀 [OTA] Update proces gestart naar versie {target_version}...")
-    doc_ref = db.collection('boxes').document(DOCUMENT_ID)
-    try:
-        doc_ref.update({'software.updateStatus': 'UPDATING'})
-        subprocess.check_call(['git', 'fetch', '--tags'])
-        tag_name = f"v{target_version}"
-        subprocess.check_call(['git', 'checkout', tag_name])
+    print(f"📸 [CAMERA] Fase 1 (Open): Monitoring actief (Interval: {interval}s)")
+    while door_is_open:
+        take_snapshot()
+        time.sleep(interval)
         
-        print(f"✅ Succesvol gewisseld naar {tag_name}")
-        doc_ref.update({
-            'software.updateStatus': 'SUCCESS', 
-            'software.currentVersion': target_version
-        })
-        print("🔄 Herstarten...")
-        os.execv(sys.executable, ['python'] + sys.argv)
-    except Exception as e:
-        print(f"❌ Update gefaald: {e}")
-        doc_ref.update({'software.updateStatus': 'FAILED', 'software.error': str(e)})
+    print(f"🔒 [CAMERA] Box gesloten. Fase 2 (Naloop): {duration}s")
+    end_time = time.time() + duration
+    while time.time() < end_time:
+        take_snapshot()
+        time.sleep(interval)
+    print("📸 [CAMERA] Monitoring volledig gestopt.")
 
-def check_for_updates(data):
-    software = data.get('software', {})
-    target_version = software.get('targetVersion', VERSION)
-    update_status = software.get('updateStatus', 'IDLE')
-    
-    latest_git = get_latest_git_tag()
-    if software.get('latestAvailable') != latest_git:
-        db.collection('boxes').document(DOCUMENT_ID).update({'software.latestAvailable': latest_git})
-
-    if update_status == 'READY_TO_UPDATE' and target_version != VERSION:
-        print(f"📡 Update commando ontvangen! Van {VERSION} naar {target_version}")
-        perform_update(target_version)
-    elif update_status == 'READY_TO_UPDATE' and target_version == VERSION:
-        db.collection('boxes').document(DOCUMENT_ID).update({'software.updateStatus': 'IDLE'})
-
-# --- Sync Functies ---
-def get_box_full_doc():
-    try:
-        doc = db.collection('boxes').document(DOCUMENT_ID).get()
-        if doc.exists: return doc.to_dict()
-    except Exception as e: print(f"⚠️ Fout bij ophalen document: {e}")
-    return {}
-
-def update_pi_status():
-    global cached_config
-    doc_ref = db.collection('boxes').document(DOCUMENT_ID)
-    doc = doc_ref.get()
-    hours_now = round(time.time() / 3600, 2)
-    
-    if not doc.exists:
-        doc_ref.set({
-            "software": {
-                "lastHeartbeat": hours_now,
-                "currentVersion": VERSION,
-                "gitCommit": get_git_revision_hash(),
-                "updateStatus": "IDLE",
-                "targetVersion": VERSION,
-                "latestAvailable": VERSION
-            }
-        })
-    else:
-        data = doc.to_dict()
-        check_for_updates(data)
-        try:
-            doc_ref.update({
-                'software.lastHeartbeat': hours_now,
-                'software.currentVersion': VERSION,
-                'software.gitCommit': get_git_revision_hash(),
-                'software.error': '' 
-            })
-        except Exception as e: print(f"⚠️ Fout bij heartbeat: {e}")
-
-    full_doc = get_box_full_doc()
-    if full_doc and full_doc != cached_config:
-        cached_config = full_doc
-        print(f"⚙️ Sync voltooid! (Versie: {VERSION})")
-
-    threading.Timer(300, update_pi_status).start()
-
-# --- Hardware & Commando's ---
-def turn_light_off():
-    global light_timer
-    GPIO.output(LIGHT_PIN, GPIO.LOW)
-    print("💡 [STATUS] Licht is nu uitgeschakeld.")
-    light_timer = None
-
-def close_box(trigger_source="SMS"):
-    global light_timer
-    print(f"🔒 Box aan het sluiten... (Trigger: {trigger_source})")
+# --- Acties ---
+def close_box(trigger_source):
+    global door_is_open
+    print(f"🔒 [ACTIE] Box sluiten (Bron: {trigger_source})")
+    door_is_open = False
     GPIO.output(DOOR_PIN, False)
     
-    if light_timer is not None:
-        light_timer.cancel()
+    # Licht management
+    delay = get_hw_config().get('lighting', {}).get('lightOffDelaySeconds', 60)
+    print(f"💡 [TIMER] Licht gaat over {delay}s uit.")
+    threading.Timer(float(delay), lambda: GPIO.output(LIGHT_PIN, GPIO.LOW)).start()
 
-    hw_config = cached_config.get('hardware', {})
-    lighting = hw_config.get('lighting', {})
-    delay = lighting.get('lightOffDelaySeconds', 60)
-    
-    print(f"💡 [STATUS] Licht blijft aan voor {delay} seconden.")
-    light_timer = threading.Timer(float(delay), turn_light_off)
-    light_timer.start()
-
-def is_authorized(phone_number):
-    try:
-        is_share = db.collection('boxes').document(DOCUMENT_ID).collection('shares').document(phone_number).get().exists
-        is_auth = db.collection('boxes').document(DOCUMENT_ID).collection('authorizedUsers').document(phone_number).get().exists
-        return is_share or is_auth
-    except Exception as e: return False
-
-def handle_command(doc_ref, data):
-    # 1. Geheugencheck (Hebben we dit document al behandeld?)
-    if doc_ref.id in processed_commands:
-        return
-
-    # 2. Statuscheck
-    if data.get('status') != 'pending':
-        return 
-
-    # 3. Markering
-    processed_commands.add(doc_ref.id) 
-    doc_ref.update({'status': 'processing'})
-    
-    command = data.get('command', '').upper()
-    phone = data.get('phone') 
-    
-    if not is_authorized(phone):
-        doc_ref.update({'status': 'denied', 'lastCommandStatus': 'denied'})
-        return
-
-    try:
-        hw_config = cached_config.get('hardware', {})
+def handle_command(cmd, trigger):
+    global door_is_open
+    if cmd == "OPEN":
+        print("🔓 [ACTIE] Box openen...")
+        door_is_open = True
+        GPIO.output(DOOR_PIN, True)
+        GPIO.output(LIGHT_PIN, GPIO.HIGH)
         
-        if command == "OPEN":
-            print(f"🔓 Box openen (ID: {doc_ref.id})...")
-            GPIO.output(DOOR_PIN, True)
-            
-            if hw_config.get('lighting', {}).get('onWhenOpen', True):
-                GPIO.output(LIGHT_PIN, GPIO.HIGH)
-                
-            auto_close = hw_config.get('autoClose', {})
-            if auto_close.get('enabled', False):
-                delay = auto_close.get('delaySeconds', 60)
-                print(f"⏳ AutoClose geactiveerd ({delay}s).")
-                threading.Timer(float(delay), lambda: close_box("AutoClose")).start()
-            
-            doc_ref.update({'status': 'completed', 'lastCommandStatus': 'completed'})
-            
-        elif command == "CLOSE":
-            print(f"🔒 Box sluiten (ID: {doc_ref.id})...")
-            close_box(trigger_source="SMS")
-            doc_ref.update({'status': 'completed', 'lastCommandStatus': 'completed'})
-            
-    except Exception as e:
-        print(f"❌ Fout bij commando: {e}")
-        doc_ref.update({'status': 'error', 'error': str(e)})
+        # --- AUTO-CLOSE LOGICA (De fix) ---
+        hw = get_hw_config()
+        auto_close = hw.get('autoClose', {})
+        if auto_close.get('enabled', False):
+            delay = float(auto_close.get('delaySeconds', 30))
+            print(f"⏱️ [TIMER] Auto-close actief: sluit over {delay}s")
+            threading.Timer(delay, lambda: handle_command("CLOSE", "AutoClose")).start()
+        # ----------------------------------
+        
+        threading.Thread(target=snapshot_loop, daemon=True).start()
+    elif cmd == "CLOSE":
+        close_box(trigger)
 
-# --- Start & Interactieve Console ---
-update_pi_status()
-print(f"\n👂 Luisterend naar {DOCUMENT_ID} (Versie {VERSION})...")
-print("⌨️  Typ 'c' en druk op Enter om de 'Fysieke Sluit-knop' (GPIO 27) te simuleren.")
-print("⌨️  Typ 'exit' om te stoppen.")
+# --- Start Debug Console ---
+print(f"\n--- [DEBUG CONSOLE] {DOCUMENT_ID} ---")
+print("Typ: 'o'(Open), 'c'(Close), 'b'(Knop-druk), 'q'(Quit)")
 
+def input_loop():
+    while True:
+        cmd = input("\n> ").lower()
+        if cmd == 'o': handle_command("OPEN", "Simulatie")
+        elif cmd == 'c': handle_command("CLOSE", "Simulatie")
+        elif cmd == 'b': close_box("PhysicalButton")
+        elif cmd == 'q': os._exit(0)
+
+threading.Thread(target=input_loop, daemon=True).start()
+
+# --- Listener ---
 query = db.collection('boxes').document(DOCUMENT_ID).collection('commands').where(filter=FieldFilter('status', '==', 'pending'))
-query_watch = query.on_snapshot(lambda col, chg, read: [handle_command(c.document.reference, c.document.to_dict()) for c in chg if c.type.name in ['ADDED', 'MODIFIED']])
+query.on_snapshot(lambda col, chg, read: [handle_command(c.document.get('command').upper(), "SMS") for c in chg if c.type.name == 'ADDED' and c.document.get('status') == 'pending'])
 
 try:
-    while True:
-        cmd = input("> ")
-        if cmd.lower() == 'c':
-            physical_close_callback(CLOSE_BTN_PIN)
-        elif cmd.lower() == 'exit':
-            break
+    while True: time.sleep(1)
 except KeyboardInterrupt:
-    print("\n👋 Handmatige stop.")
-finally:
     GPIO.cleanup()
-    print("🧹 GPIO opgeschoond. Tot ziens!")
+    print("\n👋 Gestopt.")
