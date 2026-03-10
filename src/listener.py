@@ -12,24 +12,49 @@ import subprocess
 import sys
 import os
 
-# --- NIEUWE HARDWARE LIBRARY ---
+# --- NIEUWE HARDWARE LIBRARY (I2C) ---
 if platform.system() != "Windows":
-    from gpiozero import OutputDevice, Button
-    from gpiozero.pins.lgpio import LGPIOFactory
-    # Forceer het gebruik van de juiste driver voor Pi 4B
-    factory = LGPIOFactory()
+    class I2CRelay:
+        def __init__(self, bus, address, relay_id, name):
+            self.bus = str(bus)
+            self.address = str(address)
+            self.relay_id = str(relay_id)
+            self.name = name
+
+        def on(self):
+            # 0xFF is relais AAN (KLIK!)
+            try:
+                subprocess.run(["sudo", "i2cset", "-y", self.bus, self.address, self.relay_id, "0xFF"], check=True)
+                print(f"  [HARDWARE] {self.name} (I2C {self.relay_id}) is nu AAN (KLIK)")
+            except subprocess.CalledProcessError as e:
+                print(f"  [FOUT] Kon {self.name} niet aanzetten: {e}")
+
+        def off(self):
+            # 0x00 is relais UIT
+            try:
+                subprocess.run(["sudo", "i2cset", "-y", self.bus, self.address, self.relay_id, "0x00"], check=True)
+                print(f"  [HARDWARE] {self.name} (I2C {self.relay_id}) is nu UIT")
+            except subprocess.CalledProcessError as e:
+                print(f"  [FOUT] Kon {self.name} niet uitzetten: {e}")
+
+    # We kunnen de fysieke GPIO-knop nog steeds via gpiozero laten lopen als die wel op Pin 27 zit
+    try:
+        from gpiozero import Button
+        from gpiozero.pins.lgpio import LGPIOFactory
+        factory = LGPIOFactory()
+    except ImportError:
+        pass # Geen GPIO bibliotheek beschikbaar
 else:
     # Simulatie voor Windows
     class MockDevice:
-        def __init__(self, pin, **kwargs): self.pin = pin
-        def on(self): print(f"  [SIM] Pin {self.pin} is nu AAN (Relais KLIK)")
-        def off(self): print(f"  [SIM] Pin {self.pin} is nu UIT")
-        def close(self): pass
-    OutputDevice = MockDevice
+        def __init__(self, name, **kwargs): self.name = name
+        def on(self): print(f"  [SIM] {self.name} is nu AAN (Relais KLIK)")
+        def off(self): print(f"  [SIM] {self.name} is nu UIT")
+    I2CRelay = lambda bus, address, relay_id, name: MockDevice(name)
     Button = MockDevice
 
 # --- CONFIGURATIE ---
-VERSION = "1.0.28"
+VERSION = "1.0.30"
 cached_config = {}
 door_is_open = False
 KEY_PATH = "service-account.json"
@@ -50,15 +75,23 @@ storage_client = storage.Client(credentials=creds)
 db = get_db(creds)
 
 # --- Hardware Initialisatie ---
-# We gebruiken active_high=False omdat 99% van de relaisbordjes "Active Low" zijn.
-# initial_value=False zorgt dat de deur DICHT blijft bij het opstarten.
-door = OutputDevice(17, active_high=False, initial_value=False)
-light = OutputDevice(22, active_high=False, initial_value=False)
+# I2C Relais Instellingen.
+# Adres: 0x10. Relais 1 (0x01) is de deur, Relais 2 (0x02) is de lamp.
+door = I2CRelay(bus=1, address="0x10", relay_id="0x01", name="Deur")
+light = I2CRelay(bus=1, address="0x10", relay_id="0x02", name="Lamp")
 
-# Fysieke knop op Pin 27
-if platform.system() != "Windows":
-    close_button = Button(27, pull_up=True, bounce_time=0.1)
-    close_button.when_pressed = lambda: close_box(trigger_source="PhysicalButton")
+# Zet ze voor de zekerheid UIT bij het opstarten
+door.off()
+light.off()
+
+# Fysieke knop op Pin 27 (Dit blijft GPIO, tenzij de knop ook op de I2C bus zit)
+if platform.system() != "Windows" and 'Button' in globals():
+    try:
+        close_button = Button(27, pull_up=True, bounce_time=0.1)
+        close_button.when_pressed = lambda: close_box(trigger_source="PhysicalButton")
+        print("🔘 Fysieke sluitknop geconfigureerd op GPIO 27.")
+    except Exception as e:
+        print(f"⚠️ Kon fysieke knop niet instellen: {e}")
 
 # --- Camera & Snapshot Logica ---
 def take_snapshot():
@@ -101,7 +134,7 @@ def turn_light_off():
 def close_box(trigger_source="System"):
     global door_is_open
     door_is_open = False
-    door.off() # Relais laat los
+    door.off() # Relais laat los via I2C
     print(f"🔒 Box aan het sluiten... (Trigger: {trigger_source})")
     
     delay = cached_config.get('hardware', {}).get('lighting', {}).get('lightOffDelaySeconds', 60)
@@ -127,7 +160,7 @@ def handle_command(doc_ref, data):
     try:
         if command == "OPEN":
             door_is_open = True
-            door.on() # Relais KLIKT nu
+            door.on() # Relais KLIKT nu via I2C
             print(f"🔓 [ACTION] Deur geopend voor {phone}")
             
             hw_config = cached_config.get('hardware', {})
