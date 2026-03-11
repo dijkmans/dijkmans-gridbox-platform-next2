@@ -2,14 +2,18 @@
 # START_HIER.ps1 v4.0 - De "Master" Editie
 # =========================================
 Clear-Host
+
+# --- INSTELLINGEN ---
 $key = 'service-account.json'
 $repo = 'https://github.com/dijkmans/dijkmans-gridbox-platform-next2.git'
+$piWachtwoord = 'victoria'  # <--- Hier staat je wachtwoord nu centraal!
+# --------------------
 
 Write-Host '=========================================' -ForegroundColor Cyan
 Write-Host '   GRIDBOX MASTER ASSISTENT v4.0         ' -ForegroundColor Cyan
 Write-Host '=========================================' -ForegroundColor Cyan
 
-# 1. Controleer de sleutel (Bugfix: $k is nu correct $key)
+# 1. Controleer de sleutel
 if (!(Test-Path $key)) {
     Write-Host "❌ FOUT: $key niet gevonden in deze map!" -ForegroundColor Red
     Write-Host "Zorg dat het Firestore sleutelbestand naast dit script staat." -ForegroundColor Yellow
@@ -27,7 +31,6 @@ if ([string]::IsNullOrWhiteSpace($id)) {
 # 3. Firestore vullen (Mal: gbox-004 -> Nieuw: gbox-xxx)
 Write-Host "🚀 Cloud configureren: Kopieer gbox-004 naar $id..." -ForegroundColor Yellow
 
-# Python code overzichtelijk opgebouwd (Upgrade-bestendig!)
 $pyCode = @"
 import sys
 from google.cloud import firestore
@@ -37,7 +40,6 @@ try:
     c = service_account.Credentials.from_service_account_file('$key')
     db = firestore.Client(credentials=c)
     
-    # Haal de mal op
     doc_ref = db.collection('boxes').document('gbox-004').get()
     if not doc_ref.exists:
         print('FOUT_MAL_ONTBREEKT')
@@ -46,7 +48,6 @@ try:
     s = doc_ref.to_dict()
     s['software'] = {'currentVersion':'1.0.30'}
     
-    # Schrijf de nieuwe box weg
     db.collection('boxes').document('$id').set(s)
     print('PYTHON_SUCCESS')
 except Exception as e:
@@ -63,10 +64,9 @@ if ($res -match 'PYTHON_SUCCESS') {
     return
 }
 
-# 4. Bestanden binnenhalen of verversen (Veilige methode)
+# 4. Bestanden binnenhalen of verversen
 Write-Host '📦 Bestanden synchroniseren...' -ForegroundColor Gray
 if (!(Test-Path '.git')) {
-    # Veilige initialisatie in plaats van een geforceerde clone in een volle map
     git init
     git remote add origin $repo
     git fetch origin
@@ -80,7 +80,8 @@ Write-Host "`n✨ ALLES IS KLAAR VOOR DE START!" -ForegroundColor Green
 Write-Host "-------------------------------------------------"
 Write-Host "1. Open Raspberry Pi Imager."
 Write-Host "2. Gebruik Hostname: $id" -ForegroundColor White
-Write-Host "3. Gebruik User: pi | Pass: gridbox2026" -ForegroundColor White
+# Hier gebruiken we de nieuwe variabele voor het wachtwoord:
+Write-Host "3. Gebruik User: pi | Pass: $piWachtwoord" -ForegroundColor White 
 Write-Host "4. Zet SSH AAN."
 Write-Host "-------------------------------------------------"
 pause
