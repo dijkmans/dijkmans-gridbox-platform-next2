@@ -1,80 +1,49 @@
-# START_HIER.ps1 v2.0 - De Definitieve "Gouden Versie"
-# Deze versie is geoptimaliseerd om NOOIT meer aanhalingsteken-fouten te geven.
-
+# START_HIER.ps1 v2.1
 Clear-Host
-$keyFile = "service-account.json"
-$repoUrl = "https://github.com/dijkmans/dijkmans-gridbox-platform-next2.git"
+$keyFile = 'service-account.json'
+$repoUrl = 'https://github.com/dijkmans/dijkmans-gridbox-platform-next2.git'
 
-Write-Host "=================================================" -ForegroundColor Cyan
-Write-Host "   GRIDBOX INSTALLER v2.0 (Gouden Editie)       " -ForegroundColor Cyan
-Write-Host "=================================================" -ForegroundColor Cyan
+Write-Host '=== GRIDBOX INSTALLER v2.1 ===' -ForegroundColor Cyan
 
-# 1. Controleer of de sleutel in de huidige map staat
 if (-not (Test-Path ".\$keyFile")) {
-    Write-Host "❌ FOUT: Ik zie $keyFile niet in deze map." -ForegroundColor Red
-    Write-Host "Zorg dat je in PowerShell eerst 'cd ~\Downloads' typt." -ForegroundColor Yellow
-    pause; return
+    Write-Host 'FOUT: Sleutel niet gevonden. Typ eerst: cd ~\Downloads' -ForegroundColor Red
+    return
 }
 
-# 2. Vraag het nieuwe nummer
-$boxID = Read-Host "`nWelk nieuwe Box ID wilt u aanmaken? (bijv. gbox-005)"
-if (-not $boxID) { $boxID = "gbox-005" }
+$boxID = Read-Host 'Welk nieuwe Box ID wilt u aanmaken?'
+if (-not $boxID) { $boxID = 'gbox-005' }
 
-# 3. Firestore actie (Python)
-Write-Host "🚀 Cloud configureren voor $boxID..." -ForegroundColor Yellow
-
-# We bouwen het Python script heel zorgvuldig op om SyntaxErrors te voorkomen
+Write-Host 'Cloud configureren...' -ForegroundColor Yellow
 $pyCode = @"
 import sys
 from google.cloud import firestore
 from google.oauth2 import service_account
-
 try:
     creds = service_account.Credentials.from_service_account_file('$keyFile')
     db = firestore.Client(credentials=creds)
-    
-    # Haal template gbox-004 op
-    source_ref = db.collection('boxes').document('gbox-004')
-    source_doc = source_ref.get()
-    
-    if source_doc.exists:
-        data = source_doc.to_dict()
-        # Update software versie
-        if 'software' not in data: data['software'] = {}
-        data['software']['currentVersion'] = '1.0.30'
-        
-        # Schrijf naar nieuwe box
-        db.collection('boxes').document('$boxID').set(data)
-        print("PYTHON_SUCCESS")
-    else:
-        print("ERROR: gbox-004 niet gevonden in Firestore")
+    source = db.collection('boxes').document('gbox-004').get().to_dict()
+    if source:
+        if 'software' not in source: source['software'] = {}
+        source['software']['currentVersion'] = '1.0.30'
+        db.collection('boxes').document('$boxID').set(source)
+        print('PYTHON_SUCCESS')
 except Exception as e:
-    print(f"ERROR: {e}")
+    print(f'ERROR: {e}')
 "@
 
-# Voer de Python code uit
 $result = $pyCode | python
-
-if ($result -match "PYTHON_SUCCESS") {
-    Write-Host "✅ Cloud koppeling gelukt!" -ForegroundColor Green
+if ($result -match 'PYTHON_SUCCESS') {
+    Write-Host 'Cloud koppeling gelukt!' -ForegroundColor Green
 } else {
-    Write-Host "❌ Fout in cloud-configuratie: $result" -ForegroundColor Red
-    pause; return
+    Write-Host "Fout: $result" -ForegroundColor Red
+    return
 }
 
-# 4. Bestanden synchroniseren
-Write-Host "📦 Bestanden controleren en ophalen..." -ForegroundColor Gray
-if (-not (Test-Path ".git")) {
+if (-not (Test-Path '.git')) {
     git clone $repoUrl .
 } else {
     git fetch origin; git reset --hard origin/main
 }
 
-# 5. Finale instructies
-Write-Host "`n✨ KLAAR! Je kunt nu de SD-kaart flashen." -ForegroundColor Green
-Write-Host "-------------------------------------------------"
-Write-Host " Hostname: $boxID" -ForegroundColor White
-Write-Host " Gebruiker: pi | Wachtwoord: gridbox2026" -ForegroundColor White
-Write-Host "-------------------------------------------------"
-Write-Host "Druk op een toets om af te sluiten..."
-pause
+Write-Host "KLAAR! Hostname: $boxID | User: pi | Pass: gridbox2026"
+Read-Host 'Druk op Enter om af te sluiten'
