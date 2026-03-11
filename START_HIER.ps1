@@ -43,5 +43,6 @@ if (!(Test-Path '.git')) {
 }
 
 Write-Host '✨ KLAAR!' -ForegroundColor Green
-Write-Host "Hostname: $id | User: pi | Pass: gridbox2026" -ForegroundColor Cyan
+$info = 'Hostname: ' + $id + ' | User: pi | Pass: gridbox2026'
+Write-Host $info -ForegroundColor Cyan
 pause
