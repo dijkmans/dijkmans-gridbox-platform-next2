@@ -1,45 +1,49 @@
-# START_HIER.ps1 v2.2 - De Bulletproof Editie
+# GRIDBOX INSTALLER v3.0 - Definitieve Versie
 Clear-Host
-$key = 'service-account.json'
-$url = 'https://github.com/dijkmans/dijkmans-gridbox-platform-next2.git'
+$k = "service-account.json"
+$repo = "https://github.com/dijkmans/dijkmans-gridbox-platform-next2.git"
 
-Write-Host '=========================================' -ForegroundColor Cyan
-Write-Host '   GRIDBOX INSTALLER v2.2 (Bulletproof)  ' -ForegroundColor Cyan
-Write-Host '=========================================' -ForegroundColor Cyan
+Write-Host "=========================================" -ForegroundColor Cyan
+Write-Host "   GRIDBOX ASSISTENT v3.0                " -ForegroundColor Cyan
+Write-Host "=========================================" -ForegroundColor Cyan
 
-if (-not (Test-Path ".\$key")) {
-    Write-Host 'FOUT: Sleutel niet gevonden in Downloads.' -ForegroundColor Red
-    return
+# 1. Check of de sleutel aanwezig is
+if (!(Test-Path $k)) {
+    Write-Host "❌ FOUT: Sleutel ($k) niet gevonden in Downloads!" -ForegroundColor Red
+    Write-Host "Zorg dat je eerst 'cd ~\Downloads' typt." -ForegroundColor Yellow
+    pause; return
 }
 
-$boxID = Read-Host 'Welk nieuwe Box ID wilt u aanmaken?'
-if (-not $boxID) { $boxID = 'gbox-005' }
+# 2. Vraag het ID
+$id = Read-Host "`nWelk nieuwe Box ID wilt u aanmaken? (bijv. gbox-005)"
+if (!$id) { $id = "gbox-005" }
 
-Write-Host 'Cloud configureren...' -ForegroundColor Yellow
+# 3. Cloud instellen via Python
+Write-Host "🚀 Cloud configureren voor $id..." -ForegroundColor Yellow
+$py = "import sys; from google.cloud import firestore; from google.oauth2 import service_account; " + `
+"c=service_account.Credentials.from_service_account_file('$k'); " + `
+"db=firestore.Client(credentials=c); " + `
+"s=db.collection('boxes').document('gbox-004').get().to_dict(); " + `
+"s['software']={'currentVersion':'1.0.30'}; " + `
+"db.collection('boxes').document('$id').set(s); print('SUCCESS')"
 
-# Python aanroep zonder Here-String om fouten te voorkomen
-$pyPart1 = "import sys; from google.cloud import firestore; from google.oauth2 import service_account; "
-$pyPart2 = "c=service_account.Credentials.from_service_account_file('$key'); db=firestore.Client(credentials=c); "
-$pyPart3 = "s=db.collection('boxes').document('gbox-004').get().to_dict(); s['software']={'currentVersion':'1.0.30'}; "
-$pyPart4 = "db.collection('boxes').document('$boxID').set(s); print('PYTHON_SUCCESS')"
-$fullPy = $pyPart1 + $pyPart2 + $pyPart3 + $pyPart4
+$res = python -c $py
 
-$res = python -c $fullPy
-
-if ($res -match 'PYTHON_SUCCESS') {
-    Write-Host 'Cloud koppeling gelukt!' -ForegroundColor Green
+if ($res -match "SUCCESS") {
+    Write-Host "✅ Cloud koppeling gelukt!" -ForegroundColor Green
 } else {
-    Write-Host "Fout in cloud: $res" -ForegroundColor Red
-    return
+    Write-Host "❌ Fout: $res" -ForegroundColor Red
+    pause; return
 }
 
-if (-not (Test-Path '.git')) {
-    Write-Host 'Bestanden ophalen...'
-    git clone $url .
+# 4. Git download (indien nog niet aanwezig)
+if (!(Test-Path ".git")) {
+    Write-Host "📦 Bestanden ophalen van GitHub..." -ForegroundColor Gray
+    git clone $repo .
 } else {
     git fetch origin; git reset --hard origin/main
 }
 
-Write-Host "KLAAR! Hostname: $boxID | User: pi | Pass: gridbox2026"
-Write-Host 'Druk op een toets om af te sluiten...'
-$null = [System.Console]::ReadKey($true)
+Write-Host "`n✨ KLAAR! Je kunt nu de SD-kaart flashen." -ForegroundColor Green
+Write-Host "Hostname: $id | User: pi | Pass: gridbox2026" -ForegroundColor Cyan
+pause
