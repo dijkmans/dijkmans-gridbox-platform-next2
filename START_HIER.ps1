@@ -108,7 +108,6 @@ $ZoekPaden = @(
     "${env:ProgramFiles(x86)}\Raspberry Pi\Imager\rpi-imager.exe"
 )
 
-# Zoek het eerste pad dat daadwerkelijk bestaat op deze PC
 $ImagerPath = $ZoekPaden | Where-Object { Test-Path $_ } | Select-Object -First 1
 
 if ($ImagerPath) {
@@ -121,7 +120,6 @@ if ($ImagerPath) {
     Write-Host "-------------------------------------------------"
     Start-Process $ImagerPath
 } else {
-    # Als hij het écht niet kan vinden op de standaard plekken, gebruiken we een Windows fallback
     Write-Host "ℹ️ We proberen de Imager via Windows te openen..." -ForegroundColor Yellow
     try {
         Start-Process "rpi-imager" -ErrorAction Stop
