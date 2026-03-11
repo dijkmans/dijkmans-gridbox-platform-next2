@@ -100,12 +100,12 @@ if ($Drive -eq 'C') {
 # Veiligheidscheck 3: Bestaat de schijf en is het een verwisselbare USB/SD kaart?
 $Volume = Get-Volume -DriveLetter $Drive -ErrorAction SilentlyContinue
 if (!$Volume -or $Volume.DriveType -ne 'Removable') {
-    Write-Host "❌ FOUT: Schijf $Drive: is niet gevonden of is geen verwisselbare SD-kaart! Controleer de letter." -ForegroundColor Red
+    Write-Host "❌ FOUT: Schijf ${Drive}: is niet gevonden of is geen verwisselbare SD-kaart! Controleer de letter." -ForegroundColor Red
     pause
     return
 }
 
-Write-Host "✅ Veilige SD-kaart gedetecteerd op schijf $Drive:!" -ForegroundColor Green
+Write-Host "✅ Veilige SD-kaart gedetecteerd op schijf ${Drive}:!" -ForegroundColor Green
 
 # Start Raspberry Pi Imager automatisch op
 $ImagerPath = "C:\Program Files\Raspberry Pi\Imager\rpi-imager.exe"
