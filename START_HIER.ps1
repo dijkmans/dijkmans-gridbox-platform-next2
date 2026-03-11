@@ -102,10 +102,16 @@ if (!$Volume -or $Volume.DriveType -ne 'Removable') {
 
 Write-Host "✅ Veilige SD-kaart gedetecteerd op schijf $Drive!" -ForegroundColor Green
 
-# Start Raspberry Pi Imager
-$ImagerPath = "C:\Program Files\Raspberry Pi\Imager\rpi-imager.exe"
+# 6. SLIM ZOEKEN NAAR RASPBERRY PI IMAGER
+$ZoekPaden = @(
+    "$env:ProgramFiles\Raspberry Pi\Imager\rpi-imager.exe",
+    "${env:ProgramFiles(x86)}\Raspberry Pi\Imager\rpi-imager.exe"
+)
 
-if (Test-Path $ImagerPath) {
+# Zoek het eerste pad dat daadwerkelijk bestaat op deze PC
+$ImagerPath = $ZoekPaden | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+if ($ImagerPath) {
     Write-Host "`n-------------------------------------------------"
     Write-Host "Raspberry Pi Imager opent nu automatisch."
     Write-Host "Vul bij de instellingen (OS Customisation) het volgende in:"
@@ -115,7 +121,13 @@ if (Test-Path $ImagerPath) {
     Write-Host "-------------------------------------------------"
     Start-Process $ImagerPath
 } else {
-    Write-Host "❌ Raspberry Pi Imager is niet gevonden. Installeer deze eerst op de PC." -ForegroundColor Red
+    # Als hij het écht niet kan vinden op de standaard plekken, gebruiken we een Windows fallback
+    Write-Host "ℹ️ We proberen de Imager via Windows te openen..." -ForegroundColor Yellow
+    try {
+        Start-Process "rpi-imager" -ErrorAction Stop
+    } catch {
+        Write-Host "❌ Imager niet gevonden. Open deze handmatig via je Start-menu." -ForegroundColor Red
+    }
 }
 
 pause
