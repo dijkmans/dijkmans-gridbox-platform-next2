@@ -1,44 +1,80 @@
-$foutloosScript = @'
-# START_HIER.ps1 v1.9 (Gegarandeerd Foutloos)
+# START_HIER.ps1 v2.0 - De Definitieve "Gouden Versie"
+# Deze versie is geoptimaliseerd om NOOIT meer aanhalingsteken-fouten te geven.
+
 Clear-Host
-$key = "service-account.json"
-$repo = "https://github.com/dijkmans/dijkmans-gridbox-platform-next2.git"
+$keyFile = "service-account.json"
+$repoUrl = "https://github.com/dijkmans/dijkmans-gridbox-platform-next2.git"
 
-Write-Host "=========================================" -ForegroundColor Cyan
-Write-Host "   GRIDBOX INSTALLER v1.9 (Piet Editie)  " -ForegroundColor Cyan
-Write-Host "=========================================" -ForegroundColor Cyan
+Write-Host "=================================================" -ForegroundColor Cyan
+Write-Host "   GRIDBOX INSTALLER v2.0 (Gouden Editie)       " -ForegroundColor Cyan
+Write-Host "=================================================" -ForegroundColor Cyan
 
-if (-not (Test-Path ".\$key")) {
-    Write-Host "❌ FOUT: Ik zie $key niet in Downloads!" -ForegroundColor Red
+# 1. Controleer of de sleutel in de huidige map staat
+if (-not (Test-Path ".\$keyFile")) {
+    Write-Host "❌ FOUT: Ik zie $keyFile niet in deze map." -ForegroundColor Red
+    Write-Host "Zorg dat je in PowerShell eerst 'cd ~\Downloads' typt." -ForegroundColor Yellow
     pause; return
 }
 
+# 2. Vraag het nieuwe nummer
 $boxID = Read-Host "`nWelk nieuwe Box ID wilt u aanmaken? (bijv. gbox-005)"
+if (-not $boxID) { $boxID = "gbox-005" }
 
-Write-Host "🚀 Cloud configureren..." -ForegroundColor Yellow
-$pyCode = "import sys; from google.cloud import firestore; from google.oauth2 import service_account; c=service_account.Credentials.from_service_account_file('$key'); db=firestore.Client(credentials=c); s=db.collection('boxes').document('gbox-004').get().to_dict(); s['software']={'currentVersion':'1.0.30'}; db.collection('boxes').document('$boxID').set(s); print('SUCCESS')"
+# 3. Firestore actie (Python)
+Write-Host "🚀 Cloud configureren voor $boxID..." -ForegroundColor Yellow
 
-$res = python -c $pyCode
-if ($res -match "SUCCESS") { 
-    Write-Host "✅ Cloud koppeling gelukt!" -ForegroundColor Green 
-} else { 
-    Write-Host "❌ Fout in cloud: $res" -ForegroundColor Red; pause; return 
+# We bouwen het Python script heel zorgvuldig op om SyntaxErrors te voorkomen
+$pyCode = @"
+import sys
+from google.cloud import firestore
+from google.oauth2 import service_account
+
+try:
+    creds = service_account.Credentials.from_service_account_file('$keyFile')
+    db = firestore.Client(credentials=creds)
+    
+    # Haal template gbox-004 op
+    source_ref = db.collection('boxes').document('gbox-004')
+    source_doc = source_ref.get()
+    
+    if source_doc.exists:
+        data = source_doc.to_dict()
+        # Update software versie
+        if 'software' not in data: data['software'] = {}
+        data['software']['currentVersion'] = '1.0.30'
+        
+        # Schrijf naar nieuwe box
+        db.collection('boxes').document('$boxID').set(data)
+        print("PYTHON_SUCCESS")
+    else:
+        print("ERROR: gbox-004 niet gevonden in Firestore")
+except Exception as e:
+    print(f"ERROR: {e}")
+"@
+
+# Voer de Python code uit
+$result = $pyCode | python
+
+if ($result -match "PYTHON_SUCCESS") {
+    Write-Host "✅ Cloud koppeling gelukt!" -ForegroundColor Green
+} else {
+    Write-Host "❌ Fout in cloud-configuratie: $result" -ForegroundColor Red
+    pause; return
 }
 
-if (-not (Test-Path ".git")) { 
-    Write-Host "📦 Bestanden ophalen van GitHub..." -ForegroundColor Gray
-    git clone $repo . 
-} else { 
-    Write-Host "📦 Bestanden verversen..." -ForegroundColor Gray
-    git fetch origin; git reset --hard origin/main 
+# 4. Bestanden synchroniseren
+Write-Host "📦 Bestanden controleren en ophalen..." -ForegroundColor Gray
+if (-not (Test-Path ".git")) {
+    git clone $repoUrl .
+} else {
+    git fetch origin; git reset --hard origin/main
 }
 
-Write-Host "`n✨ KLAAR! Je kunt nu flashen." -ForegroundColor Green
+# 5. Finale instructies
+Write-Host "`n✨ KLAAR! Je kunt nu de SD-kaart flashen." -ForegroundColor Green
 Write-Host "-------------------------------------------------"
-Write-Host " Hostname: $boxID | User: pi | Pass: gridbox2026" -ForegroundColor Cyan
+Write-Host " Hostname: $boxID" -ForegroundColor White
+Write-Host " Gebruiker: pi | Wachtwoord: gridbox2026" -ForegroundColor White
 Write-Host "-------------------------------------------------"
+Write-Host "Druk op een toets om af te sluiten..."
 pause
-'@
-
-$foutloosScript | Out-File -FilePath "$HOME\Downloads\START_HIER.ps1" -Encoding utf8 -Force
-Write-Host "`n✅ Bestand is hersteld en staat nu goed!" -ForegroundColor Green
