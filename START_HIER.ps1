@@ -1,86 +1,62 @@
-# START_HIER.ps1 (v1.4 - De "Gouden" Piet-Editie)
-# Deze versie is geoptimaliseerd voor Windows PowerShell en voorkomt Python-conflicten.
+# START_HIER.ps1 (v1.6 - De Finale "Piet-Proof" Editie)
+# Deze versie gebruikt de 'directe Python aanroep' om PowerShell-fouten te voorkomen.
 
 Clear-Host
+$key = "service-account.json"
 $repoUrl = "https://github.com/dijkmans/dijkmans-gridbox-platform-next2.git"
-$downloadsPath = "$HOME\Downloads\service-account.json"
-$localKey = ".\service-account.json"
 
-Write-Host "=================================================" -ForegroundColor Cyan
-Write-Host "    GRIDBOX EEN-KLIK INSTALLER v1.4              " -ForegroundColor Cyan
-Write-Host "=================================================" -ForegroundColor Cyan
+Write-Host "=========================================" -ForegroundColor Cyan
+Write-Host "   GRIDBOX INSTALLER v1.6 (Finale)       " -ForegroundColor Cyan
+Write-Host "=========================================" -ForegroundColor Cyan
 
-# STAP 1: De Sleutel-Check
-if (Test-Path $downloadsPath) {
-    Write-Host "[+] Sleutel gevonden in Downloads. Kopieren..." -ForegroundColor Green
-    Copy-Item $downloadsPath -Destination $localKey -Force
-} elseif (-not (Test-Path $localKey)) {
-    Write-Host "[!] SLEUTEL NIET GEVONDEN!" -ForegroundColor Red
-    Write-Host "Zet 'service-account.json' in je Downloads map." -ForegroundColor Yellow
+# 1. Check of we in de juiste map staan (Downloads)
+if (-not (Test-Path ".\$key")) {
+    Write-Host "❌ FOUT: Ik zie de sleutel ($key) niet." -ForegroundColor Red
+    Write-Host "Zorg dat je eerst 'cd ~\Downloads' typt in PowerShell!" -ForegroundColor Yellow
     pause; return
 }
 
-# STAP 2: Onderdelen ophalen van GitHub
-Write-Host "[+] Bestanden controleren..." -ForegroundColor Gray
+# 2. Vraag het nieuwe Box ID
+$boxID = Read-Host "`nWelk nieuwe Box ID wil je aanmaken? (bijv. gbox-005)"
+
+# 3. Firestore regelen (De veilige 'one-liner' methode)
+Write-Host "🚀 Cloud configureren voor $boxID..." -ForegroundColor Yellow
+
+$code = "import sys; from google.cloud import firestore; from google.oauth2 import service_account; " + `
+"try: " + `
+"  creds = service_account.Credentials.from_service_account_file('$key'); " + `
+"  db = firestore.Client(credentials=creds); " + `
+"  source = db.collection('boxes').document('gbox-004').get().to_dict(); " + `
+"  if source: " + `
+"    source['software'] = source.get('software', {}); " + `
+"    source['software']['currentVersion'] = '1.0.30'; " + `
+"    db.collection('boxes').document('$boxID').set(source); " + `
+"    print('SUCCESS'); " + `
+"  else: print('ERROR: gbox-004 niet gevonden'); " + `
+"except Exception as e: print(f'ERROR: {e}')"
+
+$result = python -c $code
+
+if ($result -match "SUCCESS") { 
+    Write-Host "✅ Cloud koppeling gelukt voor $boxID!" -ForegroundColor Green 
+} else { 
+    Write-Host "❌ Cloud fout: $result" -ForegroundColor Red
+    pause; return 
+}
+
+# 4. Git Check (Download de rest van de bestanden indien nodig)
 if (-not (Test-Path ".git")) {
+    Write-Host "📦 Ophalen van overige bestanden van GitHub..." -ForegroundColor Gray
     git clone $repoUrl .
 } else {
     git fetch origin; git reset --hard origin/main
 }
 
-# STAP 3: De Box ID vraag
-$targetID = Read-Host "`nWelke nieuwe Box ID wil je aanmaken? (bijv. gbox-005)"
-
-# STAP 4: Firestore Klonen via Python (geisoleerd)
-Write-Host "[+] Cloud configureren voor $targetID..." -ForegroundColor Yellow
-$pythonScript = @"
-import sys
-from google.cloud import firestore
-from google.oauth2 import service_account
-try:
-    creds = service_account.Credentials.from_service_account_file('service-account.json')
-    db = firestore.Client(credentials=creds)
-    source_doc = db.collection('boxes').document('gbox-004').get()
-    if source_doc.exists:
-        data = source_doc.to_dict()
-        data['software'] = data.get('software', {})
-        data['software']['currentVersion'] = '1.0.30'
-        db.collection('boxes').document('$targetID').set(data)
-        print('PYTHON_SUCCESS')
-    else:
-        print('ERROR: Bron gbox-004 niet gevonden')
-except Exception as e:
-    print(f'ERROR: {e}')
-"@
-
-$result = $pythonScript | python
-if ($result -match "PYTHON_SUCCESS") { 
-    Write-Host "[+] Cloud gereed: Box $targetID aangemaakt." -ForegroundColor Green 
-} else { 
-    Write-Host "[!] Fout bij cloud-configuratie: $result" -ForegroundColor Red
-    pause; return 
-}
-
-# STAP 5: Imager & Voorbereiding
-Write-Host "`n[!] START NU DE RASPBERRY PI IMAGER:" -ForegroundColor Yellow
+# 5. Afronden & Instructies
+Write-Host "`n✨ KLAAR! Je kunt nu de SD-kaart flashen." -ForegroundColor Green
 Write-Host "-------------------------------------------------"
-Write-Host " Hostname: $targetID" -ForegroundColor White
-Write-Host " Gebruiker: pi | Wachtwoord: gridbox2026" -ForegroundColor White
-Write-Host " SSH: Moet op AAN staan" -ForegroundColor White
+Write-Host " Hostname: $boxID" -ForegroundColor Cyan
+Write-Host " Gebruiker: pi | Wachtwoord: gridbox2026" -ForegroundColor Cyan
+Write-Host " SSH: AAN (instellen in Imager)" -ForegroundColor Cyan
 Write-Host "-------------------------------------------------"
-Read-Host "Druk op ENTER als de Pi opgestart is en in het netwerk zit..."
-
-# Box config bestandje maken
-$configJson = '{"deviceId": "' + $targetID + '"}'
-$configJson | Out-File -FilePath "box_config.json" -Encoding ascii
-
-# Bestanden overzetten naar de Pi
-Write-Host "[+] Bestanden versturen naar de Pi..." -ForegroundColor Gray
-scp service-account.json box_config.json pi@$($targetID + ".local"):~/gridbox/platform/
-
-# Herstart de service op de Pi
-Write-Host "[+] Service herstarten..." -ForegroundColor Gray
-ssh pi@$($targetID + ".local") "sudo systemctl restart gridbox.service"
-
-Write-Host "`n[***] INSTALLATIE VOLTOOID! Box $targetID is live. [***]" -ForegroundColor Green
 pause
