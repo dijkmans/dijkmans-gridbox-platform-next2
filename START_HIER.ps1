@@ -16,7 +16,6 @@ Write-Host '=========================================' -ForegroundColor Cyan
 # 1. Controleer de sleutel
 if (!(Test-Path $key)) {
     Write-Host "❌ FOUT: $key niet gevonden in deze map!" -ForegroundColor Red
-    Write-Host "Zorg dat het Firestore sleutelbestand naast dit script staat." -ForegroundColor Yellow
     pause
     return
 }
@@ -25,10 +24,9 @@ if (!(Test-Path $key)) {
 $id = Read-Host 'Welk nieuwe Box ID wilt u aanmaken? (bijv. gbox-005)'
 if ([string]::IsNullOrWhiteSpace($id)) { 
     $id = 'gbox-005'
-    Write-Host "Geen invoer herkend. Standaardwaarde '$id' wordt gebruikt." -ForegroundColor Yellow
 }
 
-# 3. Firestore vullen (Mal: gbox-004 -> Nieuw: gbox-xxx)
+# 3. Firestore vullen
 Write-Host "🚀 Cloud configureren: Kopieer gbox-004 naar $id..." -ForegroundColor Yellow
 
 $pyCode = @"
@@ -57,23 +55,23 @@ except Exception as e:
 $res = python -c $pyCode
 
 if ($res -match 'PYTHON_SUCCESS') {
-    Write-Host "✅ Cloud koppeling gelukt! Instellingen gekopieerd naar $id." -ForegroundColor Green
+    Write-Host "✅ Cloud koppeling gelukt!" -ForegroundColor Green
 } else {
     Write-Host "❌ Fout in Cloud: $res" -ForegroundColor Red
     pause
     return
 }
 
-# 4. Bestanden binnenhalen of verversen
+# 4. Bestanden synchroniseren
 Write-Host '📦 Bestanden synchroniseren...' -ForegroundColor Gray
 if (!(Test-Path '.git')) {
-    git init
+    git init | Out-Null
     git remote add origin $repo
-    git fetch origin
-    git checkout -t origin/main -f
+    git fetch origin | Out-Null
+    git checkout -t origin/main -f | Out-Null
 } else {
-    git fetch origin
-    git reset --hard origin/main
+    git fetch origin | Out-Null
+    git reset --hard origin/main | Out-Null
 }
 
 # 5. AUTOMATISCHE SD-KAART CONFIGURATIE
@@ -85,29 +83,26 @@ pause
 
 $Drive = Read-Host "Welke schijfletter heeft de SD-kaart gekregen? (Bijv. D, E of F)"
 
-# Veiligheidscheck 1: Pak alleen de eerste letter en maak er een hoofdletter van
 if (![string]::IsNullOrWhiteSpace($Drive)) {
     $Drive = $Drive.Substring(0,1).ToUpper()
 }
 
-# Veiligheidscheck 2: Is het de C-schijf? (Voorkomt crashen van de Windows PC)
 if ($Drive -eq 'C') {
     Write-Host "❌ FOUT: Je kunt je Windows C-schijf niet overschrijven! Script afgebroken." -ForegroundColor Red
     pause
     return
 }
 
-# Veiligheidscheck 3: Bestaat de schijf en is het een verwisselbare USB/SD kaart?
 $Volume = Get-Volume -DriveLetter $Drive -ErrorAction SilentlyContinue
 if (!$Volume -or $Volume.DriveType -ne 'Removable') {
-    Write-Host "❌ FOUT: Schijf ${Drive}: is niet gevonden of is geen verwisselbare SD-kaart! Controleer de letter." -ForegroundColor Red
+    Write-Host "❌ FOUT: Schijf $Drive is niet gevonden of is geen verwisselbare SD-kaart!" -ForegroundColor Red
     pause
     return
 }
 
-Write-Host "✅ Veilige SD-kaart gedetecteerd op schijf ${Drive}:!" -ForegroundColor Green
+Write-Host "✅ Veilige SD-kaart gedetecteerd op schijf $Drive!" -ForegroundColor Green
 
-# Start Raspberry Pi Imager automatisch op
+# Start Raspberry Pi Imager
 $ImagerPath = "C:\Program Files\Raspberry Pi\Imager\rpi-imager.exe"
 
 if (Test-Path $ImagerPath) {
@@ -120,8 +115,7 @@ if (Test-Path $ImagerPath) {
     Write-Host "-------------------------------------------------"
     Start-Process $ImagerPath
 } else {
-    Write-Host "❌ Raspberry Pi Imager is niet gevonden op de standaardlocatie. Installeer deze eerst op de PC." -ForegroundColor Red
+    Write-Host "❌ Raspberry Pi Imager is niet gevonden. Installeer deze eerst op de PC." -ForegroundColor Red
 }
 
-Write-Host "`nDruk op Enter om dit venster te sluiten..."
 pause
