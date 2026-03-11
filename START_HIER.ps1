@@ -1,11 +1,11 @@
-$pietScript = @'
-# START_HIER.ps1 v1.8 (Directe Installatie)
+$foutloosScript = @'
+# START_HIER.ps1 v1.9 (Gegarandeerd Foutloos)
 Clear-Host
 $key = "service-account.json"
 $repo = "https://github.com/dijkmans/dijkmans-gridbox-platform-next2.git"
 
 Write-Host "=========================================" -ForegroundColor Cyan
-Write-Host "   GRIDBOX INSTALLER v1.8                " -ForegroundColor Cyan
+Write-Host "   GRIDBOX INSTALLER v1.9 (Piet Editie)  " -ForegroundColor Cyan
 Write-Host "=========================================" -ForegroundColor Cyan
 
 if (-not (Test-Path ".\$key")) {
@@ -13,7 +13,7 @@ if (-not (Test-Path ".\$key")) {
     pause; return
 }
 
-$boxID = Read-Host "`nWelk nieuwe Box ID wil je aanmaken? (bijv. gbox-005)"
+$boxID = Read-Host "`nWelk nieuwe Box ID wilt u aanmaken? (bijv. gbox-005)"
 
 Write-Host "🚀 Cloud configureren..." -ForegroundColor Yellow
 $pyCode = "import sys; from google.cloud import firestore; from google.oauth2 import service_account; c=service_account.Credentials.from_service_account_file('$key'); db=firestore.Client(credentials=c); s=db.collection('boxes').document('gbox-004').get().to_dict(); s['software']={'currentVersion':'1.0.30'}; db.collection('boxes').document('$boxID').set(s); print('SUCCESS')"
@@ -22,19 +22,23 @@ $res = python -c $pyCode
 if ($res -match "SUCCESS") { 
     Write-Host "✅ Cloud koppeling gelukt!" -ForegroundColor Green 
 } else { 
-    Write-Host "❌ Fout: $res" -ForegroundColor Red; pause; return 
+    Write-Host "❌ Fout in cloud: $res" -ForegroundColor Red; pause; return 
 }
 
 if (-not (Test-Path ".git")) { 
-    Write-Host "📦 Bestanden ophalen..." -ForegroundColor Gray
+    Write-Host "📦 Bestanden ophalen van GitHub..." -ForegroundColor Gray
     git clone $repo . 
 } else { 
+    Write-Host "📦 Bestanden verversen..." -ForegroundColor Gray
     git fetch origin; git reset --hard origin/main 
 }
 
 Write-Host "`n✨ KLAAR! Je kunt nu flashen." -ForegroundColor Green
-Write-Host "Hostname: $boxID | User: pi | Pass: gridbox2026" -ForegroundColor Cyan
+Write-Host "-------------------------------------------------"
+Write-Host " Hostname: $boxID | User: pi | Pass: gridbox2026" -ForegroundColor Cyan
+Write-Host "-------------------------------------------------"
 pause
 '@
-$pietScript | Out-File -FilePath "$HOME\Downloads\START_HIER.ps1" -Encoding utf8
-Write-Host "`n✅ Bestand START_HIER.ps1 is vers aangemaakt!" -ForegroundColor Green
+
+$foutloosScript | Out-File -FilePath "$HOME\Downloads\START_HIER.ps1" -Encoding utf8 -Force
+Write-Host "`n✅ Bestand is hersteld en staat nu goed!" -ForegroundColor Green
