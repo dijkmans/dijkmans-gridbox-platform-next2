@@ -1,12 +1,14 @@
-# START_HIER.ps1 v2.1
+# START_HIER.ps1 v2.2 - De Bulletproof Editie
 Clear-Host
-$keyFile = 'service-account.json'
-$repoUrl = 'https://github.com/dijkmans/dijkmans-gridbox-platform-next2.git'
+$key = 'service-account.json'
+$url = 'https://github.com/dijkmans/dijkmans-gridbox-platform-next2.git'
 
-Write-Host '=== GRIDBOX INSTALLER v2.1 ===' -ForegroundColor Cyan
+Write-Host '=========================================' -ForegroundColor Cyan
+Write-Host '   GRIDBOX INSTALLER v2.2 (Bulletproof)  ' -ForegroundColor Cyan
+Write-Host '=========================================' -ForegroundColor Cyan
 
-if (-not (Test-Path ".\$keyFile")) {
-    Write-Host 'FOUT: Sleutel niet gevonden. Typ eerst: cd ~\Downloads' -ForegroundColor Red
+if (-not (Test-Path ".\$key")) {
+    Write-Host 'FOUT: Sleutel niet gevonden in Downloads.' -ForegroundColor Red
     return
 }
 
@@ -14,36 +16,30 @@ $boxID = Read-Host 'Welk nieuwe Box ID wilt u aanmaken?'
 if (-not $boxID) { $boxID = 'gbox-005' }
 
 Write-Host 'Cloud configureren...' -ForegroundColor Yellow
-$pyCode = @"
-import sys
-from google.cloud import firestore
-from google.oauth2 import service_account
-try:
-    creds = service_account.Credentials.from_service_account_file('$keyFile')
-    db = firestore.Client(credentials=creds)
-    source = db.collection('boxes').document('gbox-004').get().to_dict()
-    if source:
-        if 'software' not in source: source['software'] = {}
-        source['software']['currentVersion'] = '1.0.30'
-        db.collection('boxes').document('$boxID').set(source)
-        print('PYTHON_SUCCESS')
-except Exception as e:
-    print(f'ERROR: {e}')
-"@
 
-$result = $pyCode | python
-if ($result -match 'PYTHON_SUCCESS') {
+# Python aanroep zonder Here-String om fouten te voorkomen
+$pyPart1 = "import sys; from google.cloud import firestore; from google.oauth2 import service_account; "
+$pyPart2 = "c=service_account.Credentials.from_service_account_file('$key'); db=firestore.Client(credentials=c); "
+$pyPart3 = "s=db.collection('boxes').document('gbox-004').get().to_dict(); s['software']={'currentVersion':'1.0.30'}; "
+$pyPart4 = "db.collection('boxes').document('$boxID').set(s); print('PYTHON_SUCCESS')"
+$fullPy = $pyPart1 + $pyPart2 + $pyPart3 + $pyPart4
+
+$res = python -c $fullPy
+
+if ($res -match 'PYTHON_SUCCESS') {
     Write-Host 'Cloud koppeling gelukt!' -ForegroundColor Green
 } else {
-    Write-Host "Fout: $result" -ForegroundColor Red
+    Write-Host "Fout in cloud: $res" -ForegroundColor Red
     return
 }
 
 if (-not (Test-Path '.git')) {
-    git clone $repoUrl .
+    Write-Host 'Bestanden ophalen...'
+    git clone $url .
 } else {
     git fetch origin; git reset --hard origin/main
 }
 
 Write-Host "KLAAR! Hostname: $boxID | User: pi | Pass: gridbox2026"
-Read-Host 'Druk op Enter om af te sluiten'
+Write-Host 'Druk op een toets om af te sluiten...'
+$null = [System.Console]::ReadKey($true)
