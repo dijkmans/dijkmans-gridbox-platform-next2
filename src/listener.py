@@ -17,12 +17,12 @@ from google.cloud.firestore import GeoPoint
 from db_manager import get_db
 
 # =========================================================
-# GRIDBOX SERVICE - MASTER v1.0.44
+# GRIDBOX SERVICE - MASTER v1.0.45
 # Behoudt de VOLLEDIGE originele structuur en regellengte.
-# Wijzigt enkel: Firestore veldnamen + GitHub versie-uitlezer.
+# FIX: Github pad gecorrigeerd naar 'src/' folder.
 # =========================================================
 
-VERSION = "1.0.44"
+VERSION = "1.0.45"
 KEY_PATH = "service-account.json"
 BUCKET_NAME = "gridbox-platform.firebasestorage.app"
 TIMEZONE = ZoneInfo("Europe/Brussels")
@@ -84,7 +84,7 @@ class I2CRelay:
     def off(self): self._run("0x00", "UIT")
 
 # =========================================================
-# HELPERS (GITHUB PARSER TOEGEVOEGD)
+# HELPERS (GITHUB FIX TOEGEPAST)
 # =========================================================
 
 def get_git_commit():
@@ -94,16 +94,22 @@ def get_git_commit():
         return "unknown"
 
 def get_remote_version_number():
-    """Nieuwe functie: Plukt 'VERSION = ' tekst van GitHub"""
+    """Nieuwe functie: Plukt 'VERSION = ' tekst van GitHub uit de src map"""
     try:
+        # Haal metadata op
         subprocess.run(["git", "fetch"], capture_output=True, timeout=10)
+        
+        # FIX: We voegen 'src/' toe aan het pad omdat het bestand daar staat op GitHub
         filename = os.path.basename(__file__)
-        remote_content = subprocess.check_output(["git", "show", f"origin/main:{filename}"]).decode()
+        remote_path = f"src/{filename}" 
+        
+        remote_content = subprocess.check_output(["git", "show", f"origin/main:{remote_path}"]).decode()
+        
         for line in remote_content.splitlines():
             if "VERSION =" in line:
                 return line.split('"')[1]
         return "unknown"
-    except:
+    except Exception:
         return "error"
 
 def read_pi_model():
@@ -156,8 +162,8 @@ def update_pi_status():
         
         # De heringerichte software map volgens jouw wens
         full_software_map = {
-            "versionRaspberry": VERSION,            # Voorheen currentVersion
-            "latestGithub": github_version,         # Voorheen latestAvailable
+            "versionRaspberry": VERSION,            
+            "latestGithub": github_version,         
             "targetVersion": sw_cfg.get('targetVersion', VERSION),
             "updateStatus": sw_cfg.get('updateStatus', "IDLE"),
             "gitCommitLocal": get_git_commit(),
