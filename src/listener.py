@@ -19,7 +19,7 @@ from google.oauth2 import service_account
 from db_manager import get_db
 
 # =========================================================
-# GRIDBOX SERVICE - MASTER v1.0.46
+# GRIDBOX SERVICE - MASTER v1.0.47
 # Één script:
 # - bootstrap bij opstart
 # - runtime voor commands / knop / camera / heartbeat
@@ -27,9 +27,12 @@ from db_manager import get_db
 # - WEL update / downgrade via Firestore:
 #     software.targetVersion
 #     software.softwareUpdateRequested = true
+#
+# NIEUW in v1.0.47: 
+# - Directe test-snapshot bij opstart om JWT fouten te vangen.
 # =========================================================
 
-VERSION = "v1.0.46"
+VERSION = "v1.0.47"
 KEY_PATH = "service-account.json"
 BUCKET_NAME = "gridbox-platform.firebasestorage.app"
 TIMEZONE = ZoneInfo("Europe/Brussels")
@@ -344,19 +347,9 @@ def schedule_service_restart():
 # =========================================================
 
 def get_running_version():
-    """
-    Belangrijk:
-    versionRaspberry moet de effectief draaiende code weergeven.
-    Daarom gebruiken we de VERSION constant van deze process,
-    niet de actuele tag van de repo op disk.
-    """
     return VERSION
 
 def get_running_commit():
-    """
-    Zelfde idee:
-    commit van de draaiende process, bepaald bij startup.
-    """
     return STARTUP_GIT_COMMIT
 
 def derive_deployment_status(version_raspberry, target_version):
@@ -789,7 +782,6 @@ def maybe_process_software_request():
         log(f"🚀 Software update gevraagd naar {target_version}")
         software_action_in_progress = True
 
-        # Neem de opdracht meteen over en zet de vlag terug uit
         write_software_fields({
             "softwareUpdateRequested": False,
             "updateStatus": "APPLYING",
@@ -1034,6 +1026,12 @@ light.off()
 try:
     bootstrap_if_needed()
     update_pi_status()
+    
+    # --- NIEUW: STARTUP TEST SNAPSHOT ---
+    log("📸 Startup test snapshot uitvoeren...")
+    threading.Thread(target=take_snapshot, daemon=True).start()
+    # ------------------------------------
+
 except Exception as e:
     log(f"❌ Bootstrap/init fout: {e}")
 
