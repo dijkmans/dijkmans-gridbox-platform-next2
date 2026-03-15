@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gridbox Manager Pro v1.0.3</title>
-    <meta name="description" content="Gridbox Manager Pro - Industrieel vlootbeheer.">
-    <meta name="version" content="1.0.1">
+    <title>Gridbox Manager Pro v1.0.4</title>
+    <meta name="description" content="Gridbox vlootbeheer portaal.">
+    <meta name="version" content="1.0.4">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        :root { --primary: #0052cc; --success: #28a745; --danger: #dc3545; --bg: #f0f2f5; --text: #1c1e21; }
+        :root { --primary: #0052cc; --success: #28a745; --danger: #dc3545; --bg: #f0f2f5; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; }
         .navbar { background: white; padding: 0.8rem 2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.08); position: sticky; top: 0; z-index: 1000; }
         .logo-area { display: flex; align-items: center; gap: 12px; font-weight: 700; color: var(--primary); }
@@ -21,7 +21,7 @@
         .shutter { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: repeating-linear-gradient(0deg, #999, #999 8px, #777 9px, #777 15px); transition: transform 5s ease-in-out; }
         .shutter.open { transform: translateY(-90%); }
         .btn-group { display: flex; gap: 10px; margin-top: 10px; }
-        .btn { border: none; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; flex: 1; }
+        .btn { border: none; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; flex: 1; transition: 0.3s; }
         .btn-primary { background: var(--primary); color: white; }
         .btn-outline { background: white; border: 1px solid #ddd; color: #444; }
         table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
@@ -30,28 +30,28 @@
 </head>
 <body>
     <div id="auth-ui" style="display:none; height:100vh; align-items:center; justify-content:center;">
-        <div style="background:white; padding:2rem; border-radius:12px; text-align:center;">
-            <h2>Gridbox Portaal</h2>
-            <input type="email" id="email" placeholder="E-mail" style="width:100%; padding:10px; margin-bottom:1rem;">
-            <button class="btn btn-primary" onclick="sendLoginLink()">Inloggen</button>
+        <div style="background:white; padding:2rem; border-radius:12px; text-align:center; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+            <h2>Gridbox Manager</h2>
+            <input type="email" id="email" placeholder="E-mailadres" style="width:100%; padding:10px; margin-bottom:1rem; border:1px solid #ddd; border-radius:6px;">
+            <button class="btn btn-primary" onclick="sendLoginLink()">Magic Link Versturen</button>
         </div>
     </div>
     <div id="main-ui" style="display:none;">
         <nav class="navbar">
-            <div class="logo-area">Manager <span class="version-badge">v1.0.3</span></div>
+            <div class="logo-area">Gridbox Manager <span class="version-badge">v1.0.4</span></div>
             <button class="btn btn-outline" style="width:auto" onclick="window.logout()">Uitloggen</button>
         </nav>
         <div class="container">
             <div id="map"></div>
             <div>
-                <h4>Vloot</h4><div id="box-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:1.5rem;"></div>
-                <h4 style="margin-top:2rem;">Logs</h4>
+                <h4>Vloot Overzicht</h4><div id="box-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:1.5rem;"></div>
+                <h4 style="margin-top:2rem;">Activiteit Log</h4>
                 <div style="background:white; border-radius:12px; padding:1rem;"><table><tbody id="audit-log-body"></tbody></table></div>
             </div>
             <div>
-                <h4>Beheer</h4>
-                <div style="background:white; border-radius:12px; padding:1rem; margin-bottom:1rem;">
-                    <input type="email" id="invite-email" placeholder="collega@email.be" style="width:100%; padding:8px; margin-bottom:10px;">
+                <h4>Toegangsbeheer</h4>
+                <div style="background:white; border-radius:12px; padding:1.5rem; margin-bottom:1rem;">
+                    <input type="email" id="invite-email" placeholder="collega@email.be" style="width:100%; padding:8px; margin-bottom:10px; border:1px solid #ddd; border-radius:6px;">
                     <button class="btn btn-primary" onclick="window.inviteUser()">Uitnodigen</button>
                 </div>
                 <div style="background:white; border-radius:12px; padding:1rem;"><table><tbody id="user-list-body"></tbody></table></div>
@@ -62,7 +62,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, query, where, onSnapshot, doc, getDoc, getDocs, orderBy, limit, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, query, where, onSnapshot, doc, getDoc, updateDoc, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js";
 
         const cfg = { apiKey: "AIzaSyCmwIzuvHO4KW8qGMGlNFK4cnBzrVivtQE", authDomain: "gridbox-platform.firebaseapp.com", projectId: "gridbox-platform", storageBucket: "gridbox-platform.firebasestorage.app", messagingSenderId: "960191535038", appId: "1:960191535038:web:af62e61a8daf768a8acbef" };
@@ -75,26 +75,26 @@
         const initMap = () => { if(!map) { map = L.map('map').setView([51.15, 4.45], 10); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); } };
 
         window.logout = () => signOut(auth);
-        window.sendLoginLink = () => sendSignInLinkToEmail(auth, document.getElementById("email").value, { url: window.location.href, handleCodeInApp: true }).then(() => alert("Mail verstuurd!"));
+        window.sendLoginLink = () => sendSignInLinkToEmail(auth, document.getElementById("email").value, { url: window.location.href, handleCodeInApp: true }).then(() => alert("E-mail verstuurd!"));
 
         window.toggleBox = async (id, currentStatus) => {
             const next = (currentStatus === 'OPEN') ? 'CLOSE' : 'OPEN';
-            if (confirm(`Box ${id} ${next.toLowerCase()}en?`)) {
+            if (confirm(`Wilt u box ${id} ${next.toLowerCase()}en?`)) {
                 await updateDoc(doc(db, "boxes", id), { status: next });
                 httpsCallable(functions, "openBox")({ boxId: id, action: next });
             }
         };
 
         window.shareBox = async (id) => {
-            const phoneNumber = prompt("GSM nummer klant?");
+            const phoneNumber = prompt("GSM nummer van de klant?");
             if (phoneNumber) {
-                const name = prompt("Naam?");
+                const name = prompt("Naam van de klant?");
                 httpsCallable(functions, "createShare")({ boxId: id, phoneNumber, name }).then(r => alert(r.data.message));
             }
         };
 
         if (isSignInWithEmailLink(auth, window.location.href)) {
-            let email = window.localStorage.getItem("emailForSignIn") || window.prompt("Email?");
+            let email = window.localStorage.getItem("emailForSignIn") || window.prompt("Bevestig e-mail:");
             signInWithEmailLink(auth, email, window.location.href);
         }
 
@@ -126,5 +126,3 @@
     </script>
 </body>
 </html>
-
-

@@ -1,13 +1,12 @@
 ﻿const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
-// De enige juiste manier om Bird te initialiseren in deze versie:
 const mb = require('messagebird').initClient('NzCP9BR7gRtERq0KCYi6DbPaZ3ZkwAxsmjS6');
 
 admin.initializeApp();
 const db = admin.firestore();
 
 exports.createShare = onCall({ cors: true }, async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Log in verplicht.');
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Inloggen verplicht.');
     const { boxId, phoneNumber, name, description } = request.data;
     try {
         const shareRef = db.collection('boxes').doc(boxId).collection('shares').doc(phoneNumber);
@@ -30,7 +29,6 @@ exports.createShare = onCall({ cors: true }, async (request) => {
                 body: smsBody
             }, async (err, response) => {
                 if (err) {
-                    console.error('Bird error:', err);
                     await shareRef.update({ status: 'failed' });
                     resolve({ success: false, message: 'SMS mislukt.' });
                 } else {
