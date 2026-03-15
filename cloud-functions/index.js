@@ -9,7 +9,7 @@ exports.createShare = onCall({ cors: true }, async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Inloggen verplicht.');
     let { boxId, phoneNumber, name, description } = request.data;
     
-    // Nummer opschonen voor Bird
+    // Nummer opschonen
     phoneNumber = phoneNumber.replace(/\s+/g, '');
     if (!phoneNumber.startsWith('+')) phoneNumber = '+' + phoneNumber;
 
@@ -17,7 +17,7 @@ exports.createShare = onCall({ cors: true }, async (request) => {
         const shareRef = db.collection('boxes').doc(boxId).collection('shares').doc(phoneNumber);
         await shareRef.set({
             name: name,
-            description: description || 'Toegang via dashboard',
+            description: description || 'Toegang via portaal',
             active: true,
             status: 'pending',
             createdAt: admin.firestore.FieldValue.serverTimestamp()
@@ -26,7 +26,7 @@ exports.createShare = onCall({ cors: true }, async (request) => {
         const templateSnap = await db.collection('smsTemplates').doc('invitation').get();
         let smsBody = templateSnap.exists ? templateSnap.data().body : 'Beste [customerName], je hebt toegang tot Gridbox [boxId].';
         smsBody = smsBody.replace('[customerName]', name).replace('[boxId]', boxId);
-        smsBody += '\n\nStuur "Open ' + boxId.split('-')[1] + '" om te openen.';
+        smsBody += '\n\nStuur "Open ' + boxId.split('-')[1] + '" naar dit nummer om te openen.';
         
         return new Promise((resolve) => {
             mb.messages.create({
@@ -35,8 +35,9 @@ exports.createShare = onCall({ cors: true }, async (request) => {
                 body: smsBody
             }, async (err, response) => {
                 if (err) {
-                    await shareRef.update({ status: 'failed', error: err.errors[0].description });
-                    resolve({ success: false, message: 'SMS mislukt: ' + err.errors[0].description });
+                    const errMsg = err.errors ? err.errors[0].description : 'Onbekende Bird fout';
+                    await shareRef.update({ status: 'failed', error: errMsg });
+                    resolve({ success: false, message: 'SMS mislukt: ' + errMsg });
                 } else {
                     await shareRef.update({ status: 'sent', birdId: response.id });
                     resolve({ success: true, message: 'SMS verzonden naar ' + name });
