@@ -9,18 +9,18 @@
         :root { --primary: #0052cc; --success: #28a745; --danger: #dc3545; --bg: #f0f2f5; --text: #1c1e21; }
         body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); margin: 0; color: var(--text); }
         
-        /* Navigatiebalk */
+        /* Navigatie */
         .navbar { background: white; padding: 0.8rem 2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.08); position: sticky; top: 0; z-index: 1000; }
         .logo-area { display: flex; align-items: center; gap: 12px; font-size: 1.3rem; font-weight: 700; color: var(--primary); }
         .logo-placeholder { width: 36px; height: 36px; background: var(--primary); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; }
         .badge { font-size: 0.7rem; background: #e8f0fe; color: #1967d2; padding: 3px 10px; border-radius: 4px; text-transform: uppercase; font-weight: 800; border: 1px solid #c2d7f9; }
 
-        /* Pagina Structuur */
+        /* Layout */
         .container { max-width: 1200px; margin: 2rem auto; padding: 0 1.5rem; display: grid; grid-template-columns: 1fr 380px; gap: 2rem; }
         #map { height: 400px; width: 100%; border-radius: 12px; margin-bottom: 2rem; border: 1px solid #ddd; box-shadow: 0 4px 12px rgba(0,0,0,0.1); grid-column: span 2; }
         .card { background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 2px rgba(0,0,0,0.1); margin-bottom: 2rem; }
         
-        /* Gridbox Kaarten & Rolluik */
+        /* Gridbox Cards & Shutter */
         .box-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.5rem; }
         .box-card { background: white; border-radius: 12px; padding: 1.5rem; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-top: 5px solid #ddd; }
         .box-card.is-open { border-top-color: var(--success); }
@@ -38,12 +38,10 @@
         .btn-danger { background: var(--danger); color: white; }
         .btn-outline { background: white; border: 1px solid #ddd; color: #444; }
 
-        /* Tabellen voor logs en gebruikers */
         table { width: 100%; border-collapse: collapse; }
         td { padding: 12px 8px; border-top: 1px solid #f0f2f5; font-size: 0.85rem; }
         th { text-align: left; font-size: 0.7rem; color: #888; text-transform: uppercase; padding: 10px 8px; }
 
-        /* Login Scherm */
         #auth-ui { display: flex; align-items: center; justify-content: center; height: 100vh; background: #f0f2f5; }
         @media (max-width: 900px) { .container { grid-template-columns: 1fr; } #map { grid-column: span 1; } }
     </style>
@@ -52,19 +50,16 @@
     <div id="auth-ui">
         <div class="card" style="width:380px; text-align:center; padding: 2.5rem;">
             <div class="logo-area" style="justify-content: center; margin-bottom: 1.5rem;"><div class="logo-placeholder">G</div> Gridbox Portaal</div>
-            <input type="email" id="email" placeholder="naam@bedrijf.be" style="width:100%; padding:12px; margin-bottom:15px; border-radius:8px; border:1px solid #ddd; font-size: 1rem;">
-            <button class="btn btn-primary" onclick="sendLoginLink()">Magic Link Versturen</button>
+            <input type="email" id="email" placeholder="naam@bedrijf.be" style="width:100%; padding:12px; margin-bottom:15px; border-radius:8px; border:1px solid #ddd;">
+            <button class="btn btn-primary" onclick="sendLoginLink()">Inloggen</button>
         </div>
     </div>
 
     <div id="main-ui" style="display:none;">
         <nav class="navbar">
-            <div class="logo-area">
-                <div class="logo-placeholder">G</div> Manager 
-                <span id="role-badge" class="badge">Laden...</span>
-            </div>
+            <div class="logo-area"><div class="logo-placeholder">G</div> Manager <span id="role-badge" class="badge">Laden...</span></div>
             <div style="display:flex; gap:15px; align-items:center;">
-                <span id="display-user-email" style="font-size: 0.85rem; color: #65676b; font-weight: 500;">...</span>
+                <span id="display-user-email" style="font-size: 0.85rem; color: #65676b;">...</span>
                 <button class="btn btn-outline" style="width:auto; padding: 5px 15px;" onclick="window.logout()">Uitloggen</button>
             </div>
         </nav>
@@ -73,7 +68,7 @@
             <div id="map"></div>
             
             <div>
-                <h2 id="fleet-title" style="font-size: 1.1rem; color: #444; margin-bottom: 1rem;">Mijn Vloot</h2>
+                <h2 style="font-size: 1.1rem; color: #444; margin-bottom: 1rem;">Mijn Vloot</h2>
                 <div id="box-grid" class="box-grid"></div>
 
                 <h2 style="font-size: 1.1rem; color: #444; margin-top: 3rem; margin-bottom: 1rem;">Recente Activiteit</h2>
@@ -89,9 +84,8 @@
                     <input type="email" id="invite-email" placeholder="collega@email.be" style="width:100%; padding:10px; margin-bottom:10px; border-radius:6px; border:1px solid #ddd;">
                     <button class="btn btn-primary" onclick="window.inviteUser()">Versturen</button>
                 </div>
-
                 <div class="card" style="padding: 0.5rem 1.5rem;">
-                    <h3 style="font-size: 0.9rem; margin: 1.5rem 0 1rem 0;">Toeganglijst</h3>
+                    <h3 style="font-size: 0.9rem; margin-top: 0;">Toeganglijst</h3>
                     <table><tbody id="user-list-body"></tbody></table>
                 </div>
             </div>
@@ -105,14 +99,12 @@
         import { getFirestore, collection, query, where, onSnapshot, doc, getDoc, getDocs, orderBy, limit, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js";
 
-        // Firebase Configuratie
         const cfg = { apiKey: "AIzaSyCmwIzuvHO4KW8qGMGlNFK4cnBzrVivtQE", authDomain: "gridbox-platform.firebaseapp.com", projectId: "gridbox-platform", storageBucket: "gridbox-platform.firebasestorage.app", messagingSenderId: "960191535038", appId: "1:960191535038:web:af62e61a8daf768a8acbef" };
         const app = initializeApp(cfg);
         const auth = getAuth(app);
         const db = getFirestore(app);
         const functions = getFunctions(app);
 
-        // Kaart Setup
         let map, markers = {};
         delete L.Icon.Default.prototype._getIconUrl;
         L.Icon.Default.mergeOptions({
@@ -123,44 +115,43 @@
 
         const initMap = () => { if(!map) { map = L.map('map').setView([51.15, 4.45], 10); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); } };
 
-        // Functies voor de UI
-        window.sendLoginLink = () => sendSignInLinkToEmail(auth, document.getElementById("email").value, { url: window.location.href, handleCodeInApp: true }).then(() => alert("Check je mail voor de login link!"));
+        window.sendLoginLink = () => sendSignInLinkToEmail(auth, document.getElementById("email").value, { url: window.location.href, handleCodeInApp: true }).then(() => alert("Mail verstuurd!"));
         window.logout = () => signOut(auth);
         
         window.inviteUser = () => { 
             const email = document.getElementById("invite-email").value;
-            httpsCallable(functions, "inviteUser")({ email }).then(() => { alert("Uitnodiging verstuurd!"); document.getElementById("invite-email").value = ""; }); 
+            httpsCallable(functions, "inviteUser")({ email }).then(() => { alert("Gelukt!"); document.getElementById("invite-email").value = ""; }); 
         };
 
-        // OPEN/CLOSE Toggle met Azure-stijl popup
+        // DE GEFIXTE TOGGLE FUNCTIE
         window.toggleBox = async (id, currentStatus) => {
-            const nextAction = currentStatus === 'OPEN' ? 'CLOSE' : 'OPEN';
+            const nextAction = (currentStatus === 'OPEN') ? 'CLOSE' : 'OPEN';
+            console.log("Schakelen naar:", nextAction);
+            
             if (confirm(`Weet je zeker dat je box ${id} wilt ${nextAction.toLowerCase()}en?`)) {
-                // Update Firestore status voor directe visuele feedback (shutter animatie)
-                await updateDoc(doc(db, "boxes", id), { status: nextAction });
-                // Roep cloud function aan voor hardware en audit logs
-                httpsCallable(functions, "openBox")({ boxId: id, action: nextAction });
+                try {
+                    // 1. Update status voor animatie
+                    await updateDoc(doc(db, "boxes", id), { status: nextAction });
+                    // 2. Stuur het commando naar de Cloud Function
+                    const result = await httpsCallable(functions, "openBox")({ boxId: id, action: nextAction });
+                    console.log("Commando verstuurd:", result.data);
+                } catch (e) {
+                    alert("Fout: " + e.message);
+                }
             }
         };
 
-        // Deelfunctie: vraagt GSM, Naam en Omschrijving
         window.shareBox = async (id) => {
-            const phoneNumber = prompt("GSM nummer van de klant? (Wordt ID voor het share document)");
+            const phoneNumber = prompt("GSM nummer van de klant?");
             if (phoneNumber) {
                 const name = prompt("Naam van de klant?");
-                const desc = prompt("Omschrijving van deze toegang?");
-                httpsCallable(functions, "createShare")({ 
-                    boxId: id, 
-                    phoneNumber: phoneNumber, 
-                    name: name, 
-                    description: desc 
-                }).then(r => alert(r.data.message || "Gedeeld!"));
+                const desc = prompt("Omschrijving?");
+                httpsCallable(functions, "createShare")({ boxId: id, phoneNumber, name, description: desc }).then(r => alert(r.data.message));
             }
         };
 
-        // Firebase Auth Afhandeling
         if (isSignInWithEmailLink(auth, window.location.href)) {
-            let email = window.localStorage.getItem("emailForSignIn") || window.prompt("Bevestig je e-mail:");
+            let email = window.localStorage.getItem("emailForSignIn") || window.prompt("Email?");
             signInWithEmailLink(auth, email, window.location.href);
         }
 
@@ -170,14 +161,12 @@
                 document.getElementById("display-user-email").innerText = user.email;
                 document.getElementById("auth-ui").style.display = "none";
                 document.getElementById("main-ui").style.display = "block";
-                
                 const uDoc = await getDoc(doc(db, "users", user.uid));
                 const uData = uDoc.data();
                 const role = uData?.role || 'user';
                 const cid = uData?.customerId;
                 document.getElementById("role-badge").innerText = role;
 
-                // Queries instellen op basis van rol
                 let bQ, uQ, lQ;
                 if (role === 'superAdmin') {
                     bQ = query(collection(db, "boxes"));
@@ -189,20 +178,18 @@
                     lQ = query(collection(db, "auditLogs"), where("customerId", "==", cid), orderBy("timestamp", "desc"), limit(10));
                 }
 
-                // Luisteren naar Boxen (Shutter + Kaart)
                 onSnapshot(bQ, (snap) => {
                     const g = document.getElementById("box-grid"); g.innerHTML = "";
                     let bounds = [];
                     snap.forEach(async (d) => {
                         const bData = d.data();
                         const isOpen = bData.status === 'OPEN';
-                        
                         const card = document.createElement("div");
                         card.className = `box-card ${isOpen ? 'is-open' : ''}`;
                         card.innerHTML = `
-                            <b style="font-size:1.1rem">📦 ${d.id}</b>
+                            <b>📦 ${d.id}</b>
                             <div class="shutter-container">
-                                <div class="box-content-sim">LADEN...</div>
+                                <div class="box-content-sim">HARDWARE ONLINE</div>
                                 <div class="shutter ${isOpen ? 'open' : ''}"></div>
                             </div>
                             <div class="btn-group">
@@ -210,23 +197,17 @@
                                     ${isOpen ? 'CLOSE' : 'OPEN'}
                                 </button>
                                 <button class="btn btn-outline" onclick="shareBox('${d.id}')">SHARE</button>
-                            </div>
-                        `;
+                            </div>`;
                         g.appendChild(card);
 
-                        // Vlaggetjes op de kaart
                         const sSnap = await getDocs(collection(db, "boxes", d.id, "sites"));
                         sSnap.forEach(s => {
                             const geo = s.data().location?.geo;
                             if (geo) {
-                                let lat, lng;
-                                if (geo.latitude) { lat = geo.latitude; lng = geo.longitude; } 
-                                else { 
-                                    lat = parseFloat(geo[0].toString().replace(/[^\d.-]/g, '')); 
-                                    lng = parseFloat(geo[1].toString().replace(/[^\d.-]/g, '')); 
-                                }
+                                let lat = geo.latitude || parseFloat(geo[0].toString().replace(/[^\d.-]/g, ''));
+                                let lng = geo.longitude || parseFloat(geo[1].toString().replace(/[^\d.-]/g, ''));
                                 if (markers[d.id]) map.removeLayer(markers[d.id]);
-                                markers[d.id] = L.marker([lat, lng]).addTo(map).bindPopup(`<b>${d.id}</b><br>${s.data().name}`);
+                                markers[d.id] = L.marker([lat, lng]).addTo(map).bindPopup(d.id);
                                 bounds.push([lat, lng]);
                                 if(bounds.length > 0) map.fitBounds(bounds, {padding:[50,50], maxZoom:14});
                             }
@@ -234,7 +215,6 @@
                     });
                 });
 
-                // Gebruikerslijst
                 onSnapshot(uQ, (s) => {
                     const b = document.getElementById("user-list-body"); b.innerHTML = "";
                     s.forEach(d => { 
@@ -242,12 +222,11 @@
                     });
                 });
 
-                // Audit Logs
                 onSnapshot(lQ, (s) => {
                     const b = document.getElementById("audit-log-body"); b.innerHTML = "";
                     s.forEach(d => { 
                         const l = d.data(); const t = l.timestamp ? l.timestamp.toDate().toLocaleTimeString('nl-BE') : '...';
-                        b.innerHTML += `<tr><td><small>${t}</small></td><td><b>${l.userEmail?.split('@')[0] || 'Sys'}</b></td><td>${l.boxId}</td><td>${l.action || 'Open'}</td></tr>`;
+                        b.innerHTML += `<tr><td>${t}</td><td><b>${l.userEmail?.split('@')[0] || 'Sys'}</b></td><td>${l.boxId}</td><td>${l.action || 'Open'}</td></tr>`;
                     });
                 });
                 setTimeout(() => map.invalidateSize(), 500);
