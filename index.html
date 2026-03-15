@@ -15,33 +15,35 @@
         .logo-placeholder { width: 36px; height: 36px; background: var(--primary); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; }
         .badge { font-size: 0.7rem; background: #e8f0fe; color: #1967d2; padding: 3px 10px; border-radius: 4px; text-transform: uppercase; font-weight: 800; border: 1px solid #c2d7f9; }
 
-        /* Layout */
+        /* Layout Container */
         .container { max-width: 1200px; margin: 2rem auto; padding: 0 1.5rem; display: grid; grid-template-columns: 1fr 380px; gap: 2rem; }
         #map { height: 400px; width: 100%; border-radius: 12px; margin-bottom: 2rem; border: 1px solid #ddd; box-shadow: 0 4px 12px rgba(0,0,0,0.1); grid-column: span 2; }
         .card { background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 2px rgba(0,0,0,0.1); margin-bottom: 2rem; }
         
-        /* Box Cards & Shutter */
-        .box-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1.5rem; }
+        /* Box Cards & Shutter Simulation */
+        .box-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.5rem; }
         .box-card { background: white; border-radius: 12px; padding: 1.5rem; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-top: 5px solid #ddd; }
         .box-card.is-open { border-top-color: var(--success); }
         
         .shutter-container { height: 80px; background: #333; border-radius: 6px; margin: 1rem 0; position: relative; overflow: hidden; border: 3px solid #444; }
-        /* Animatie vertraagd naar 5 seconden */
+        /* De gevraagde 5 seconden animatie */
         .shutter { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: repeating-linear-gradient(0deg, #999, #999 8px, #777 9px, #777 15px); transition: transform 5s ease-in-out; z-index: 2; }
         .shutter.open { transform: translateY(-90%); }
         .box-content-sim { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #555; font-size: 0.7rem; background: #eee; z-index: 1; font-weight: bold; }
 
-        /* Knoppen */
+        /* Actie Knoppen */
         .btn-group { display: flex; gap: 10px; margin-top: 10px; }
-        .btn { border: none; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; width: 100%; transition: 0.3s; font-size: 0.85rem; flex: 1; }
+        .btn { border: none; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; width: 100%; transition: 0.3s; font-size: 0.85rem; flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; }
         .btn-primary { background: var(--primary); color: white; }
         .btn-danger { background: var(--danger); color: white; }
         .btn-outline { background: white; border: 1px solid #ddd; color: #444; }
 
+        /* Tabellen */
         table { width: 100%; border-collapse: collapse; }
         td { padding: 12px 8px; border-top: 1px solid #f0f2f5; font-size: 0.85rem; }
         th { text-align: left; font-size: 0.7rem; color: #888; text-transform: uppercase; padding: 10px 8px; }
 
+        /* Login UI */
         #auth-ui { display: flex; align-items: center; justify-content: center; height: 100vh; background: #f0f2f5; }
         @media (max-width: 900px) { .container { grid-template-columns: 1fr; } #map { grid-column: span 1; } }
     </style>
@@ -50,8 +52,8 @@
     <div id="auth-ui">
         <div class="card" style="width:380px; text-align:center; padding: 2.5rem;">
             <div class="logo-area" style="justify-content: center; margin-bottom: 1.5rem;"><div class="logo-placeholder">G</div> Gridbox Portaal</div>
-            <input type="email" id="email" placeholder="naam@bedrijf.be" style="width:100%; padding:12px; margin-bottom:15px; border-radius:8px; border:1px solid #ddd;">
-            <button class="btn btn-primary" onclick="sendLoginLink()">Magic Link Versturen</button>
+            <input type="email" id="email" placeholder="naam@bedrijf.be" style="width:100%; padding:12px; margin-bottom:15px; border-radius:8px; border:1px solid #ddd; font-size: 1rem;">
+            <button class="btn btn-primary" onclick="sendLoginLink()">Inloggen via Magic Link</button>
         </div>
     </div>
 
@@ -119,7 +121,7 @@
 
         const initMap = () => { if(!map) { map = L.map('map').setView([51.15, 4.45], 10); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); } };
 
-        window.sendLoginLink = () => sendSignInLinkToEmail(auth, document.getElementById("email").value, { url: window.location.href, handleCodeInApp: true }).then(() => alert("Mail verstuurd!"));
+        window.sendLoginLink = () => sendSignInLinkToEmail(auth, document.getElementById("email").value, { url: window.location.href, handleCodeInApp: true }).then(() => alert("Inlogmail verzonden!"));
         window.logout = () => signOut(auth);
         
         window.inviteUser = () => { 
@@ -136,17 +138,19 @@
             }
         };
 
-        // Share functie
+        // Deel functie (Maakt Firestore record aan via Cloud Function)
         window.shareBox = async (id) => {
-            const name = prompt("Voor wie is deze toegang? (Naam)");
-            if (name) {
-                const desc = prompt("Omschrijving?");
-                httpsCallable(functions, "createShare")({ boxId: id, name, description: desc }).then(() => alert("Deel-link aangemaakt in Firestore!"));
+            const phoneNumber = prompt("GSM nummer van de klant? (ID voor share document)");
+            if (phoneNumber) {
+                const name = prompt("Naam van de klant?");
+                const desc = prompt("Omschrijving van de toegang?");
+                httpsCallable(functions, "createShare")({ boxId: id, phoneNumber, name, description: desc })
+                    .then(r => alert(r.data.message || "Gedeeld!"));
             }
         };
 
         if (isSignInWithEmailLink(auth, window.location.href)) {
-            let email = window.localStorage.getItem("emailForSignIn") || window.prompt("Email?");
+            let email = window.localStorage.getItem("emailForSignIn") || window.prompt("Bevestig je e-mailadres:");
             signInWithEmailLink(auth, email, window.location.href);
         }
 
@@ -191,9 +195,9 @@
                             </div>
                             <div class="btn-group">
                                 <button class="btn ${isOpen ? 'btn-danger' : 'btn-primary'}" onclick="toggleBox('${d.id}', '${bData.status || 'CLOSE'}')">
-                                    ${isOpen ? 'CLOSE' : 'OPEN'}
+                                    ${isOpen ? '🔓 CLOSE' : '🔒 OPEN'}
                                 </button>
-                                <button class="btn btn-outline" onclick="shareBox('${d.id}')">SHARE</button>
+                                <button class="btn btn-outline" onclick="shareBox('${d.id}')">🔗 SHARE</button>
                             </div>
                         `;
                         g.appendChild(card);
@@ -202,8 +206,8 @@
                         sSnap.forEach(s => {
                             const geo = s.data().location?.geo;
                             if (geo) {
-                                let lat = geo.latitude ? geo.latitude : parseFloat(geo[0].toString().replace(/[^\d.-]/g, ''));
-                                let lng = geo.longitude ? geo.longitude : parseFloat(geo[1].toString().replace(/[^\d.-]/g, ''));
+                                let lat = geo.latitude || parseFloat(geo[0].toString().replace(/[^\d.-]/g, ''));
+                                let lng = geo.longitude || parseFloat(geo[1].toString().replace(/[^\d.-]/g, ''));
                                 if (markers[d.id]) map.removeLayer(markers[d.id]);
                                 markers[d.id] = L.marker([lat, lng]).addTo(map).bindPopup(`<b>${d.id}</b><br>${s.data().name}`);
                                 bounds.push([lat, lng]);
@@ -224,7 +228,7 @@
                     const b = document.getElementById("audit-log-body"); b.innerHTML = "";
                     s.forEach(d => { 
                         const l = d.data(); const t = l.timestamp ? l.timestamp.toDate().toLocaleTimeString('nl-BE') : '...';
-                        b.innerHTML += `<tr><td>${t}</td><td><b>${l.userEmail?.split('@')[0] || 'Sys'}</b></td><td>${l.boxId}</td><td>${l.action || 'Open'}</td></tr>`;
+                        b.innerHTML += `<tr><td><small>${t}</small></td><td><b>${l.userEmail?.split('@')[0] || 'Sys'}</b></td><td>${l.boxId}</td><td>${l.action || 'Actie'}</td></tr>`;
                     });
                 });
                 setTimeout(() => map.invalidateSize(), 500);
