@@ -7,20 +7,26 @@ const db = admin.firestore();
 
 exports.createShare = onCall({ cors: true }, async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Inloggen verplicht.');
-    const { boxId, phoneNumber, name, description } = request.data;
+    let { boxId, phoneNumber, name, description } = request.data;
+    
+    // Nummer opschonen voor Bird
+    phoneNumber = phoneNumber.replace(/\s+/g, '');
+    if (!phoneNumber.startsWith('+')) phoneNumber = '+' + phoneNumber;
+
     try {
         const shareRef = db.collection('boxes').doc(boxId).collection('shares').doc(phoneNumber);
         await shareRef.set({
             name: name,
-            description: description || 'Toegang via portaal',
+            description: description || 'Toegang via dashboard',
             active: true,
             status: 'pending',
             createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
+
         const templateSnap = await db.collection('smsTemplates').doc('invitation').get();
         let smsBody = templateSnap.exists ? templateSnap.data().body : 'Beste [customerName], je hebt toegang tot Gridbox [boxId].';
         smsBody = smsBody.replace('[customerName]', name).replace('[boxId]', boxId);
-        smsBody += '\n\nStuur "Open ' + boxId.split('-')[1] + '" naar dit nummer om te openen.';
+        smsBody += '\n\nStuur "Open ' + boxId.split('-')[1] + '" om te openen.';
         
         return new Promise((resolve) => {
             mb.messages.create({
@@ -29,11 +35,11 @@ exports.createShare = onCall({ cors: true }, async (request) => {
                 body: smsBody
             }, async (err, response) => {
                 if (err) {
-                    await shareRef.update({ status: 'failed' });
-                    resolve({ success: false, message: 'SMS mislukt.' });
+                    await shareRef.update({ status: 'failed', error: err.errors[0].description });
+                    resolve({ success: false, message: 'SMS mislukt: ' + err.errors[0].description });
                 } else {
                     await shareRef.update({ status: 'sent', birdId: response.id });
-                    resolve({ success: true, message: 'SMS verzonden naar ' + name + '!' });
+                    resolve({ success: true, message: 'SMS verzonden naar ' + name });
                 }
             });
         });
