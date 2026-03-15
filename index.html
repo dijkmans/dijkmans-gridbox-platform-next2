@@ -6,75 +6,37 @@
     <title>Gridbox Manager</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        :root { --primary: #0052cc; --success: #28a745; --danger: #dc3545; --bg: #f0f2f5; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; color: #1c1e21; }
+        :root { --primary: #0052cc; --success: #28a745; --bg: #f0f2f5; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); margin: 0; }
         .navbar { background: white; padding: 0.8rem 2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 1000; }
-        .logo-area { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--primary); }
-        .badge { font-size: 0.7rem; background: #e8f0fe; color: #1967d2; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; font-weight: 800; border: 1px solid #c2d7f9; }
-        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; display: grid; grid-template-columns: 1fr 350px; gap: 2rem; }
-        #map { height: 400px; width: 100%; border-radius: 12px; margin-bottom: 2rem; border: 1px solid #ddd; box-shadow: 0 4px 12px rgba(0,0,0,0.1); grid-column: span 2; }
-        .card { background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 2px rgba(0,0,0,0.1); margin-bottom: 1.5rem; }
-        .btn { border: none; padding: 10px 15px; border-radius: 6px; font-weight: 600; cursor: pointer; width: 100%; transition: 0.2s; }
-        .btn-primary { background: var(--primary); color: white; }
-        .box-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
-        .box-card { background: white; border-radius: 10px; padding: 1rem; border-top: 4px solid var(--success); text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-        td { padding: 12px 5px; border-top: 1px solid #eee; }
-        @media (max-width: 850px) { .container { grid-template-columns: 1fr; } #map { grid-column: span 1; } }
+        #map { height: 450px; width: 100%; border-radius: 12px; border: 1px solid #ddd; margin-bottom: 2rem; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1.5rem; }
+        .box-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1.5rem; }
+        .box-card { background: white; border-radius: 12px; padding: 1.5rem; border-top: 5px solid var(--success); text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .btn { border: none; padding: 10px; border-radius: 6px; font-weight: 600; cursor: pointer; width: 100%; background: var(--primary); color: white; }
     </style>
 </head>
 <body>
-    <div id="auth-ui" style="display: flex; align-items: center; justify-content: center; height: 100vh;">
-        <div class="card" style="width:320px; text-align:center;">
-            <div class="logo-area" style="justify-content:center; margin-bottom:1rem;">Gridbox Portaal</div>
-            <input type="email" id="email" placeholder="E-mailadres" style="width:100%; padding:10px; margin-bottom:10px; box-sizing:border-box;">
-            <button class="btn btn-primary" onclick="sendLoginLink()">Inloggen</button>
-        </div>
-    </div>
-
-    <div id="main-ui" style="display:none;">
-        <nav class="navbar">
-            <div class="logo-area">Gridbox Manager <span id="role-badge" class="badge"></span></div>
-            <div style="display:flex; gap:15px; align-items:center;">
-                <small id="user-display" style="color: #666; font-weight:500;"></small>
-                <button onclick="window.logout()" style="background:none; border:none; cursor:pointer; text-decoration:underline; font-size:0.8rem;">Uitloggen</button>
-            </div>
-        </nav>
-        <div class="container">
-            <div id="map"></div>
-            <div>
-                <h4 id="fleet-title" style="margin:0 0 1rem 0;">Vlootoverzicht</h4>
-                <div id="box-grid" class="box-grid"></div>
-                <h4 style="margin:2rem 0 1rem 0;">Recente Activiteit</h4>
-                <div class="card" style="padding:0.5rem 1rem;"><table><tbody id="audit-log-body"></tbody></table></div>
-            </div>
-            <div>
-                <h4 style="margin:0 0 1rem 0;">Beheer</h4>
-                <div class="card">
-                    <input type="email" id="invite-email" placeholder="collega@email.be" style="width:100%; padding:8px; margin-bottom:10px;">
-                    <button class="btn btn-primary" onclick="window.inviteUser()">Gebruiker Uitnodigen</button>
-                </div>
-                <div class="card" style="padding:0.5rem 1rem;"><table><tbody id="user-list-body"></tbody></table></div>
-            </div>
-        </div>
+    <nav class="navbar"><div style="font-weight:700; color:var(--primary);">Gridbox Manager</div></nav>
+    <div class="container">
+        <div id="map"></div>
+        <div class="box-grid" id="box-grid"></div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, query, where, onSnapshot, doc, getDoc, getDocs, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-        import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const cfg = { apiKey: "AIzaSyCmwIzuvHO4KW8qGMGlNFK4cnBzrVivtQE", authDomain: "gridbox-platform.firebaseapp.com", projectId: "gridbox-platform", storageBucket: "gridbox-platform.firebasestorage.app", messagingSenderId: "960191535038", appId: "1:960191535038:web:af62e61a8daf768a8acbef" };
         const app = initializeApp(cfg);
-        const auth = getAuth(app);
         const db = getFirestore(app);
-        const functions = getFunctions(app);
+        const auth = getAuth(app);
 
         let map, markers = {};
         
-        // FIX VOOR ICONEN
+        // Fix voor de bekende Leaflet marker-bug
         delete L.Icon.Default.prototype._getIconUrl;
         L.Icon.Default.mergeOptions({
             iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -82,84 +44,42 @@
             shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
         });
 
-        const initMap = () => { 
-            if(!map) { 
-                map = L.map('map').setView([51.1, 4.5], 8); 
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); 
-            } 
-        };
+        const initMap = () => { if(!map) { map = L.map('map').setView([51.1396, 4.9733], 12); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); } };
 
-        window.sendLoginLink = () => sendSignInLinkToEmail(auth, document.getElementById("email").value, { url: window.location.href, handleCodeInApp: true }).then(() => alert("Check mail!"));
-        window.logout = () => signOut(auth);
-        window.openBox = (id) => httpsCallable(functions, "openBox")({ boxId: id }).then(r => alert(r.data.message));
-        window.inviteUser = () => { const email = document.getElementById("invite-email").value; httpsCallable(functions, "inviteUser")({ email }).then(() => alert("Gelukt!")).catch(e => alert(e.message)); };
-
-        if (isSignInWithEmailLink(auth, window.location.href)) {
-            let email = window.localStorage.getItem("emailForSignIn") || window.prompt("Email?");
-            signInWithEmailLink(auth, email, window.location.href);
-        }
-
-        onAuthStateChanged(auth, async (user) => {
+        onAuthStateChanged(auth, (user) => {
             if (user) {
                 initMap();
-                document.getElementById("user-display").innerText = user.email;
-                document.getElementById("auth-ui").style.display = "none";
-                document.getElementById("main-ui").style.display = "block";
-                
-                const uSnap = await getDoc(doc(db, "users", user.uid));
-                const uData = uSnap.data();
-                const role = uData?.role || 'user';
-                const cid = uData?.customerId;
-                document.getElementById("role-badge").innerText = role;
-
-                let bQ, uQ, lQ;
-                if (role === 'superAdmin') {
-                    bQ = query(collection(db, "boxes"));
-                    uQ = query(collection(db, "users"));
-                    lQ = query(collection(db, "auditLogs"), orderBy("timestamp", "desc"), limit(8));
-                } else {
-                    bQ = query(collection(db, "boxes"), where("customerId", "==", cid));
-                    uQ = query(collection(db, "users"), where("customerId", "==", cid));
-                    lQ = query(collection(db, "auditLogs"), where("customerId", "==", cid), orderBy("timestamp", "desc"), limit(8));
-                }
-
-                onSnapshot(bQ, (snap) => {
+                onSnapshot(collection(db, "boxes"), (snap) => {
                     const g = document.getElementById("box-grid"); g.innerHTML = "";
                     let bounds = [];
-                    snap.forEach(async (d) => {
-                        g.innerHTML += `<div class="box-card"><b>${d.id}</b><br><br><button class="btn btn-primary" onclick="window.openBox('${d.id}')">OPEN BOX</button></div>`;
-                        const sSnap = await getDocs(collection(db, "boxes", d.id, "sites"));
+                    snap.forEach(async (doc) => {
+                        const bId = doc.id;
+                        g.innerHTML += `<div class="box-card"><h3>📦 ${bId}</h3></div>`;
+                        
+                        const sSnap = await getDocs(collection(db, "boxes", bId, "sites"));
                         sSnap.forEach(s => {
-                            if (s.data().location?.geo) {
-                                const [lat, lng] = s.data().location.geo;
-                                if (markers[d.id]) map.removeLayer(markers[d.id]);
-                                markers[d.id] = L.marker([parseFloat(lat), parseFloat(lng)]).addTo(map).bindPopup(`<b>${d.id}</b><br>${s.data().name || ''}`);
-                                bounds.push([parseFloat(lat), parseFloat(lng)]);
-                                if (bounds.length > 0) map.fitBounds(bounds, {padding: [50, 50], maxZoom: 12});
+                            const geo = s.data().location?.geo;
+                            if (geo) {
+                                let lat, lng;
+                                // Check of het een Firebase GeoPoint is of een lijstje
+                                if (geo.latitude) {
+                                    lat = geo.latitude;
+                                    lng = geo.longitude;
+                                } else {
+                                    lat = parseFloat(geo[0].toString().replace(/[^\d.-]/g, ''));
+                                    lng = parseFloat(geo[1].toString().replace(/[^\d.-]/g, ''));
+                                }
+
+                                if (!isNaN(lat) && !isNaN(lng)) {
+                                    if (markers[bId]) map.removeLayer(markers[bId]);
+                                    markers[bId] = L.marker([lat, lng]).addTo(map).bindPopup(`<b>${bId}</b><br>${s.data().name}`);
+                                    bounds.push([lat, lng]);
+                                    if(bounds.length > 0) map.fitBounds(bounds, {padding: [50, 50]});
+                                }
                             }
                         });
                     });
                 });
-
-                onSnapshot(uQ, (s) => {
-                    const b = document.getElementById("user-list-body"); b.innerHTML = "";
-                    s.forEach(d => { 
-                        b.innerHTML += `<tr><td>${d.data().email || 'Onbekend'}</td><td style="text-align:right"><span class="badge" style="background:#eee; color:#666;">${d.data().role || 'user'}</span></td></tr>`; 
-                    });
-                });
-
-                onSnapshot(lQ, (s) => {
-                    const b = document.getElementById("audit-log-body"); b.innerHTML = "";
-                    s.forEach(d => { 
-                        const log = d.data();
-                        const t = log.timestamp ? log.timestamp.toDate().toLocaleTimeString('nl-BE') : '...';
-                        b.innerHTML += `<tr><td><small>${t}</small></td><td><b>${log.userEmail ? log.userEmail.split('@')[0] : 'Systeem'}</b></td><td><small>${log.boxId}</small></td></tr>`;
-                    });
-                });
-                setTimeout(() => map.invalidateSize(), 600);
-            } else {
-                document.getElementById("auth-ui").style.display = "flex";
-                document.getElementById("main-ui").style.display = "none";
             }
         });
     </script>
