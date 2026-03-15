@@ -22,18 +22,21 @@
         
         /* Box Cards & Shutter */
         .box-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1.5rem; }
-        .box-card { background: white; border-radius: 12px; padding: 1.5rem; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-top: 5px solid #ddd; transition: 0.3s; }
+        .box-card { background: white; border-radius: 12px; padding: 1.5rem; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-top: 5px solid #ddd; }
         .box-card.is-open { border-top-color: var(--success); }
         
         .shutter-container { height: 80px; background: #333; border-radius: 6px; margin: 1rem 0; position: relative; overflow: hidden; border: 3px solid #444; }
-        .shutter { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: repeating-linear-gradient(0deg, #999, #999 8px, #777 9px, #777 15px); transition: transform 2s ease-in-out; z-index: 2; }
+        /* Animatie vertraagd naar 5 seconden */
+        .shutter { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: repeating-linear-gradient(0deg, #999, #999 8px, #777 9px, #777 15px); transition: transform 5s ease-in-out; z-index: 2; }
         .shutter.open { transform: translateY(-90%); }
-        .box-content-sim { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #555; font-size: 0.8rem; background: #eee; z-index: 1; }
+        .box-content-sim { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #555; font-size: 0.7rem; background: #eee; z-index: 1; font-weight: bold; }
 
-        .btn { border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; width: 100%; transition: 0.3s; font-size: 0.9rem; }
+        /* Knoppen */
+        .btn-group { display: flex; gap: 10px; margin-top: 10px; }
+        .btn { border: none; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; width: 100%; transition: 0.3s; font-size: 0.85rem; flex: 1; }
         .btn-primary { background: var(--primary); color: white; }
         .btn-danger { background: var(--danger); color: white; }
-        .btn-outline { background: white; border: 1px solid #ddd; color: #444; width: auto; padding: 8px 15px; }
+        .btn-outline { background: white; border: 1px solid #ddd; color: #444; }
 
         table { width: 100%; border-collapse: collapse; }
         td { padding: 12px 8px; border-top: 1px solid #f0f2f5; font-size: 0.85rem; }
@@ -48,7 +51,7 @@
         <div class="card" style="width:380px; text-align:center; padding: 2.5rem;">
             <div class="logo-area" style="justify-content: center; margin-bottom: 1.5rem;"><div class="logo-placeholder">G</div> Gridbox Portaal</div>
             <input type="email" id="email" placeholder="naam@bedrijf.be" style="width:100%; padding:12px; margin-bottom:15px; border-radius:8px; border:1px solid #ddd;">
-            <button class="btn btn-primary" onclick="sendLoginLink()">Inloggen via Magic Link</button>
+            <button class="btn btn-primary" onclick="sendLoginLink()">Magic Link Versturen</button>
         </div>
     </div>
 
@@ -56,11 +59,11 @@
         <nav class="navbar">
             <div class="logo-area">
                 <div class="logo-placeholder">G</div> Manager 
-                <span id="role-badge" class="badge">...</span>
+                <span id="role-badge" class="badge">Laden...</span>
             </div>
             <div style="display:flex; gap:15px; align-items:center;">
                 <span id="display-user-email" style="font-size: 0.85rem; color: #65676b; font-weight: 500;">...</span>
-                <button class="btn btn-outline" onclick="window.logout()">Uitloggen</button>
+                <button class="btn btn-outline" style="width:auto; padding: 5px 15px;" onclick="window.logout()">Uitloggen</button>
             </div>
         </nav>
 
@@ -68,7 +71,7 @@
             <div id="map"></div>
             
             <div>
-                <h2 id="fleet-title" style="font-size: 1.1rem; color: #444; margin-bottom: 1rem;">Vlootoverzicht</h2>
+                <h2 id="fleet-title" style="font-size: 1.1rem; color: #444; margin-bottom: 1rem;">Mijn Vloot</h2>
                 <div id="box-grid" class="box-grid"></div>
 
                 <h2 style="font-size: 1.1rem; color: #444; margin-top: 3rem; margin-bottom: 1rem;">Recente Activiteit</h2>
@@ -124,19 +127,26 @@
             httpsCallable(functions, "inviteUser")({ email }).then(() => { alert("Gelukt!"); document.getElementById("invite-email").value = ""; }); 
         };
 
-        // De Azure-stijl toggle met bevestiging
+        // De Azure-stijl toggle met bevestiging en 5s animatie
         window.toggleBox = async (id, currentStatus) => {
             const nextAction = currentStatus === 'OPEN' ? 'CLOSE' : 'OPEN';
             if (confirm(`Weet je zeker dat je box ${id} wilt ${nextAction === 'OPEN' ? 'openen' : 'sluiten'}?`)) {
-                // 1. Update de status voor de UI simulatie
                 await updateDoc(doc(db, "boxes", id), { status: nextAction });
-                // 2. Roep de Cloud Function aan voor de echte hardware actie & audit log
                 httpsCallable(functions, "openBox")({ boxId: id, action: nextAction });
             }
         };
 
+        // Share functie
+        window.shareBox = async (id) => {
+            const name = prompt("Voor wie is deze toegang? (Naam)");
+            if (name) {
+                const desc = prompt("Omschrijving?");
+                httpsCallable(functions, "createShare")({ boxId: id, name, description: desc }).then(() => alert("Deel-link aangemaakt in Firestore!"));
+            }
+        };
+
         if (isSignInWithEmailLink(auth, window.location.href)) {
-            let email = window.localStorage.getItem("emailForSignIn") || window.prompt("Bevestig je e-mailadres:");
+            let email = window.localStorage.getItem("emailForSignIn") || window.prompt("Email?");
             signInWithEmailLink(auth, email, window.location.href);
         }
 
@@ -153,19 +163,17 @@
                 const cid = uData?.customerId;
                 document.getElementById("role-badge").innerText = role;
 
-                // Smart Queries gebaseerd op rol
                 let bQ, uQ, lQ;
                 if (role === 'superAdmin') {
                     bQ = query(collection(db, "boxes"));
                     uQ = query(collection(db, "users"));
-                    lQ = query(collection(db, "auditLogs"), orderBy("timestamp", "desc"), limit(8));
+                    lQ = query(collection(db, "auditLogs"), orderBy("timestamp", "desc"), limit(10));
                 } else {
                     bQ = query(collection(db, "boxes"), where("customerId", "==", cid));
                     uQ = query(collection(db, "users"), where("customerId", "==", cid));
-                    lQ = query(collection(db, "auditLogs"), where("customerId", "==", cid), orderBy("timestamp", "desc"), limit(8));
+                    lQ = query(collection(db, "auditLogs"), where("customerId", "==", cid), orderBy("timestamp", "desc"), limit(10));
                 }
 
-                // Boxen & Rolluik Animatie
                 onSnapshot(bQ, (snap) => {
                     const g = document.getElementById("box-grid"); g.innerHTML = "";
                     let bounds = [];
@@ -178,22 +186,24 @@
                         card.innerHTML = `
                             <b style="font-size:1.1rem">📦 ${d.id}</b>
                             <div class="shutter-container">
-                                <div class="box-content-sim">LADEN...</div>
+                                <div class="box-content-sim">HARDWARE ONLINE</div>
                                 <div class="shutter ${isOpen ? 'open' : ''}"></div>
                             </div>
-                            <button class="btn ${isOpen ? 'btn-danger' : 'btn-primary'}" onclick="toggleBox('${d.id}', '${bData.status || 'CLOSE'}')">
-                                ${isOpen ? '🔓 CLOSE BOX' : '🔒 OPEN BOX'}
-                            </button>
+                            <div class="btn-group">
+                                <button class="btn ${isOpen ? 'btn-danger' : 'btn-primary'}" onclick="toggleBox('${d.id}', '${bData.status || 'CLOSE'}')">
+                                    ${isOpen ? 'CLOSE' : 'OPEN'}
+                                </button>
+                                <button class="btn btn-outline" onclick="shareBox('${d.id}')">SHARE</button>
+                            </div>
                         `;
                         g.appendChild(card);
 
-                        // Kaart Markers via Sites
                         const sSnap = await getDocs(collection(db, "boxes", d.id, "sites"));
                         sSnap.forEach(s => {
                             const geo = s.data().location?.geo;
                             if (geo) {
-                                let lat = geo.latitude || parseFloat(geo[0].toString().replace(/[^\d.-]/g, ''));
-                                let lng = geo.longitude || parseFloat(geo[1].toString().replace(/[^\d.-]/g, ''));
+                                let lat = geo.latitude ? geo.latitude : parseFloat(geo[0].toString().replace(/[^\d.-]/g, ''));
+                                let lng = geo.longitude ? geo.longitude : parseFloat(geo[1].toString().replace(/[^\d.-]/g, ''));
                                 if (markers[d.id]) map.removeLayer(markers[d.id]);
                                 markers[d.id] = L.marker([lat, lng]).addTo(map).bindPopup(`<b>${d.id}</b><br>${s.data().name}`);
                                 bounds.push([lat, lng]);
@@ -203,21 +213,18 @@
                     });
                 });
 
-                // Gebruikerslijst fix
                 onSnapshot(uQ, (s) => {
                     const b = document.getElementById("user-list-body"); b.innerHTML = "";
                     s.forEach(d => { 
-                        const mail = d.data().email || "Onbekend";
-                        b.innerHTML += `<tr><td>${mail}</td><td style="text-align:right"><span class="badge" style="background:#eee;color:#666">${d.data().role || 'user'}</span></td></tr>`; 
+                        b.innerHTML += `<tr><td>${d.data().email || 'Onbekend'}</td><td style="text-align:right"><span class="badge" style="background:#eee;color:#666">${d.data().role || 'user'}</span></td></tr>`; 
                     });
                 });
 
-                // Audit Logs
                 onSnapshot(lQ, (s) => {
                     const b = document.getElementById("audit-log-body"); b.innerHTML = "";
                     s.forEach(d => { 
                         const l = d.data(); const t = l.timestamp ? l.timestamp.toDate().toLocaleTimeString('nl-BE') : '...';
-                        b.innerHTML += `<tr><td><small>${t}</small></td><td><b>${l.userEmail?.split('@')[0] || 'Sys'}</b></td><td>${l.boxId}</td><td>${l.action || 'Open'}</td></tr>`;
+                        b.innerHTML += `<tr><td>${t}</td><td><b>${l.userEmail?.split('@')[0] || 'Sys'}</b></td><td>${l.boxId}</td><td>${l.action || 'Open'}</td></tr>`;
                     });
                 });
                 setTimeout(() => map.invalidateSize(), 500);
