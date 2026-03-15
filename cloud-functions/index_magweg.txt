@@ -1,0 +1,102 @@
+﻿const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const admin = require("firebase-admin");
+
+admin.initializeApp();
+const db = admin.firestore();
+
+/**
+ * 1. OPEN BOX
+ * Opent een box en houdt bij wie dit heeft gedaan in de Audit Log.
+ */
+exports.openBox = onCall(async (request) => {
+    // Check of de gebruiker is ingelogd
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'Je moet ingelogd zijn om een box te openen.');
+    }
+
+    const uid = request.auth.uid;
+    const boxId = request.data.boxId;
+
+    // Haal gegevens van de gebruiker en de box op
+    const [userDoc, boxDoc] = await Promise.all([
+        db.collection('users').doc(uid).get(),
+        db.collection('boxes').doc(boxId).get()
+    ]);
+
+    if (!userDoc.exists || !boxDoc.exists) {
+        throw new HttpsError('not-found', 'Gebruiker of box niet gevonden.');
+    }
+
+    const userData = userDoc.data();
+    const boxData = boxDoc.data();
+
+    // Veiligheidscheck: Hoort de gebruiker bij deze box?
+    if (userData.customerId !== boxData.customerId) {
+        throw new HttpsError('permission-denied', 'Je hebt geen toegang tot deze box.');
+    }
+
+    // A. Stuur commando naar de fysieke box
+    await db.collection('boxes').doc(boxId).collection('commands').add({
+        command: 'OPEN',
+        status: 'pending',
+        requestedBy: request.auth.token.email,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // B. Schrijf naar het centrale Logboek (Audit Log)
+    await db.collection('auditLogs').add({
+        boxId: boxId,
+        userEmail: request.auth.token.email,
+        userName: userData.name || request.auth.token.email,
+        customerId: userData.customerId,
+        action: 'Box geopend',
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return { success: true, message: `Sleutel omgedraaid voor ${boxId}` };
+});
+
+/**
+ * 2. INVITE USER
+ * Voegt een nieuwe e-mail toe aan de klantenlijst. Alleen voor admins.
+ */
+exports.inviteUser = onCall(async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Niet ingelogd.');
+
+    const adminDoc = await db.collection('users').doc(request.auth.uid).get();
+    if (adminDoc.data().role !== 'platformAdmin') {
+        throw new HttpsError('permission-denied', 'Alleen admins kunnen uitnodigen.');
+    }
+
+    const newUserEmail = request.data.email;
+    const customerId = adminDoc.data().customerId;
+
+    await db.collection('users').add({
+        email: newUserEmail,
+        customerId: customerId,
+        role: 'user',
+        status: 'invited',
+        invitedBy: request.auth.token.email,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return { success: true, message: `Gebruiker ${newUserEmail} toegevoegd.` };
+});
+
+/**
+ * 3. DELETE USER
+ * Verwijdert een gebruiker uit de database. Alleen voor admins.
+ */
+exports.deleteUser = onCall(async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Niet ingelogd.');
+
+    const adminDoc = await db.collection('users').doc(request.auth.uid).get();
+    if (adminDoc.data().role !== 'platformAdmin') {
+        throw new HttpsError('permission-denied', 'Alleen admins kunnen gebruikers wissen.');
+    }
+
+    const userIdToDelete = request.data.userId;
+    await db.collection('users').doc(userIdToDelete).delete();
+
+    return { success: true, message: "Gebruiker succesvol verwijderd." };
+});

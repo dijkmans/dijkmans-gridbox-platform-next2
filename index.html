@@ -3,99 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gridbox Manager Pro</title>
+    <title>Gridbox Manager Pro v1.0.3</title>
+    <meta name="description" content="Gridbox Manager Pro - Industrieel vlootbeheer.">
+    <meta name="version" content="1.0.1">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         :root { --primary: #0052cc; --success: #28a745; --danger: #dc3545; --bg: #f0f2f5; --text: #1c1e21; }
-        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); margin: 0; color: var(--text); }
-        
-        /* Navigatie */
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; }
         .navbar { background: white; padding: 0.8rem 2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.08); position: sticky; top: 0; z-index: 1000; }
-        .logo-area { display: flex; align-items: center; gap: 12px; font-size: 1.3rem; font-weight: 700; color: var(--primary); }
-        .logo-placeholder { width: 36px; height: 36px; background: var(--primary); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; }
-        .badge { font-size: 0.7rem; background: #e8f0fe; color: #1967d2; padding: 3px 10px; border-radius: 4px; text-transform: uppercase; font-weight: 800; border: 1px solid #c2d7f9; }
-
-        /* Layout Container */
+        .logo-area { display: flex; align-items: center; gap: 12px; font-weight: 700; color: var(--primary); }
+        .version-badge { font-size: 0.65rem; background: #333; color: #fff; padding: 2px 6px; border-radius: 4px; margin-left: 8px; }
         .container { max-width: 1200px; margin: 2rem auto; padding: 0 1.5rem; display: grid; grid-template-columns: 1fr 380px; gap: 2rem; }
-        #map { height: 400px; width: 100%; border-radius: 12px; margin-bottom: 2rem; border: 1px solid #ddd; box-shadow: 0 4px 12px rgba(0,0,0,0.1); grid-column: span 2; }
-        .card { background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 2px rgba(0,0,0,0.1); margin-bottom: 2rem; }
-        
-        /* Gridbox Cards & Rolluik Animatie */
-        .box-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.5rem; }
-        .box-card { background: white; border-radius: 12px; padding: 1.5rem; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-top: 5px solid #ddd; transition: 0.3s; }
+        #map { height: 400px; width: 100%; border-radius: 12px; border: 1px solid #ddd; grid-column: span 2; }
+        .box-card { background: white; border-radius: 12px; padding: 1.5rem; text-align: center; border-top: 5px solid #ddd; }
         .box-card.is-open { border-top-color: var(--success); }
-        
-        .shutter-container { height: 80px; background: #333; border-radius: 6px; margin: 1rem 0; position: relative; overflow: hidden; border: 3px solid #444; }
-        /* De gevraagde industriële 5 seconden animatie */
-        .shutter { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: repeating-linear-gradient(0deg, #999, #999 8px, #777 9px, #777 15px); transition: transform 5s ease-in-out; z-index: 2; }
+        .shutter-container { height: 80px; background: #333; border-radius: 6px; margin: 1rem 0; position: relative; overflow: hidden; }
+        .shutter { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: repeating-linear-gradient(0deg, #999, #999 8px, #777 9px, #777 15px); transition: transform 5s ease-in-out; }
         .shutter.open { transform: translateY(-90%); }
-        .box-content-sim { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #555; font-size: 0.7rem; background: #eee; z-index: 1; font-weight: bold; }
-
-        /* Actie Knoppen */
         .btn-group { display: flex; gap: 10px; margin-top: 10px; }
-        .btn { border: none; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; width: 100%; transition: 0.3s; font-size: 0.85rem; flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; }
+        .btn { border: none; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; flex: 1; }
         .btn-primary { background: var(--primary); color: white; }
-        .btn-danger { background: var(--danger); color: white; }
         .btn-outline { background: white; border: 1px solid #ddd; color: #444; }
-
-        /* Tabellen voor Logs en Gebruikers */
-        table { width: 100%; border-collapse: collapse; }
-        td { padding: 12px 8px; border-top: 1px solid #f0f2f5; font-size: 0.85rem; }
-        th { text-align: left; font-size: 0.7rem; color: #888; text-transform: uppercase; padding: 10px 8px; }
-
-        /* Login UI */
-        #auth-ui { display: flex; align-items: center; justify-content: center; height: 100vh; background: #f0f2f5; }
-        @media (max-width: 900px) { .container { grid-template-columns: 1fr; } #map { grid-column: span 1; } }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        td { padding: 10px; border-top: 1px solid #eee; }
     </style>
 </head>
 <body>
-    <div id="auth-ui">
-        <div class="card" style="width:380px; text-align:center; padding: 2.5rem;">
-            <div class="logo-area" style="justify-content: center; margin-bottom: 1.5rem;"><div class="logo-placeholder">G</div> Gridbox Portaal</div>
-            <p style="color: #666; font-size: 0.9rem;">Voer je e-mail in voor een veilige login link.</p>
-            <input type="email" id="email" placeholder="naam@bedrijf.be" style="width:100%; padding:12px; margin-bottom:15px; border-radius:8px; border:1px solid #ddd; font-size: 1rem;">
-            <button class="btn btn-primary" onclick="sendLoginLink()">Magic Link Versturen</button>
+    <div id="auth-ui" style="display:none; height:100vh; align-items:center; justify-content:center;">
+        <div style="background:white; padding:2rem; border-radius:12px; text-align:center;">
+            <h2>Gridbox Portaal</h2>
+            <input type="email" id="email" placeholder="E-mail" style="width:100%; padding:10px; margin-bottom:1rem;">
+            <button class="btn btn-primary" onclick="sendLoginLink()">Inloggen</button>
         </div>
     </div>
-
     <div id="main-ui" style="display:none;">
         <nav class="navbar">
-            <div class="logo-area"><div class="logo-placeholder">G</div> Manager <span id="role-badge" class="badge">Laden...</span></div>
-            <div style="display:flex; gap:15px; align-items:center;">
-                <span id="display-user-email" style="font-size: 0.85rem; color: #65676b; font-weight: 500;">...</span>
-                <button class="btn btn-outline" style="width:auto; padding: 5px 15px;" onclick="window.logout()">Uitloggen</button>
-            </div>
+            <div class="logo-area">Manager <span class="version-badge">v1.0.3</span></div>
+            <button class="btn btn-outline" style="width:auto" onclick="window.logout()">Uitloggen</button>
         </nav>
-
         <div class="container">
             <div id="map"></div>
-            
             <div>
-                <h2 style="font-size: 1.1rem; color: #444; margin-bottom: 1rem;">Vlootoverzicht</h2>
-                <div id="box-grid" class="box-grid"></div>
-
-                <h2 style="font-size: 1.1rem; color: #444; margin-top: 3rem; margin-bottom: 1rem;">Recente Activiteit</h2>
-                <div class="card" style="padding: 0.5rem 1.5rem;">
-                    <table><thead><tr><th>Tijd</th><th>Wie</th><th>Box</th><th>Actie</th></tr></thead><tbody id="audit-log-body"></tbody></table>
-                </div>
+                <h4>Vloot</h4><div id="box-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:1.5rem;"></div>
+                <h4 style="margin-top:2rem;">Logs</h4>
+                <div style="background:white; border-radius:12px; padding:1rem;"><table><tbody id="audit-log-body"></tbody></table></div>
             </div>
-
             <div>
-                <h2 style="font-size: 1.1rem; color: #444; margin-bottom: 1rem;">Beheer</h2>
-                <div class="card">
-                    <h3 style="font-size: 0.9rem; margin-top: 0;">Collega Uitnodigen</h3>
-                    <input type="email" id="invite-email" placeholder="collega@email.be" style="width:100%; padding:10px; margin-bottom:10px; border-radius:6px; border:1px solid #ddd;">
-                    <button class="btn btn-primary" onclick="window.inviteUser()">Versturen</button>
+                <h4>Beheer</h4>
+                <div style="background:white; border-radius:12px; padding:1rem; margin-bottom:1rem;">
+                    <input type="email" id="invite-email" placeholder="collega@email.be" style="width:100%; padding:8px; margin-bottom:10px;">
+                    <button class="btn btn-primary" onclick="window.inviteUser()">Uitnodigen</button>
                 </div>
-
-                <div class="card" style="padding: 0.5rem 1.5rem;">
-                    <h3 style="font-size: 0.9rem; margin: 1.5rem 0 1rem 0;">Toeganglijst</h3>
-                    <table><tbody id="user-list-body"></tbody></table>
-                </div>
+                <div style="background:white; border-radius:12px; padding:1rem;"><table><tbody id="user-list-body"></tbody></table></div>
             </div>
         </div>
     </div>
-
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -109,133 +71,60 @@
         const db = getFirestore(app);
         const functions = getFunctions(app);
 
-        // KAART SETUP
-        let map, markers = {};
-        delete L.Icon.Default.prototype._getIconUrl;
-        L.Icon.Default.mergeOptions({
-            iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-            iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-            shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-        });
-
+        let map;
         const initMap = () => { if(!map) { map = L.map('map').setView([51.15, 4.45], 10); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); } };
 
-        // AUTH ACTIES
-        window.sendLoginLink = () => sendSignInLinkToEmail(auth, document.getElementById("email").value, { url: window.location.href, handleCodeInApp: true }).then(() => alert("E-mail verstuurd!"));
         window.logout = () => signOut(auth);
-        
-        // BEHEER ACTIES
-        window.inviteUser = () => { 
-            const email = document.getElementById("invite-email").value;
-            httpsCallable(functions, "inviteUser")({ email }).then(() => { alert("Uitnodiging verzonden!"); document.getElementById("invite-email").value = ""; }); 
-        };
+        window.sendLoginLink = () => sendSignInLinkToEmail(auth, document.getElementById("email").value, { url: window.location.href, handleCodeInApp: true }).then(() => alert("Mail verstuurd!"));
 
-        // OPEN/CLOSE TOGGLE (Gefixte versie met expliciete action string)
         window.toggleBox = async (id, currentStatus) => {
-            const nextAction = (currentStatus === 'OPEN') ? 'CLOSE' : 'OPEN';
-            if (confirm(`Weet je zeker dat je box ${id} wilt ${nextAction.toLowerCase()}en?`)) {
-                try {
-                    // Update lokale status voor onmiddellijke animatie
-                    await updateDoc(doc(db, "boxes", id), { status: nextAction });
-                    // Roep de server aan voor hardware-commando en audit log
-                    await httpsCallable(functions, "openBox")({ boxId: id, action: nextAction });
-                } catch (e) { alert("Fout: " + e.message); }
+            const next = (currentStatus === 'OPEN') ? 'CLOSE' : 'OPEN';
+            if (confirm(`Box ${id} ${next.toLowerCase()}en?`)) {
+                await updateDoc(doc(db, "boxes", id), { status: next });
+                httpsCallable(functions, "openBox")({ boxId: id, action: next });
             }
         };
 
-        // DEEL FUNCTIE
         window.shareBox = async (id) => {
-            const phoneNumber = prompt("GSM nummer klant (bijv. +32487389473)?");
+            const phoneNumber = prompt("GSM nummer klant?");
             if (phoneNumber) {
-                const name = prompt("Naam van de klant?");
-                const desc = prompt("Omschrijving?");
-                httpsCallable(functions, "createShare")({ boxId: id, phoneNumber, name, description: desc })
-                    .then(r => alert(r.data.message || "Gedeeld!"));
+                const name = prompt("Naam?");
+                httpsCallable(functions, "createShare")({ boxId: id, phoneNumber, name }).then(r => alert(r.data.message));
             }
         };
 
-        // FIREBASE AUTH LISTENER
         if (isSignInWithEmailLink(auth, window.location.href)) {
-            let email = window.localStorage.getItem("emailForSignIn") || window.prompt("E-mailadres?");
+            let email = window.localStorage.getItem("emailForSignIn") || window.prompt("Email?");
             signInWithEmailLink(auth, email, window.location.href);
         }
 
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 initMap();
-                document.getElementById("display-user-email").innerText = user.email;
                 document.getElementById("auth-ui").style.display = "none";
                 document.getElementById("main-ui").style.display = "block";
-                
                 const uDoc = await getDoc(doc(db, "users", user.uid));
                 const uData = uDoc.data();
-                const role = uData?.role || 'user';
                 const cid = uData?.customerId || 'gridbox-hq';
-                document.getElementById("role-badge").innerText = role;
 
-                // REAL-TIME DATA: BOXEN
                 onSnapshot(query(collection(db, "boxes"), where("customerId", "in", [cid, "gridbox-hq"])), (snap) => {
                     const g = document.getElementById("box-grid"); g.innerHTML = "";
-                    let bounds = [];
-                    snap.forEach(async (d) => {
-                        const bData = d.data();
-                        const isOpen = bData.status === 'OPEN';
-                        
-                        const card = document.createElement("div");
-                        card.className = `box-card ${isOpen ? 'is-open' : ''}`;
-                        card.innerHTML = `
-                            <b style="font-size:1.1rem">📦 ${d.id}</b>
-                            <div class="shutter-container">
-                                <div class="box-content-sim">ONLINE</div>
-                                <div class="shutter ${isOpen ? 'open' : ''}"></div>
-                            </div>
-                            <div class="btn-group">
-                                <button class="btn ${isOpen ? 'btn-danger' : 'btn-primary'}" onclick="toggleBox('${d.id}', '${bData.status || 'CLOSE'}')">
-                                    ${isOpen ? '🔓 CLOSE' : '🔒 OPEN'}
-                                </button>
-                                <button class="btn btn-outline" onclick="shareBox('${d.id}')">🔗 SHARE</button>
-                            </div>
-                        `;
+                    snap.forEach(d => {
+                        const bData = d.data(); const isOpen = bData.status === 'OPEN';
+                        const card = document.createElement("div"); card.className = `box-card ${isOpen ? 'is-open' : ''}`;
+                        card.innerHTML = `<b>📦 ${d.id}</b><div class="shutter-container"><div class="shutter ${isOpen ? 'open' : ''}"></div></div><div class="btn-group"><button class="btn ${isOpen ? 'btn-danger' : 'btn-primary'}" onclick="toggleBox('${d.id}', '${bData.status || 'CLOSE'}')">${isOpen ? 'CLOSE' : 'OPEN'}</button><button class="btn btn-outline" onclick="shareBox('${d.id}')">SHARE</button></div>`;
                         g.appendChild(card);
-
-                        // Kaart Markers
-                        const sSnap = await getDocs(collection(db, "boxes", d.id, "sites"));
-                        sSnap.forEach(s => {
-                            const geo = s.data().location?.geo;
-                            if (geo) {
-                                let lat = geo.latitude || parseFloat(geo[0].toString().replace(/[^\d.-]/g, ''));
-                                let lng = geo.longitude || parseFloat(geo[1].toString().replace(/[^\d.-]/g, ''));
-                                if (markers[d.id]) map.removeLayer(markers[d.id]);
-                                markers[d.id] = L.marker([lat, lng]).addTo(map).bindPopup(`<b>${d.id}</b><br>${s.data().name}`);
-                                bounds.push([lat, lng]);
-                                if(bounds.length > 0) map.fitBounds(bounds, {padding:[50,50], maxZoom:14});
-                            }
-                        });
                     });
                 });
 
-                // REAL-TIME DATA: GEBRUIKERS
-                onSnapshot(query(collection(db, "users"), where("customerId", "==", cid)), (s) => {
-                    const b = document.getElementById("user-list-body"); b.innerHTML = "";
-                    s.forEach(d => { 
-                        b.innerHTML += `<tr><td>${d.data().email || 'Onbekend'}</td><td style="text-align:right"><span class="badge" style="background:#eee;color:#666">${d.data().role}</span></td></tr>`; 
-                    });
-                });
-
-                // REAL-TIME DATA: LOGS
-                onSnapshot(query(collection(db, "auditLogs"), where("customerId", "==", cid), orderBy("timestamp", "desc"), limit(10)), (s) => {
+                onSnapshot(query(collection(db, "auditLogs"), where("customerId", "==", cid), orderBy("timestamp", "desc"), limit(8)), (s) => {
                     const b = document.getElementById("audit-log-body"); b.innerHTML = "";
-                    s.forEach(d => { 
-                        const l = d.data(); const t = l.timestamp ? l.timestamp.toDate().toLocaleTimeString('nl-BE') : '...';
-                        b.innerHTML += `<tr><td><small>${t}</small></td><td><b>${l.userEmail?.split('@')[0]}</b></td><td>${l.boxId}</td><td>${l.action}</td></tr>`;
-                    });
+                    s.forEach(d => { const l = d.data(); b.innerHTML += `<tr><td>${l.timestamp?.toDate().toLocaleTimeString()}</td><td>${l.boxId}</td><td>${l.action}</td></tr>`; });
                 });
-                setTimeout(() => map.invalidateSize(), 500);
-            } else {
-                document.getElementById("auth-ui").style.display = "flex";
-                document.getElementById("main-ui").style.display = "none";
-            }
+            } else { document.getElementById("auth-ui").style.display = "flex"; }
         });
     </script>
 </body>
 </html>
+
+

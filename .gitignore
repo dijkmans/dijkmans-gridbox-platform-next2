@@ -2,3 +2,7 @@
 .firebase/
 service-account.json
 *.local
+
+config/serviceAccountKey.json
+
+cloud-functions/node_modules
