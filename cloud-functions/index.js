@@ -6,10 +6,10 @@ admin.initializeApp();
 const db = admin.firestore();
 
 exports.createShare = onCall({ cors: true }, async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Inloggen verplicht.');
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Log in verplicht.');
     let { boxId, phoneNumber, name, description } = request.data;
     
-    // Nummer opschonen
+    // Formatteer nummer voor Bird (+32...)
     phoneNumber = phoneNumber.replace(/\s+/g, '');
     if (!phoneNumber.startsWith('+')) phoneNumber = '+' + phoneNumber;
 
@@ -17,7 +17,7 @@ exports.createShare = onCall({ cors: true }, async (request) => {
         const shareRef = db.collection('boxes').doc(boxId).collection('shares').doc(phoneNumber);
         await shareRef.set({
             name: name,
-            description: description || 'Toegang via portaal',
+            description: description || 'Toegang via dashboard',
             active: true,
             status: 'pending',
             createdAt: admin.firestore.FieldValue.serverTimestamp()
@@ -35,9 +35,9 @@ exports.createShare = onCall({ cors: true }, async (request) => {
                 body: smsBody
             }, async (err, response) => {
                 if (err) {
-                    const errMsg = err.errors ? err.errors[0].description : 'Onbekende Bird fout';
-                    await shareRef.update({ status: 'failed', error: errMsg });
-                    resolve({ success: false, message: 'SMS mislukt: ' + errMsg });
+                    const msg = err.errors ? err.errors[0].description : 'Bird Fout';
+                    await shareRef.update({ status: 'failed', error: msg });
+                    resolve({ success: false, message: 'SMS mislukt: ' + msg });
                 } else {
                     await shareRef.update({ status: 'sent', birdId: response.id });
                     resolve({ success: true, message: 'SMS verzonden naar ' + name });
