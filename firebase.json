@@ -3,21 +3,20 @@
     "source": "cloud-functions",
     "codebase": "default",
     "region": "europe-west1",
-    "disallowLegacyRuntimeConfig": true,
-    "ignore": [
-      "node_modules",
-      ".git",
-      "firebase-debug.log",
-      "firebase-debug.*.log",
-      "*.local"
-    ]
+    "disallowLegacyRuntimeConfig": true
   },
   "hosting": {
     "public": ".",
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "src/**",
+      "web/**",
+      "docs/**",
+      "cloud-functions/**",
+      "service-account.json",
+      "*.ps1"
     ]
   }
 }
