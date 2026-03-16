@@ -1,0 +1,57 @@
+﻿:root {
+    --bg-color: #0f172a;
+    --card-bg: #1e293b;
+    --accent: #38bdf8;
+    --text-main: #f1f5f9;
+    --text-dim: #94a3b8;
+    --danger: #ef4444;
+    --success: #22c55e;
+}
+
+body {
+    margin: 0; font-family: 'Inter', sans-serif;
+    background: var(--bg-color); color: var(--text-main);
+    display: flex; height: 100vh;
+}
+
+.sidebar {
+    width: 260px; background: #020617; padding: 20px;
+    display: flex; flex-direction: column; border-right: 1px solid #1e293b;
+}
+
+.logo { font-size: 20px; font-weight: bold; margin-bottom: 40px; color: var(--accent); }
+.logo span { color: white; font-weight: 300; }
+
+.nav-links { list-style: none; padding: 0; flex-grow: 1; }
+.nav-links li { padding: 12px; color: var(--text-dim); cursor: pointer; border-radius: 8px; margin-bottom: 5px; }
+.nav-links li.active { background: #1e293b; color: white; }
+
+.content { flex-grow: 1; padding: 40px; overflow-y: auto; }
+
+.site-section { margin-bottom: 40px; }
+.site-title { font-size: 18px; border-left: 4px solid var(--accent); padding-left: 15px; margin-bottom: 20px; }
+
+.box-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+
+.box-card {
+    background: var(--card-bg); padding: 20px; border-radius: 12px;
+    border: 1px solid #334155; transition: transform 0.2s;
+}
+.box-card:hover { transform: translateY(-5px); border-color: var(--accent); }
+
+.box-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.box-header h3 { margin: 0; font-size: 16px; }
+
+.status-badge { font-size: 10px; padding: 4px 8px; border-radius: 20px; background: var(--success); color: white; text-transform: uppercase; }
+
+.box-actions { display: flex; gap: 10px; }
+.btn-open {
+    flex-grow: 1; background: var(--accent); border: none; padding: 10px;
+    border-radius: 8px; font-weight: bold; cursor: pointer; color: #020617;
+}
+
+.btn-cam {
+    background: #475569; border: none; padding: 10px; border-radius: 8px; cursor: pointer; color: white;
+}
+
+.btn-logout { background: transparent; border: 1px solid var(--danger); color: var(--danger); padding: 10px; border-radius: 8px; cursor: pointer; }

@@ -1,0 +1,14 @@
+﻿<!DOCTYPE html>
+<html>
+<head><title>Gridbox Login</title></head>
+<body>
+    <h1>Inloggen op Gridbox Core</h1>
+    <p>Gebruik je Google account om in te loggen.</p>
+    <button id="login-btn">Log in met Google</button>
+    <script type="module">
+        import { auth } from "./firebase-config.js";
+        import { GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js";
+        document.getElementById('login-btn').onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).then(() => window.location.href = 'index.html');
+    </script>
+</body>
+</html>

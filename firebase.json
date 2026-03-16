@@ -1,23 +1,29 @@
 ﻿{
-  "functions": {
-    "source": "cloud-functions",
-    "codebase": "default",
-    "region": "europe-west1",
-    "disallowLegacyRuntimeConfig": true,
-    "ignore": [
-      "node_modules",
-      ".git",
-      "firebase-debug.log",
-      "firebase-debug.*.log",
-      "*.local"
-    ]
-  },
+  "functions": [
+    {
+      "source": "cloud-functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firestore-debug.log",
+        "functions.log"
+      ]
+    }
+  ],
   "hosting": {
-    "public": ".",
+    "public": "public",
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
     ]
   }
 }
