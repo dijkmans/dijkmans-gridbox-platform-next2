@@ -50,7 +50,7 @@
         import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js";
 
         const cfg = { apiKey: "AIzaSyCmwIzuvHO4KW8qGMGlNFK4cnBzrVivtQE", authDomain: "gridbox-platform.firebaseapp.com", projectId: "gridbox-platform", storageBucket: "gridbox-platform.firebasestorage.app", messagingSenderId: "960191535038", appId: "1:960191535038:web:af62e61a8daf768a8acbef" };
-        const app = initializeApp(cfg); const auth = getAuth(app); const db = getFirestore(app); const functions = getFunctions(app);
+        const app = initializeApp(cfg); const auth = getAuth(app); const db = getFirestore(app); const functions = getFunctions(app, 'europe-west1');
 
         let map, markers = {};
         const initMap = () => { if(!map) { map = L.map('map').setView([51.15, 4.45], 10); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); } };
@@ -121,3 +121,4 @@
     </script>
 </body>
 </html>
+

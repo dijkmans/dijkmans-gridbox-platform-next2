@@ -1,72 +1,112 @@
-﻿const { onCall, HttpsError } = require('firebase-functions/v2/https');
-const { onRequest } = require('firebase-functions/v2/https');
+﻿const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
-const mb = require('messagebird').initClient('NzCP9BR7gRtERq0KCYi6DbPaZ3ZkwAxsmjS6');
+const mb = require('messagebird').initClient('bRoknKEna83EdGVd7wF2VF6ZpAKcP1IXWh4A');
 
 admin.initializeApp();
 const db = admin.firestore();
 
-// A. DEEL-FUNCTIE (Dashboard -> SMS Uitnodiging)
-exports.createShare = onCall({ cors: true }, async (request) => {
+// 1. CREATESHARE (SMS VERSTUREN)
+exports.createShare = onCall({ region: 'europe-west1', cors: true }, async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Log in verplicht.');
+    
     let { boxId, phoneNumber, name } = request.data;
+    
+    // Telefoonnummer opschonen
     phoneNumber = phoneNumber.replace(/\s+/g, '');
     if (phoneNumber.startsWith('0')) phoneNumber = '+32' + phoneNumber.substring(1);
     if (!phoneNumber.startsWith('+')) phoneNumber = '+' + phoneNumber;
 
+    const shareRef = db.collection('boxes').doc(boxId).collection('shares').doc(phoneNumber);
+
     try {
-        const shareRef = db.collection('boxes').doc(boxId).collection('shares').doc(phoneNumber);
-        await shareRef.set({ name, active: true, status: 'pending', createdAt: admin.firestore.FieldValue.serverTimestamp() });
-        const template = await db.collection('smsTemplates').doc('invitation').get();
-        let body = template.exists ? template.data().body : 'Beste [customerName], welkom bij Gridbox [boxId].';
-        body = body.replace('[customerName]', name).replace('[boxId]', boxId);
-        body += '\n\nStuur "Open ' + parseInt(boxId.split('-')[1]) + '" om te openen.';
-        return new Promise((res) => {
-            mb.messages.create({ originator: 'Gridbox', recipients: [phoneNumber], body }, async (err) => {
-                if (err) { await shareRef.update({ status: 'failed' }); res({ success: false, message: 'SMS mislukt' }); }
-                else { await shareRef.update({ status: 'sent' }); res({ success: true, message: 'SMS verzonden naar ' + name }); }
+        // Maak alvast de share aan in de database
+        await shareRef.set({ 
+            name, 
+            active: true, 
+            status: 'sending', 
+            createdAt: admin.firestore.FieldValue.serverTimestamp() 
+        });
+
+        // Stel de SMS tekst samen
+        let body = `Beste ${name}, je hebt toegang tot Gridbox ${boxId}. \n\nStuur "Open ${boxId.split('-')[1]}" om de box te openen.`;
+
+        // SMS versturen via MessageBird
+        return new Promise((resolve) => {
+            mb.messages.create({
+                originator: 'Gridbox', // TIP: Verander dit in je eigen GSM nr als 'Gridbox' niet werkt
+                recipients: [phoneNumber],
+                body: body
+            }, async (err, response) => {
+                if (err) {
+                    console.error("MessageBird Error:", err);
+                    const errorDesc = err.errors && err.errors[0] ? err.errors[0].description : 'Onbekende API fout';
+                    await shareRef.update({ status: 'failed', error: errorDesc });
+                    resolve({ success: false, message: 'SMS kon niet worden verzonden: ' + errorDesc });
+                } else {
+                    await shareRef.update({ status: 'sent', birdId: response.id, error: null });
+                    resolve({ success: true, message: 'SMS succesvol verzonden!' });
+                }
             });
         });
-    } catch (e) { throw new HttpsError('internal', e.message); }
+    } catch (e) {
+        await shareRef.update({ status: 'error', error: e.message });
+        throw new HttpsError('internal', e.message);
+    }
 });
 
-// B. HANDMATIG OPENEN (Dashboard Knop)
-exports.openBox = onCall({ cors: true }, async (request) => {
-    const { boxId, action } = request.data;
-    const cmd = (action === 'CLOSE') ? 'CLOSE' : 'OPEN';
+// 2. OPEN BOX (MET AUDIT LOG)
+exports.openBox = onCall({ region: 'europe-west1', cors: true }, async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Log in verplicht.');
+    
+    const { boxId } = request.data;
+    const userEmail = request.auth.token.email;
+
+    // A. Commando voor de hardware
     await db.collection('boxes').doc(boxId).collection('commands').add({
-        command: cmd, status: 'pending', requestedBy: request.auth.token.email, createdAt: admin.firestore.FieldValue.serverTimestamp()
+        command: 'OPEN',
+        status: 'pending',
+        requestedBy: userEmail,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
-    await db.collection('auditLogs').add({ boxId, action: cmd, userEmail: request.auth.token.email, timestamp: admin.firestore.FieldValue.serverTimestamp(), customerId: 'gridbox-hq' });
-    return { success: true };
+
+    // B. Schrijf naar Audit Log (Voor je kaart en lijst!)
+    await db.collection('auditLogs').add({
+        boxId: boxId,
+        userEmail: userEmail,
+        action: 'Box geopend via Portaal',
+        customerId: 'CUST-001', // Dit zou je dynamisch kunnen maken
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return { success: true, message: `Sleutel omgedraaid voor ${boxId}` };
 });
 
-// C. SMS HANDLER (Ontvangt "Open 5" van klanten)
-exports.smsHandler = onRequest(async (req, res) => {
-    const { originator, body } = req.query; // Bird stuurt dit via Webhook
+// 3. SMS HANDLER (VOOR INKOMENDE SMS)
+exports.smsHandler = onRequest({ region: 'europe-west1' }, async (req, res) => {
+    const { originator, body } = req.query;
     if (!originator || !body) return res.status(400).send('Missing info');
+
     const msg = body.toUpperCase();
     const boxNr = msg.replace(/[^0-9]/g, '');
     const boxId = 'gbox-' + boxNr.padStart(3, '0');
-    
-    // Check of dit nummer toegang heeft
-    const shareDoc = await db.collection('boxes').doc(boxId).collection('shares').doc(originator).get();
-    if (!shareDoc.exists) {
-        mb.messages.create({ originator: 'Gridbox', recipients: [originator], body: 'Geen toegang tot deze box.' }, () => {});
-        return res.status(200).send('Denied');
-    }
 
-    const action = msg.includes('CLOSE') ? 'CLOSE' : 'OPEN';
-    await db.collection('boxes').doc(boxId).collection('commands').add({ command: action, status: 'pending', requestedBy: 'SMS:' + originator, createdAt: admin.firestore.FieldValue.serverTimestamp() });
-    
-    const templateName = action === 'OPEN' ? 'confirm_open' : 'confirm_close';
-    const tempDoc = await db.collection('smsTemplates').doc(templateName).get();
-    mb.messages.create({ originator: 'Gridbox', recipients: [originator], body: tempDoc.exists ? tempDoc.data().body : 'Commando uitgevoerd.' }, () => {});
-    
+    await db.collection('boxes').doc(boxId).collection('commands').add({ 
+        command: 'OPEN', 
+        status: 'pending', 
+        requestedBy: 'SMS:' + originator, 
+        createdAt: admin.firestore.FieldValue.serverTimestamp() 
+    });
+
     res.status(200).send('OK');
 });
 
-exports.inviteUser = onCall({ cors: true }, async (request) => {
-    await db.collection('users').add({ email: request.data.email, role: 'user', status: 'invited', createdAt: admin.firestore.FieldValue.serverTimestamp() });
+exports.inviteUser = onCall({ region: 'europe-west1', cors: true }, async (request) => {
+    await db.collection('users').add({ 
+        email: request.data.email, 
+        customerId: 'CUST-001',
+        role: 'user', 
+        status: 'invited', 
+        createdAt: admin.firestore.FieldValue.serverTimestamp() 
+    });
     return { success: true };
 });
