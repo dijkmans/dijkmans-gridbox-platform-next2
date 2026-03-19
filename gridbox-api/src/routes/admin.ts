@@ -297,6 +297,14 @@ router.post("/admin/memberships", async (req, res) => {
 
     if (!snapshot.empty) {
       const existingDoc = snapshot.docs[0];
+      const existingData = existingDoc.data() as Record<string, any>;
+
+      if (existingData.role === "platformAdmin") {
+        return res.status(409).json({
+          error: "PLATFORM_ADMIN_PROTECTED",
+          message: "Bestaande platformAdmin membership kan niet overschreven worden"
+        });
+      }
 
       await existingDoc.ref.set(
         {

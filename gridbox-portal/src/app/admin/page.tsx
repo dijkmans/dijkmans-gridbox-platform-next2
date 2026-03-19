@@ -256,7 +256,18 @@ export default function AdminPage() {
     e.preventDefault();
 
     const email = membershipEmail.trim();
+    const normalizedEmail = email.toLowerCase();
     const customerId = membershipCustomerId.trim();
+
+    const existingMembership = memberships.find(
+      (item) => (item.email || "").toLowerCase() === normalizedEmail
+    );
+
+    if (existingMembership?.role === "platformAdmin") {
+      setErrorMessage("Bestaande platformAdmin membership kan niet overschreven worden");
+      setSuccessMessage("");
+      return;
+    }
 
     if (!email) {
       setErrorMessage("Email is verplicht");
