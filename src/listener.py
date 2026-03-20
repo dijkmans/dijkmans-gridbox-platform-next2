@@ -7,6 +7,7 @@ import subprocess
 import threading
 import time
 from datetime import datetime
+from io import BytesIO
 from zoneinfo import ZoneInfo
 
 import requests
@@ -15,6 +16,7 @@ from google.cloud import storage
 from google.cloud.firestore import GeoPoint
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.oauth2 import service_account
+from PIL import Image, ImageChops, ImageStat
 
 from db_manager import get_db
 
@@ -28,8 +30,9 @@ from db_manager import get_db
 #     software.targetVersion
 #     software.softwareUpdateRequested = true
 #
-# NIEUW in v1.0.47: 
-# - Directe test-snapshot bij opstart om JWT fouten te vangen.
+# LOKALE UITBREIDINGEN:
+# - snapshots krijgen metadata-index in Firestore
+# - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
 VERSION = "v1.0.47"
@@ -52,10 +55,13 @@ CLOSE_BUTTON_PIN = 8             # GPIO 8 (Pin 24)
 cached_config = {}
 box_is_open = False
 snapshot_thread_running = False
+last_snapshot_small = None
+last_snapshot_id = None
 
 state_lock = threading.Lock()
 command_lock = threading.Lock()
 software_update_lock = threading.Lock()
+snapshot_lock = threading.Lock()
 
 light_off_timer = None
 shutter_motor_timer = None
@@ -81,6 +87,11 @@ if platform.system() != "Windows":
             BUTTON_FACTORY = None
     except Exception:
         GPIO_AVAILABLE = False
+
+try:
+    RESAMPLE_LANCZOS = Image.Resampling.LANCZOS
+except AttributeError:
+    RESAMPLE_LANCZOS = Image.LANCZOS
 
 
 # =========================================================
@@ -423,7 +434,8 @@ def build_hardware_defaults_from_box_config():
         "camera": {
             "enabled": camera_cfg.get("enabled", True),
             "snapshotIntervalSeconds": camera_cfg.get("snapshotIntervalSeconds", 5),
-            "postCloseSnapshotDurationSeconds": camera_cfg.get("postCloseSnapshotDurationSeconds", 30)
+            "postCloseSnapshotDurationSeconds": camera_cfg.get("postCloseSnapshotDurationSeconds", 30),
+            "changeDetectionThreshold": camera_cfg.get("changeDetectionThreshold", 6.0)
         }
     }
 
@@ -823,11 +835,58 @@ def maybe_process_software_request():
 
 
 # =========================================================
+# CAMERA HELPERS
+# =========================================================
+
+def get_camera_config():
+    return cached_config.get("hardware", {}).get("camera", {})
+
+def get_snapshot_collection_ref():
+    return box_doc_ref.collection("snapshots")
+
+def get_snapshot_change_threshold():
+    cam_cfg = get_camera_config()
+    try:
+        return float(cam_cfg.get("changeDetectionThreshold", 6.0))
+    except Exception:
+        return 6.0
+
+def build_small_snapshot(image):
+    return image.convert("L").resize((64, 64), RESAMPLE_LANCZOS)
+
+def analyze_snapshot_change(image):
+    current_small = build_small_snapshot(image)
+    threshold = get_snapshot_change_threshold()
+
+    with snapshot_lock:
+        previous_small = last_snapshot_small
+        previous_id = last_snapshot_id
+
+    if previous_small is None:
+        return current_small, False, 0.0, previous_id, threshold
+
+    diff = ImageChops.difference(current_small, previous_small)
+    stat = ImageStat.Stat(diff)
+    score = float(stat.mean[0]) if stat.mean else 0.0
+    score = round(score, 4)
+    change_detected = score >= threshold
+
+    return current_small, change_detected, score, previous_id, threshold
+
+def remember_snapshot_reference(small_image, snapshot_id):
+    global last_snapshot_small, last_snapshot_id
+
+    with snapshot_lock:
+        last_snapshot_small = small_image
+        last_snapshot_id = snapshot_id
+
+
+# =========================================================
 # CAMERA
 # =========================================================
 
-def take_snapshot():
-    cam_cfg = cached_config.get("hardware", {}).get("camera", {})
+def take_snapshot(phase="manual", sequence_number=None):
+    cam_cfg = get_camera_config()
     if not cam_cfg.get("enabled", False):
         return
 
@@ -841,14 +900,70 @@ def take_snapshot():
             auth = HTTPBasicAuth(cam_cfg.get("username"), cam_cfg.get("password"))
 
         resp = requests.get(url, auth=auth, timeout=10)
-        if resp.status_code == 200:
-            filename = f"snapshot_{int(time.time())}.jpg"
-            bucket = storage_client.bucket(BUCKET_NAME)
-            blob = bucket.blob(f"snapshots/{DOCUMENT_ID}/{filename}")
-            blob.upload_from_string(resp.content, content_type="image/jpeg")
-            log("📸 Snapshot geüpload.")
-        else:
+        if resp.status_code != 200:
             log(f"❌ Camera gaf status {resp.status_code}")
+            return
+
+        content_type = resp.headers.get("Content-Type", "image/jpeg")
+        captured_at = now_iso()
+
+        image = Image.open(BytesIO(resp.content))
+        image.load()
+
+        width, height = image.size
+        small_image, change_detected, change_score, previous_snapshot_id, threshold = analyze_snapshot_change(image)
+
+        timestamp_ms = int(time.time() * 1000)
+        filename = f"snapshot_{timestamp_ms}.jpg"
+        snapshot_id = safe_doc_id(filename.rsplit(".", 1)[0])
+
+        storage_path = f"snapshots/{DOCUMENT_ID}/{filename}"
+        bucket = storage_client.bucket(BUCKET_NAME)
+        blob = bucket.blob(storage_path)
+        blob.upload_from_string(resp.content, content_type=content_type)
+
+        with state_lock:
+            current_box_open = bool(box_is_open)
+
+        snapshot_payload = {
+            "snapshotId": snapshot_id,
+            "boxId": DOCUMENT_ID,
+            "filename": filename,
+            "storagePath": storage_path,
+            "bucket": BUCKET_NAME,
+            "capturedAt": captured_at,
+            "phase": phase,
+            "sequenceNumber": int(sequence_number) if sequence_number is not None else None,
+            "changeDetected": bool(change_detected),
+            "changeScore": float(change_score),
+            "changeThreshold": float(threshold),
+            "previousSnapshotId": previous_snapshot_id,
+            "contentType": content_type,
+            "sizeBytes": int(len(resp.content)),
+            "width": int(width),
+            "height": int(height),
+            "boxWasOpen": current_box_open,
+            "source": "listener-camera",
+            "createdAt": captured_at,
+            "updatedAt": captured_at
+        }
+
+        snapshot_payload = {k: v for k, v in snapshot_payload.items() if v is not None}
+
+        try:
+            get_snapshot_collection_ref().document(snapshot_id).set(snapshot_payload, merge=True)
+            indexed_text = "indexed"
+        except Exception as metadata_error:
+            indexed_text = "storage-only"
+            log(f"⚠️ Snapshot metadata opslaan mislukt: {metadata_error}")
+
+        remember_snapshot_reference(small_image, snapshot_id)
+
+        log(
+            f"📸 Snapshot geüpload | fase={phase} | seq={sequence_number} | "
+            f"score={change_score} | changed={change_detected} | {indexed_text}"
+        )
+
     except Exception as e:
         log(f"❌ Camera fout: {e}")
 
@@ -856,20 +971,31 @@ def snapshot_loop():
     global snapshot_thread_running
 
     try:
-        cam = cached_config.get("hardware", {}).get("camera", {})
+        cam = get_camera_config()
         interval = float(cam.get("snapshotIntervalSeconds", 5))
         duration = float(cam.get("postCloseSnapshotDurationSeconds", 30))
 
+        sequence_number = 0
+        post_close_until = None
+
         while True:
             with state_lock:
-                if not box_is_open:
-                    break
-            take_snapshot()
-            time.sleep(interval)
+                currently_open = bool(box_is_open)
 
-        end_time = time.time() + duration
-        while time.time() < end_time:
-            take_snapshot()
+            if currently_open:
+                phase = "open"
+                post_close_until = None
+            else:
+                if post_close_until is None:
+                    post_close_until = time.time() + duration
+
+                if time.time() >= post_close_until:
+                    break
+
+                phase = "post-close"
+
+            sequence_number += 1
+            take_snapshot(phase=phase, sequence_number=sequence_number)
             time.sleep(interval)
 
     finally:
@@ -1026,11 +1152,12 @@ light.off()
 try:
     bootstrap_if_needed()
     update_pi_status()
-    
-    # --- NIEUW: STARTUP TEST SNAPSHOT ---
+
     log("📸 Startup test snapshot uitvoeren...")
-    threading.Thread(target=take_snapshot, daemon=True).start()
-    # ------------------------------------
+    threading.Thread(
+        target=lambda: take_snapshot(phase="startup-test", sequence_number=0),
+        daemon=True
+    ).start()
 
 except Exception as e:
     log(f"❌ Bootstrap/init fout: {e}")
