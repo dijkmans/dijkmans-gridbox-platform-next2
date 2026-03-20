@@ -21,7 +21,7 @@ from PIL import Image, ImageChops, ImageStat
 from db_manager import get_db
 
 # =========================================================
-# GRIDBOX SERVICE - MASTER v1.0.47
+# GRIDBOX SERVICE - MASTER v1.0.50
 # Één script:
 # - bootstrap bij opstart
 # - runtime voor commands / knop / camera / heartbeat
@@ -35,7 +35,7 @@ from db_manager import get_db
 # - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.47"
+VERSION = "v1.0.50"
 KEY_PATH = "service-account.json"
 BUCKET_NAME = "gridbox-platform.firebasestorage.app"
 TIMEZONE = ZoneInfo("Europe/Brussels")
