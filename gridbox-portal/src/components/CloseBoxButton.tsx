@@ -4,9 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
 
-type OpenBoxButtonProps = {
+type CloseBoxButtonProps = {
   boxId: string;
-  canOpen: boolean;
+  canClose: boolean;
 };
 
 type CommandResponse = {
@@ -31,7 +31,7 @@ function getStatusColor(status: string) {
   return "gray";
 }
 
-export default function OpenBoxButton({ boxId, canOpen }: OpenBoxButtonProps) {
+export default function CloseBoxButton({ boxId, canClose }: CloseBoxButtonProps) {
   const router = useRouter();
 
   const [busy, setBusy] = useState(false);
@@ -68,7 +68,7 @@ export default function OpenBoxButton({ boxId, canOpen }: OpenBoxButtonProps) {
       setCommandStatus(normalizedStatus);
 
       if (normalizedStatus === "completed") {
-        setMessage("Box succesvol geopend");
+        setMessage("Box succesvol gesloten");
 
         setTimeout(() => {
           router.refresh();
@@ -78,14 +78,14 @@ export default function OpenBoxButton({ boxId, canOpen }: OpenBoxButtonProps) {
       }
 
       if (normalizedStatus === "failed") {
-        setMessage("Open-commando is mislukt");
+        setMessage("Close-commando is mislukt");
         return;
       }
 
       if (normalizedStatus === "pending") {
         setMessage("Commando staat in wachtrij...");
       } else {
-        setMessage("Open-commando wordt uitgevoerd...");
+        setMessage("Close-commando wordt uitgevoerd...");
       }
 
       await wait(1500);
@@ -94,8 +94,8 @@ export default function OpenBoxButton({ boxId, canOpen }: OpenBoxButtonProps) {
     setMessage("Nog geen bevestiging ontvangen. Controleer de box of probeer later opnieuw.");
   }
 
-  async function handleOpen() {
-    if (busy || !canOpen) {
+  async function handleClose() {
+    if (busy || !canClose) {
       return;
     }
 
@@ -113,7 +113,7 @@ export default function OpenBoxButton({ boxId, canOpen }: OpenBoxButtonProps) {
 
       const token = await user.getIdToken();
 
-      const res = await fetch(`http://localhost:8080/portal/boxes/${boxId}/open`, {
+      const res = await fetch(`http://localhost:8080/portal/boxes/${boxId}/close`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`
@@ -123,7 +123,7 @@ export default function OpenBoxButton({ boxId, canOpen }: OpenBoxButtonProps) {
       const data = await res.json();
 
       if (!res.ok) {
-        setMessage(data.message || "Openen mislukt");
+        setMessage(data.message || "Sluiten mislukt");
         return;
       }
 
@@ -137,20 +137,20 @@ export default function OpenBoxButton({ boxId, canOpen }: OpenBoxButtonProps) {
       setMessage("Commando verstuurd...");
       await pollCommand(typed.commandId);
     } catch (error) {
-      setMessage("Netwerkfout bij openen");
+      setMessage("Netwerkfout bij sluiten");
     } finally {
       setBusy(false);
     }
   }
 
-  const buttonLabel = busy ? "Bezig..." : "Open box";
+  const buttonLabel = busy ? "Bezig..." : "Close box";
 
   return (
     <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start" }}>
       <button
         type="button"
-        onClick={handleOpen}
-        disabled={!canOpen || busy}
+        onClick={handleClose}
+        disabled={!canClose || busy}
         style={{
           display: "inline-block",
           padding: "8px 12px",
@@ -158,8 +158,8 @@ export default function OpenBoxButton({ boxId, canOpen }: OpenBoxButtonProps) {
           borderRadius: "6px",
           background: "#fff",
           color: "inherit",
-          cursor: !canOpen || busy ? "not-allowed" : "pointer",
-          opacity: !canOpen || busy ? 0.6 : 1
+          cursor: !canClose || busy ? "not-allowed" : "pointer",
+          opacity: !canClose || busy ? 0.6 : 1
         }}
       >
         {buttonLabel}

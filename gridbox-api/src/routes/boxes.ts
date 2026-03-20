@@ -4,11 +4,13 @@ import { mockEventsByBoxId } from "../data/mockData";
 import { mapFirestoreBoxToPortalBoxDetail } from "../mappers/boxDetailMapper";
 import { mapFirestoreBoxToPortalBox } from "../mappers/boxMapper";
 import { getBoxById, listBoxes } from "../repositories/boxRepository";
-import { addBoxCommand, getBoxCommandById, getLatestBoxCommand } from "../repositories/commandRepository";
+import { addBoxCommand, getBoxCommandById, getLatestBoxCommand, listBoxCommands } from "../repositories/commandRepository";
 import { hasCustomerBoxAccess, listBoxIdsForCustomer } from "../repositories/customerBoxAccessRepository";
 import { getCustomerById } from "../repositories/customerRepository";
 import { getMembershipByEmail } from "../repositories/membershipRepository";
 import { getSiteById, listSites } from "../repositories/siteRepository";
+import { getFirestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 
 const router = Router();
 
@@ -102,7 +104,7 @@ router.get("/portal/boxes", async (req, res) => {
     const allowedSet = new Set(allowedBoxIds);
 
     const filteredBoxDocs = boxDocs.filter(
-      (doc) => ACTIVE_PORTAL_BOX_IDS.includes(doc.id) && allowedSet.has(doc.id)
+      (doc) => allowedSet.has(doc.id)
     );
 
     const items = filteredBoxDocs
@@ -151,13 +153,6 @@ router.get("/portal/boxes/:id", async (req, res) => {
       user: portalUser,
       customerId: context.membership.customerId
     });
-
-    if (!ACTIVE_PORTAL_BOX_IDS.includes(boxId)) {
-      return res.status(404).json({
-        error: "BOX_NOT_FOUND",
-        message: "Box niet gevonden"
-      });
-    }
 
     const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
 
@@ -218,6 +213,199 @@ router.get("/portal/boxes/:id", async (req, res) => {
   }
 });
 
+router.get("/portal/boxes/:id/shares", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+
+    console.log("PORTAL BOX SHARES REQUEST", {
+      boxId,
+      user: portalUser,
+      customerId: context.membership.customerId
+    });
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    const boxDoc = await getBoxById(boxId);
+
+    if (!boxDoc) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    const db = getFirestore();
+    const snapshot = await db.collection("boxes").doc(boxId).collection("shares").get();
+
+    const items = snapshot.docs
+      .map((doc) => {
+        const data = doc.data() as Record<string, any>;
+        const shareId = doc.id;
+
+        let typeGuess: "phone" | "uid" | "unknown" = "unknown";
+
+        if (/^\+\d{8,20}$/.test(shareId)) {
+          typeGuess = "phone";
+        } else if (/^[A-Za-z0-9_-]{20,}$/.test(shareId)) {
+          typeGuess = "uid";
+        }
+
+        const active = data.active === true || data.status === "active";
+
+        return {
+          id: shareId,
+          typeGuess,
+          active,
+          label: typeof data.name === "string" ? data.name : null,
+          email: typeof data.email === "string" ? data.email : null,
+          role: typeof data.role === "string" ? data.role : null,
+          addedBy: typeof data.addedBy === "string" ? data.addedBy : null,
+          createdAt: typeof data.createdAt === "string" ? data.createdAt : null
+        };
+      })
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+
+    return res.json({
+      boxId,
+      items,
+      count: items.length
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in /portal/boxes/:id/shares", error);
+
+    return res.status(500).json({
+      error: "BOX_SHARES_FAILED",
+      message: "Kon shares niet ophalen"
+    });
+  }
+});
+router.post("/portal/boxes/:id/shares", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+    const { phoneNumber, label } = req.body ?? {};
+
+    console.log("PORTAL BOX CREATE SHARE REQUEST", {
+      boxId,
+      user: portalUser,
+      customerId: context.membership.customerId
+    });
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    const boxDoc = await getBoxById(boxId);
+
+    if (!boxDoc) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    if (typeof phoneNumber !== "string" || phoneNumber.trim().length === 0) {
+      return res.status(400).json({
+        error: "INVALID_PHONE_NUMBER",
+        message: "Gsm-nummer is verplicht"
+      });
+    }
+
+    const normalizedPhoneNumber = phoneNumber.trim();
+
+    if (!/^\+\d{8,20}$/.test(normalizedPhoneNumber)) {
+      return res.status(400).json({
+        error: "INVALID_PHONE_NUMBER",
+        message: "Gebruik een gsm-nummer in internationaal formaat, bv +32471234567"
+      });
+    }
+
+    const normalizedLabel =
+      typeof label === "string" && label.trim().length > 0
+        ? label.trim()
+        : "";
+
+    const db = getFirestore();
+    const shareRef = db.collection("boxes").doc(boxId).collection("shares").doc(normalizedPhoneNumber);
+    const existingShare = await shareRef.get();
+
+    if (existingShare.exists) {
+      return res.status(409).json({
+        error: "SHARE_ALREADY_EXISTS",
+        message: "Voor dit gsm-nummer bestaat al een actieve of bestaande share"
+      });
+    }
+
+    await shareRef.set({
+      name: normalizedLabel,
+      status: "active",
+      createdAt: new Date().toISOString(),
+      addedBy: portalUser.email || "portal-user"
+    });
+
+    return res.json({
+      ok: true,
+      boxId,
+      phoneNumber: normalizedPhoneNumber,
+      label: normalizedLabel || null,
+      status: "active"
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in POST /portal/boxes/:id/shares", error);
+
+    return res.status(500).json({
+      error: "BOX_SHARE_CREATE_FAILED",
+      message: "Kon share niet aanmaken"
+    });
+  }
+});
 router.get("/portal/boxes/:id/commands/latest", async (req, res) => {
   try {
     const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
@@ -229,13 +417,6 @@ router.get("/portal/boxes/:id/commands/latest", async (req, res) => {
       user: portalUser,
       customerId: context.membership.customerId
     });
-
-    if (!ACTIVE_PORTAL_BOX_IDS.includes(boxId)) {
-      return res.status(404).json({
-        error: "BOX_NOT_FOUND",
-        message: "Box niet gevonden"
-      });
-    }
 
     const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
 
@@ -298,13 +479,6 @@ router.get("/portal/boxes/:id/commands/:commandId", async (req, res) => {
       user: portalUser,
       customerId: context.membership.customerId
     });
-
-    if (!ACTIVE_PORTAL_BOX_IDS.includes(boxId)) {
-      return res.status(404).json({
-        error: "BOX_NOT_FOUND",
-        message: "Box niet gevonden"
-      });
-    }
 
     const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
 
@@ -375,18 +549,34 @@ router.get("/portal/boxes/:id/events", async (req, res) => {
       });
     }
 
-    const items = mockEventsByBoxId[boxId];
+    const [commands, mockEvents] = await Promise.all([
+      listBoxCommands(boxId, 20),
+      Promise.resolve(mockEventsByBoxId[boxId] || [])
+    ]);
 
-    if (!items) {
-      return res.status(404).json({
-        error: "BOX_NOT_FOUND",
-        message: "Box niet gevonden"
-      });
-    }
+    const commandItems = commands.map((item) => {
+      const command = typeof item.data.command === "string" ? item.data.command : "UNKNOWN";
+      const status = typeof item.data.status === "string" ? item.data.status : "unknown";
+      const source = typeof item.data.source === "string" ? item.data.source : "Onbekende bron";
+      const timestamp = typeof item.data.createdAt === "string" ? item.data.createdAt : new Date().toISOString();
+
+      return {
+        id: `cmd-${item.id}`,
+        type: `command_${command.toLowerCase()}`,
+        timestamp,
+        label: `${command} via ${source} (${status})`,
+        severity: status === "failed" ? "error" : "info"
+      };
+    });
+
+    const items = [...commandItems, ...mockEvents].sort((a, b) =>
+      String(b.timestamp || "").localeCompare(String(a.timestamp || ""))
+    );
 
     return res.json({
       items,
-      count: items.length
+      count: items.length,
+      mode: "mixed"
     });
   } catch (error) {
     const statusCode = getStatusCode(error);
@@ -510,4 +700,385 @@ router.post("/portal/boxes/:id/open", async (req, res) => {
   }
 });
 
+
+router.post("/portal/boxes/:id/close", async (req, res) => {
+  try {
+    const boxId = req.params.id;
+    const portalUser = await verifyBearerToken(req.header("Authorization") || undefined);
+
+    console.log("PORTAL CLOSE REQUEST", {
+      boxId,
+      user: portalUser || null
+    });
+
+    if (!portalUser) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    const context = await requireCustomerContext(portalUser.email);
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    if (!portalUser.email || !ALLOWED_OPEN_EMAILS.includes(portalUser.email)) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang om deze box te sluiten"
+      });
+    }
+
+    if (!ACTIVE_PORTAL_BOX_IDS.includes(boxId)) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    if (boxId === "gbox-004") {
+      return res.status(403).json({
+        error: "CLOSE_NOT_ALLOWED",
+        message: "Close-actie niet toegelaten"
+      });
+    }
+
+    const boxDoc = await getBoxById(boxId);
+
+    if (!boxDoc) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    const commandId = await addBoxCommand(boxId, "CLOSE", "Web Dashboard");
+
+    return res.json({
+      ok: true,
+      boxId,
+      commandId,
+      action: "CLOSE",
+      acceptedAt: new Date().toISOString(),
+      mode: "firestore",
+      requestedBy: portalUser.email,
+      customerId: context.membership.customerId
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in POST /portal/boxes/:id/close", error);
+
+    return res.status(500).json({
+      error: "CLOSE_COMMAND_FAILED",
+      message: "Kon close-commando niet opslaan"
+    });
+  }
+});
+
+
+router.get("/portal/boxes/:id/photos", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+
+    console.log("PORTAL BOX PHOTOS REQUEST", {
+      boxId,
+      user: portalUser,
+      customerId: context.membership.customerId
+    });
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    const boxDoc = await getBoxById(boxId);
+
+    if (!boxDoc) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    const bucket = getStorage().bucket("gridbox-platform.firebasestorage.app");
+    const prefix = `snapshots/${boxId}/`;
+
+    const [files] = await bucket.getFiles({ prefix });
+
+    const items = files
+      .filter((file) => typeof file.name === "string" && !file.name.endsWith("/"))
+      .map((file) => {
+        const metadata = file.metadata || {};
+        const parts = file.name.split("/");
+        const filename = parts[parts.length - 1] || file.name;
+
+        return {
+          id: file.name,
+          filename,
+          storagePath: file.name,
+          updatedAt: typeof metadata.updated === "string" ? metadata.updated : null,
+          size: typeof metadata.size === "string" ? metadata.size : null,
+          contentType: typeof metadata.contentType === "string" ? metadata.contentType : null
+        };
+      })
+      .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))
+      .slice(0, 100);
+
+    return res.json({
+      boxId,
+      items,
+      count: items.length,
+      mode: "storage"
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in GET /portal/boxes/:id/photos", error);
+
+    return res.status(500).json({
+      error: "PHOTOS_FETCH_FAILED",
+      message: "Kon foto's niet ophalen"
+    });
+  }
+});
+router.get("/portal/boxes/:id/photos/content", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+    const filename =
+      typeof req.query.filename === "string"
+        ? req.query.filename.trim()
+        : "";
+
+    console.log("PORTAL BOX PHOTO CONTENT REQUEST", {
+      boxId,
+      filename,
+      user: portalUser,
+      customerId: context.membership.customerId
+    });
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    const boxDoc = await getBoxById(boxId);
+
+    if (!boxDoc) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    if (!filename) {
+      return res.status(400).json({
+        error: "INVALID_FILENAME",
+        message: "Bestandsnaam is verplicht"
+      });
+    }
+
+    if (filename.includes("/") || filename.includes("\\")) {
+      return res.status(400).json({
+        error: "INVALID_FILENAME",
+        message: "Ongeldige bestandsnaam"
+      });
+    }
+
+    const bucket = getStorage().bucket("gridbox-platform.firebasestorage.app");
+    const file = bucket.file(`snapshots/${boxId}/${filename}`);
+    const [exists] = await file.exists();
+
+    if (!exists) {
+      return res.status(404).json({
+        error: "PHOTO_NOT_FOUND",
+        message: "Foto niet gevonden"
+      });
+    }
+
+    const [metadata] = await file.getMetadata();
+    const [buffer] = await file.download();
+
+    res.setHeader("Content-Type", metadata.contentType || "image/jpeg");
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(200).send(buffer);
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in GET /portal/boxes/:id/photos/content", error);
+
+    return res.status(500).json({
+      error: "PHOTO_CONTENT_FAILED",
+      message: "Kon foto niet ophalen"
+    });
+  }
+});
+router.get("/portal/boxes/:id/picture", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+
+    console.log("PORTAL BOX PICTURE REQUEST", {
+      boxId,
+      user: portalUser,
+      customerId: context.membership.customerId
+    });
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    const boxDoc = await getBoxById(boxId);
+
+    if (!boxDoc) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    const camera = boxDoc.data.hardware?.camera;
+
+    if (!camera || camera.enabled !== true) {
+      return res.status(404).json({
+        error: "CAMERA_NOT_AVAILABLE",
+        message: "Camera niet beschikbaar"
+      });
+    }
+
+    const snapshotUrl = camera.snapshotUrl;
+    const username = camera.username;
+    const password = camera.password;
+
+    if (typeof snapshotUrl !== "string" || snapshotUrl.trim().length === 0) {
+      return res.status(404).json({
+        error: "SNAPSHOT_URL_MISSING",
+        message: "Snapshot URL ontbreekt"
+      });
+    }
+
+    if (typeof username !== "string" || typeof password !== "string") {
+      return res.status(500).json({
+        error: "CAMERA_CREDENTIALS_MISSING",
+        message: "Camera credentials ontbreken"
+      });
+    }
+
+    const auth = Buffer.from(`${username}:${password}`).toString("base64");
+
+    const snapshotRes = await fetch(snapshotUrl, {
+      headers: {
+        Authorization: `Basic ${auth}`
+      }
+    });
+
+    if (!snapshotRes.ok) {
+      return res.status(502).json({
+        error: "SNAPSHOT_FETCH_FAILED",
+        message: `Snapshot ophalen mislukt (${snapshotRes.status})`
+      });
+    }
+
+    const contentType = snapshotRes.headers.get("content-type") || "image/jpeg";
+    const arrayBuffer = await snapshotRes.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(200).send(buffer);
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in GET /portal/boxes/:id/picture", error);
+
+    return res.status(500).json({
+      error: "PICTURE_FETCH_FAILED",
+      message: "Kon picture niet ophalen"
+    });
+  }
+});
+
 export default router;
+
+
