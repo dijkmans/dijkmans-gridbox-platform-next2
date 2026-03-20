@@ -21,7 +21,7 @@ from PIL import Image, ImageChops, ImageStat
 from db_manager import get_db
 
 # =========================================================
-# GRIDBOX SERVICE - MASTER v1.0.50
+# GRIDBOX SERVICE - MASTER v1.0.51
 # Één script:
 # - bootstrap bij opstart
 # - runtime voor commands / knop / camera / heartbeat
@@ -35,7 +35,7 @@ from db_manager import get_db
 # - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.50"
+VERSION = "v1.0.51"
 KEY_PATH = "service-account.json"
 BUCKET_NAME = "gridbox-platform.firebasestorage.app"
 TIMEZONE = ZoneInfo("Europe/Brussels")
@@ -334,7 +334,7 @@ def maybe_install_requirements():
 
     python_exec = sw_cfg.get("pythonExecutable", "python3")
     run_cmd_checked(
-        [python_exec, "-m", "pip", "install", "-r", requirements_path],
+        [python_exec, "-m", "pip", "install", "--break-system-packages", "-r", requirements_path],
         cwd=REPO_ROOT,
         timeout=600
     )
