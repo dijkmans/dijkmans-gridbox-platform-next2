@@ -1,8 +1,29 @@
 ﻿node_modules/
 .firebase/
-service-account.json
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.next/
+dist/
+logs/
 *.local
+*.bak
+*.tmp
 
+service-account.json
+src/service-account.json
 config/serviceAccountKey.json
 
-cloud-functions/node_modules
+cloud-functions/node_modules/
+gridbox-api/node_modules/
+gridbox-portal/node_modules/
+web/node_modules/
+
+gridbox-portal/.next/
+gridbox-api/dist/
+
+box_config.json
+src/box_config.json
