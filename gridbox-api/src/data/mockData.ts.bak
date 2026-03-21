@@ -1,4 +1,4 @@
-﻿import { PortalUser } from "../types/portalUser";
+import { PortalUser } from "../types/portalUser";
 import { PortalBox } from "../types/portalBox";
 import { PortalBoxDetail } from "../types/portalBoxDetail";
 import { PortalEvent } from "../types/portalEvent";
@@ -66,31 +66,6 @@ export const mockEventsByBoxId: Record<string, PortalEvent[]> = {
       label: "Heartbeat vertraagd",
       severity: "warning"
     }
-  ],
-  "gbox-004": [
-    {
-      id: "evt-2001",
-      type: "heartbeat_delayed",
-      timestamp: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
-      label: "Heartbeat vertraagd",
-      severity: "warning"
-    }
-  ],
-  "gbox-005": [
-    {
-      id: "evt-1001",
-      type: "heartbeat",
-      timestamp: new Date().toISOString(),
-      label: "Heartbeat ontvangen",
-      severity: "info"
-    },
-    {
-      id: "evt-1002",
-      type: "relay_open",
-      timestamp: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
-      label: "Relais geopend",
-      severity: "info"
-    }
   ]
 };
 
@@ -103,8 +78,7 @@ export const mockBoxDetailsById: Record<string, PortalBoxDetail> = {
     lastHeartbeat: new Date().toISOString(),
     lastSeen: new Date().toISOString(),
     availableActions: {
-      open: true,
-      close: true
+      open: true
     },
     connectivitySummary: "Online via router",
     hardwareSummary: "Relais en deurcontact ok",
@@ -118,13 +92,10 @@ export const mockBoxDetailsById: Record<string, PortalBoxDetail> = {
     lastHeartbeat: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
     lastSeen: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
     availableActions: {
-      open: true,
-      close: true
+      open: true
     },
     connectivitySummary: "Laattijdige heartbeat",
     hardwareSummary: "Laatste status gedeeltelijk oud",
     recentEvents: mockEventsByBoxId["box-002"]
   }
 };
-
-

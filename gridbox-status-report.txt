@@ -1,0 +1,2308 @@
+
+===== BASIS =====
+
+Tijd: 2026-03-18 16:09:32
+Map:  C:\Users\piet\Projects\dijkmans-gridbox-platform-next2
+
+===== GIT ROOT =====
+
+C:/Users/piet/Projects/dijkmans-gridbox-platform-next2
+
+
+===== GIT BRANCH =====
+
+staging
+
+
+===== GIT STATUS SHORT =====
+
+ M cloud-functions/index.js
+ M web/src/features/boxes/components/BoxCard.jsx
+?? gridbox-api/
+?? gridbox-portal/
+?? gridbox-status-report.txt
+?? web/database_export.json
+?? web/export_db.py
+
+
+===== GIT LAST COMMIT =====
+
+c72f07c (HEAD -> staging, origin/staging) feat(web): full remote control with smart offline detection and shares placeholder
+
+
+===== GIT DIFF STAT =====
+
+ cloud-functions/index.js                      | 214 ++++++++++++--------------
+ web/src/features/boxes/components/BoxCard.jsx | 176 +++++++++++----------
+ 2 files changed, 186 insertions(+), 204 deletions(-)
+
+
+===== PORTS 3000 3001 8080 =====
+
+
+LocalPort       State OwningProcess
+---------       ----- -------------
+     8080      Listen         51768
+     3000 Established         12180
+     3000 Established         12180
+     3000 Established         12180
+     3000      Listen         12180
+
+
+
+
+===== NODE PROCESSES =====
+
+
+   Id ProcessName StartTime           Path                            
+   -- ----------- ---------           ----                            
+12140 node        16/03/2026 17:36:35 C:\Program Files\nodejs\node.exe
+12180 node        17/03/2026 21:51:35 C:\Program Files\nodejs\node.exe
+18124 node        17/03/2026 21:51:42 C:\Program Files\nodejs\node.exe
+30352 node        17/03/2026 20:24:41 C:\Program Files\nodejs\node.exe
+51768 node        18/03/2026 13:02:55 C:\Program Files\nodejs\node.exe
+55440 node        17/03/2026 20:24:41 C:\Program Files\nodejs\node.exe
+61864 node        17/03/2026 21:51:35 C:\Program Files\nodejs\node.exe
+61988 node        16/03/2026 17:36:35 C:\Program Files\nodejs\node.exe
+63324 node        17/03/2026 21:51:35 C:\Program Files\nodejs\node.exe
+
+
+
+
+===== HTTP CHECK 3000 =====
+
+200
+
+
+===== HTTP CHECK 3000 ADMIN =====
+
+200
+
+
+===== HTTP CHECK 8080 HEALTH =====
+
+{"ok":true,"service":"gridbox-api","timestamp":"2026-03-18T15:09:34.799Z"}
+
+
+===== ROOT PACKAGE.JSON =====
+
+BESTAAT NIET: .\package.json
+
+===== GRIDBOX-API PACKAGE.JSON =====
+
+{
+  "name": "gridbox-api",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "firebase-admin": "^13.2.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.13.10",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.8.2"
+  }
+}
+
+
+===== GRIDBOX-PORTAL PACKAGE.JSON =====
+
+{
+  "name": "gridbox-portal",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "firebase": "^12.10.0",
+    "next": "16.1.7",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.7",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
+
+
+===== API SRC FILES =====
+
+ForEach-Object : The term '.FullName.Replace' is not recognized as the name of a cmdlet, function, script file, or oper
+able program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:50
++ ... rse -File | ForEach-Object { .FullName.Replace((Get-Location).Path +  ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (.FullName.Replace:String) [ForEach-Object], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException,Microsoft.PowerShell.Commands.ForEachObjectCommand
+ 
+
+
+===== PORTAL APP FILES =====
+
+ForEach-Object : The term '.FullName.Replace' is not recognized as the name of a cmdlet, function, script file, or oper
+able program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:57
++ ... rse -File | ForEach-Object { .FullName.Replace((Get-Location).Path +  ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (.FullName.Replace:String) [ForEach-Object], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException,Microsoft.PowerShell.Commands.ForEachObjectCommand
+ 
+
+
+===== PORTAL COMPONENT FILES =====
+
+ForEach-Object : The term '.FullName.Replace' is not recognized as the name of a cmdlet, function, script file, or oper
+able program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:64
++ ... rse -File | ForEach-Object { .FullName.Replace((Get-Location).Path +  ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (.FullName.Replace:String) [ForEach-Object], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException,Microsoft.PowerShell.Commands.ForEachObjectCommand
+ 
+
+
+===== API SERVER =====
+
+import { createApp } from "./app";
+import { env } from "./config/env";
+import { initFirebaseAdmin } from "./config/firebase";
+
+initFirebaseAdmin();
+
+const app = createApp();
+
+app.listen(env.port, () => {
+  console.log(`gridbox-api running on port ${env.port}`);
+});
+
+
+===== API APP =====
+
+import express from "express";
+import cors from "cors";
+import healthRoutes from "./routes/health";
+import meRoutes from "./routes/me";
+import boxRoutes from "./routes/boxes";
+import adminRoutes from "./routes/admin";
+
+export function createApp() {
+  const app = express();
+
+  app.use(cors());
+  app.use(express.json());
+
+  app.use(healthRoutes);
+  app.use(meRoutes);
+  app.use(boxRoutes);
+  app.use(adminRoutes);
+
+  app.use((_req, res) => {
+    res.status(404).json({
+      error: "NOT_FOUND",
+      message: "Endpoint niet gevonden"
+    });
+  });
+
+  return app;
+}
+
+
+===== API ADMIN ROUTE =====
+
+import { Router } from "express";
+import { requirePortalUser } from "../auth/verifyBearerToken";
+import { getMembershipByEmail } from "../repositories/membershipRepository";
+import { getFirestore } from "firebase-admin/firestore";
+
+const router = Router();
+
+function getStatusCode(error: unknown): number {
+  if (typeof error === "object" && error !== null && "statusCode" in error) {
+    const value = (error as any).statusCode;
+    if (typeof value === "number") {
+      return value;
+    }
+  }
+
+  return 500;
+}
+
+async function requirePlatformAdmin(authHeader?: string) {
+  const portalUser = await requirePortalUser(authHeader);
+
+  if (!portalUser.email) {
+    const error = new Error("FORBIDDEN");
+    (error as any).statusCode = 403;
+    throw error;
+  }
+
+  const membership = await getMembershipByEmail(portalUser.email);
+
+  if (!membership || membership.role !== "platformAdmin") {
+    const error = new Error("FORBIDDEN");
+    (error as any).statusCode = 403;
+    throw error;
+  }
+
+  return {
+    portalUser,
+    membership
+  };
+}
+
+router.get("/admin/customers", async (req, res) => {
+  try {
+    const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    console.log("ADMIN CUSTOMERS REQUEST", {
+      user: context.portalUser.email
+    });
+
+    const db = getFirestore();
+    const snapshot = await db.collection("customers").get();
+
+    const items = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    return res.json({
+      items,
+      count: items.length
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Geen admin-toegang"
+      });
+    }
+
+    console.error("FOUT in /admin/customers", error);
+
+    return res.status(500).json({
+      error: "ADMIN_CUSTOMERS_FAILED",
+      message: "Kon customers niet ophalen"
+    });
+  }
+});
+
+router.get("/admin/boxes", async (req, res) => {
+  try {
+    const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    console.log("ADMIN BOXES REQUEST", {
+      user: context.portalUser.email
+    });
+
+    const db = getFirestore();
+    const snapshot = await db.collection("boxes").get();
+
+    const items = snapshot.docs.map((doc) => {
+      const data = doc.data() as Record<string, any>;
+
+      return {
+        id: doc.id,
+        boxId: typeof data.boxId === "string" ? data.boxId : doc.id,
+        siteId: data.siteId || null,
+        customerId: data.customerId || null,
+        updatedAt: data.updatedAt || null
+      };
+    });
+
+    return res.json({
+      items,
+      count: items.length
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Geen admin-toegang"
+      });
+    }
+
+    console.error("FOUT in /admin/boxes", error);
+
+    return res.status(500).json({
+      error: "ADMIN_BOXES_FAILED",
+      message: "Kon boxen niet ophalen"
+    });
+  }
+});
+
+router.post("/admin/customers", async (req, res) => {
+  try {
+    const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
+    const { id, name } = req.body ?? {};
+
+    if (typeof id !== "string" || id.trim().length === 0) {
+      return res.status(400).json({
+        error: "INVALID_CUSTOMER_ID",
+        message: "Customer id is verplicht"
+      });
+    }
+
+    if (typeof name !== "string" || name.trim().length === 0) {
+      return res.status(400).json({
+        error: "INVALID_CUSTOMER_NAME",
+        message: "Customer naam is verplicht"
+      });
+    }
+
+    const customerId = id.trim();
+    const customerName = name.trim();
+
+    const db = getFirestore();
+
+    await db.collection("customers").doc(customerId).set(
+      {
+        name: customerName,
+        active: true,
+        createdAt: new Date().toISOString(),
+        addedBy: context.portalUser.email
+      },
+      { merge: true }
+    );
+
+    return res.json({
+      ok: true,
+      id: customerId,
+      name: customerName
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Geen admin-toegang"
+      });
+    }
+
+    console.error("FOUT in POST /admin/customers", error);
+
+    return res.status(500).json({
+      error: "ADMIN_CUSTOMER_CREATE_FAILED",
+      message: "Kon customer niet aanmaken"
+    });
+  }
+});
+
+router.get("/admin/memberships", async (req, res) => {
+  try {
+    const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    console.log("ADMIN MEMBERSHIPS REQUEST", {
+      user: context.portalUser.email
+    });
+
+    const db = getFirestore();
+    const snapshot = await db.collection("memberships").get();
+
+    const items = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    return res.json({
+      items,
+      count: items.length
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Geen admin-toegang"
+      });
+    }
+
+    console.error("FOUT in /admin/memberships", error);
+
+    return res.status(500).json({
+      error: "ADMIN_MEMBERSHIPS_FAILED",
+      message: "Kon memberships niet ophalen"
+    });
+  }
+});
+
+router.post("/admin/memberships", async (req, res) => {
+  try {
+    const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
+    const { email, customerId, role } = req.body ?? {};
+
+    if (typeof email !== "string" || email.trim().length === 0) {
+      return res.status(400).json({
+        error: "INVALID_EMAIL",
+        message: "Email is verplicht"
+      });
+    }
+
+    if (typeof customerId !== "string" || customerId.trim().length === 0) {
+      return res.status(400).json({
+        error: "INVALID_CUSTOMER_ID",
+        message: "Customer id is verplicht"
+      });
+    }
+
+    if (typeof role !== "string" || role.trim().length === 0) {
+      return res.status(400).json({
+        error: "INVALID_ROLE",
+        message: "Rol is verplicht"
+      });
+    }
+
+    const db = getFirestore();
+    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedCustomerId = customerId.trim();
+    const trimmedRole = role.trim();
+
+    const customerDoc = await db.collection("customers").doc(trimmedCustomerId).get();
+
+    if (!customerDoc.exists) {
+      return res.status(400).json({
+        error: "CUSTOMER_NOT_FOUND",
+        message: "Customer bestaat niet"
+      });
+    }
+
+    const snapshot = await db
+      .collection("memberships")
+      .where("email", "==", trimmedEmail)
+      .limit(1)
+      .get();
+
+    if (!snapshot.empty) {
+      const existingDoc = snapshot.docs[0];
+
+      await existingDoc.ref.set(
+        {
+          email: trimmedEmail,
+          customerId: trimmedCustomerId,
+          role: trimmedRole,
+          updatedAt: new Date().toISOString(),
+          updatedBy: context.portalUser.email
+        },
+        { merge: true }
+      );
+
+      return res.json({
+        ok: true,
+        id: existingDoc.id,
+        email: trimmedEmail,
+        customerId: trimmedCustomerId,
+        role: trimmedRole,
+        mode: "updated"
+      });
+    }
+
+    const docRef = await db.collection("memberships").add({
+      email: trimmedEmail,
+      customerId: trimmedCustomerId,
+      role: trimmedRole,
+      createdAt: new Date().toISOString(),
+      addedBy: context.portalUser.email
+    });
+
+    return res.json({
+      ok: true,
+      id: docRef.id,
+      email: trimmedEmail,
+      customerId: trimmedCustomerId,
+      role: trimmedRole,
+      mode: "created"
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Geen admin-toegang"
+      });
+    }
+
+    console.error("FOUT in POST /admin/memberships", error);
+
+    return res.status(500).json({
+      error: "ADMIN_MEMBERSHIP_CREATE_FAILED",
+      message: "Kon membership niet opslaan"
+    });
+  }
+});
+
+router.get("/admin/customer-box-access", async (req, res) => {
+  try {
+    const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    console.log("ADMIN CUSTOMER BOX ACCESS REQUEST", {
+      user: context.portalUser.email
+    });
+
+    const db = getFirestore();
+    const snapshot = await db.collection("customerBoxAccess").get();
+
+    const items = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    return res.json({
+      items,
+      count: items.length
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Geen admin-toegang"
+      });
+    }
+
+    console.error("FOUT in /admin/customer-box-access", error);
+
+    return res.status(500).json({
+      error: "ADMIN_CUSTOMER_BOX_ACCESS_FAILED",
+      message: "Kon customerBoxAccess niet ophalen"
+    });
+  }
+});
+
+router.post("/admin/customer-box-access", async (req, res) => {
+  try {
+    const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
+    const { customerId, boxId } = req.body ?? {};
+
+    if (typeof customerId !== "string" || customerId.trim().length === 0) {
+      return res.status(400).json({
+        error: "INVALID_CUSTOMER_ID",
+        message: "Customer id is verplicht"
+      });
+    }
+
+    if (typeof boxId !== "string" || boxId.trim().length === 0) {
+      return res.status(400).json({
+        error: "INVALID_BOX_ID",
+        message: "Box id is verplicht"
+      });
+    }
+
+    const db = getFirestore();
+    const trimmedCustomerId = customerId.trim();
+    const trimmedBoxId = boxId.trim();
+
+    const customerDoc = await db.collection("customers").doc(trimmedCustomerId).get();
+
+    if (!customerDoc.exists) {
+      return res.status(400).json({
+        error: "CUSTOMER_NOT_FOUND",
+        message: "Customer bestaat niet"
+      });
+    }
+
+    const boxDoc = await db.collection("boxes").doc(trimmedBoxId).get();
+
+    if (!boxDoc.exists) {
+      return res.status(400).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box bestaat niet"
+      });
+    }
+
+    const docId = `${trimmedCustomerId}__${trimmedBoxId}`;
+
+    await db.collection("customerBoxAccess").doc(docId).set(
+      {
+        customerId: trimmedCustomerId,
+        boxId: trimmedBoxId,
+        active: true,
+        updatedAt: new Date().toISOString(),
+        addedBy: context.portalUser.email
+      },
+      { merge: true }
+    );
+
+    return res.json({
+      ok: true,
+      id: docId,
+      customerId: trimmedCustomerId,
+      boxId: trimmedBoxId
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Geen admin-toegang"
+      });
+    }
+
+    console.error("FOUT in POST /admin/customer-box-access", error);
+
+    return res.status(500).json({
+      error: "ADMIN_CUSTOMER_BOX_ACCESS_CREATE_FAILED",
+      message: "Kon customer-box access niet opslaan"
+    });
+  }
+});
+
+export default router;
+
+
+===== API BOXES ROUTE =====
+
+import { Router } from "express";
+import { requirePortalUser, verifyBearerToken } from "../auth/verifyBearerToken";
+import { mockEventsByBoxId } from "../data/mockData";
+import { mapFirestoreBoxToPortalBoxDetail } from "../mappers/boxDetailMapper";
+import { mapFirestoreBoxToPortalBox } from "../mappers/boxMapper";
+import { getBoxById, listBoxes } from "../repositories/boxRepository";
+import { addBoxCommand, getBoxCommandById, getLatestBoxCommand } from "../repositories/commandRepository";
+import { hasCustomerBoxAccess, listBoxIdsForCustomer } from "../repositories/customerBoxAccessRepository";
+import { getCustomerById } from "../repositories/customerRepository";
+import { getMembershipByEmail } from "../repositories/membershipRepository";
+import { getSiteById, listSites } from "../repositories/siteRepository";
+
+const router = Router();
+
+const ACTIVE_PORTAL_BOX_IDS = ["gbox-004", "gbox-005"];
+const ALLOWED_OPEN_EMAILS = ["gridboxbv@gmail.com", "piet.dijkmans@gmail.com"];
+
+function applyPortalOverrides(box: any) {
+  if (box.id === "gbox-005") {
+    return {
+      ...box,
+      displayName: "Gridbox Geel (actief)",
+      status: "online",
+      connectivitySummary: "Online en operationeel"
+    };
+  }
+
+  if (box.id === "gbox-004") {
+    return {
+      ...box,
+      displayName: "Gridbox Geel (oud model)",
+      status: "offline",
+      canOpen: false,
+      connectivitySummary: "Niet actief",
+      hardwareSummary: "Legacy box",
+      availableActions: {
+        ...(box.availableActions || {}),
+        open: false
+      }
+    };
+  }
+
+  return box;
+}
+
+function getStatusCode(error: unknown): number {
+  if (typeof error === "object" && error !== null && "statusCode" in error) {
+    const value = (error as any).statusCode;
+    if (typeof value === "number") {
+      return value;
+    }
+  }
+
+  return 500;
+}
+
+async function requireCustomerContext(email?: string) {
+  if (!email) {
+    const error = new Error("FORBIDDEN");
+    (error as any).statusCode = 403;
+    throw error;
+  }
+
+  const membership = await getMembershipByEmail(email);
+
+  if (!membership || !membership.customerId) {
+    const error = new Error("FORBIDDEN");
+    (error as any).statusCode = 403;
+    throw error;
+  }
+
+  const customer = await getCustomerById(membership.customerId);
+
+  if (!customer || customer.active !== true) {
+    const error = new Error("CUSTOMER_INACTIVE");
+    (error as any).statusCode = 403;
+    throw error;
+  }
+
+  return {
+    membership,
+    customer
+  };
+}
+
+router.get("/portal/boxes", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+
+    console.log("PORTAL BOX LIST REQUEST", {
+      user: portalUser,
+      customerId: context.membership.customerId
+    });
+
+    const [boxDocs, siteDocs, allowedBoxIds] = await Promise.all([
+      listBoxes(),
+      listSites(),
+      listBoxIdsForCustomer(context.membership.customerId!)
+    ]);
+
+    const allowedSet = new Set(allowedBoxIds);
+
+    const filteredBoxDocs = boxDocs.filter(
+      (doc) => ACTIVE_PORTAL_BOX_IDS.includes(doc.id) && allowedSet.has(doc.id)
+    );
+
+    const items = filteredBoxDocs
+      .map((doc) => mapFirestoreBoxToPortalBox(doc, siteDocs))
+      .map(applyPortalOverrides);
+
+    return res.json({
+      items,
+      count: items.length,
+      mode: "firestore"
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot het portaal"
+      });
+    }
+
+    console.error("FOUT in /portal/boxes", error);
+
+    return res.status(500).json({
+      error: "BOX_LIST_FAILED",
+      message: "Kon boxen niet ophalen"
+    });
+  }
+});
+
+router.get("/portal/boxes/:id", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+
+    console.log("PORTAL BOX DETAIL REQUEST", {
+      boxId,
+      user: portalUser,
+      customerId: context.membership.customerId
+    });
+
+    if (!ACTIVE_PORTAL_BOX_IDS.includes(boxId)) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    const boxDoc = await getBoxById(boxId);
+
+    if (!boxDoc) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    const rawSiteId =
+      typeof boxDoc.data.siteId === "string" && boxDoc.data.siteId.trim().length > 0
+        ? boxDoc.data.siteId.trim()
+        : null;
+
+    const siteDoc = rawSiteId ? await getSiteById(rawSiteId) : null;
+
+    const detail = applyPortalOverrides(
+      mapFirestoreBoxToPortalBoxDetail(boxDoc, siteDoc || undefined)
+    );
+
+    return res.json({
+      ...detail,
+      mode: "firestore"
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in /portal/boxes/:id", error);
+
+    return res.status(500).json({
+      error: "BOX_DETAIL_FAILED",
+      message: "Kon boxdetail niet ophalen"
+    });
+  }
+});
+
+router.get("/portal/boxes/:id/commands/latest", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+
+    console.log("PORTAL BOX LATEST COMMAND REQUEST", {
+      boxId,
+      user: portalUser,
+      customerId: context.membership.customerId
+    });
+
+    if (!ACTIVE_PORTAL_BOX_IDS.includes(boxId)) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    const latest = await getLatestBoxCommand(boxId);
+
+    if (!latest) {
+      return res.status(404).json({
+        error: "COMMAND_NOT_FOUND",
+        message: "Geen command gevonden"
+      });
+    }
+
+    return res.json({
+      id: latest.id,
+      ...latest.data
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in /portal/boxes/:id/commands/latest", error);
+
+    return res.status(500).json({
+      error: "LATEST_COMMAND_FAILED",
+      message: "Kon laatste command niet ophalen"
+    });
+  }
+});
+
+router.get("/portal/boxes/:id/commands/:commandId", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+    const commandId = req.params.commandId;
+
+    console.log("PORTAL BOX COMMAND REQUEST", {
+      boxId,
+      commandId,
+      user: portalUser,
+      customerId: context.membership.customerId
+    });
+
+    if (!ACTIVE_PORTAL_BOX_IDS.includes(boxId)) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    const command = await getBoxCommandById(boxId, commandId);
+
+    if (!command) {
+      return res.status(404).json({
+        error: "COMMAND_NOT_FOUND",
+        message: "Command niet gevonden"
+      });
+    }
+
+    return res.json({
+      id: command.id,
+      ...command.data
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in /portal/boxes/:id/commands/:commandId", error);
+
+    return res.status(500).json({
+      error: "COMMAND_FETCH_FAILED",
+      message: "Kon command niet ophalen"
+    });
+  }
+});
+
+router.get("/portal/boxes/:id/events", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+
+    console.log("PORTAL BOX EVENTS REQUEST", {
+      boxId,
+      user: portalUser,
+      customerId: context.membership.customerId
+    });
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    const items = mockEventsByBoxId[boxId];
+
+    if (!items) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    return res.json({
+      items,
+      count: items.length
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in /portal/boxes/:id/events", error);
+
+    return res.status(500).json({
+      error: "EVENTS_FAILED",
+      message: "Kon events niet ophalen"
+    });
+  }
+});
+
+router.post("/portal/boxes/:id/open", async (req, res) => {
+  try {
+    const boxId = req.params.id;
+    const portalUser = await verifyBearerToken(req.header("Authorization") || undefined);
+
+    console.log("PORTAL OPEN REQUEST", {
+      boxId,
+      user: portalUser || null
+    });
+
+    if (!portalUser) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    const context = await requireCustomerContext(portalUser.email);
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    if (!portalUser.email || !ALLOWED_OPEN_EMAILS.includes(portalUser.email)) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang om deze box te openen"
+      });
+    }
+
+    if (!ACTIVE_PORTAL_BOX_IDS.includes(boxId)) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    if (boxId === "gbox-004") {
+      return res.status(403).json({
+        error: "OPEN_NOT_ALLOWED",
+        message: "Open-actie niet toegelaten"
+      });
+    }
+
+    const boxDoc = await getBoxById(boxId);
+
+    if (!boxDoc) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    const commandId = await addBoxCommand(boxId, "OPEN", "Web Dashboard");
+
+    return res.json({
+      ok: true,
+      boxId,
+      commandId,
+      action: "OPEN",
+      acceptedAt: new Date().toISOString(),
+      mode: "firestore",
+      requestedBy: portalUser.email,
+      customerId: context.membership.customerId
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in POST /portal/boxes/:id/open", error);
+
+    return res.status(500).json({
+      error: "OPEN_COMMAND_FAILED",
+      message: "Kon open-commando niet opslaan"
+    });
+  }
+});
+
+export default router;
+
+
+===== API VERIFY TOKEN =====
+
+import { getAuth } from "firebase-admin/auth";
+
+export type VerifiedPortalUser = {
+  uid: string;
+  email?: string;
+  name?: string;
+};
+
+export async function verifyBearerToken(
+  authHeader?: string
+): Promise<VerifiedPortalUser | null> {
+  if (!authHeader) {
+    return null;
+  }
+
+  if (!authHeader.startsWith("Bearer ")) {
+    return null;
+  }
+
+  const idToken = authHeader.slice("Bearer ".length).trim();
+
+  if (!idToken) {
+    return null;
+  }
+
+  const decoded = await getAuth().verifyIdToken(idToken);
+
+  return {
+    uid: decoded.uid,
+    email: decoded.email,
+    name: decoded.name
+  };
+}
+
+export async function requirePortalUser(authHeader?: string): Promise<VerifiedPortalUser> {
+  const user = await verifyBearerToken(authHeader);
+
+  if (!user) {
+    const error = new Error("UNAUTHORIZED");
+    (error as any).statusCode = 401;
+    throw error;
+  }
+
+  return user;
+}
+
+
+===== PORTAL HOME PAGE =====
+
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import AuthPanel from "@/components/AuthPanel";
+import DebugTokenPanel from "@/components/DebugTokenPanel";
+import { auth } from "@/lib/firebase";
+
+type PortalBox = {
+  id: string;
+  displayName: string;
+  siteId: string;
+  siteName: string;
+  status: "online" | "offline" | "warning" | "unknown";
+  lastHeartbeat?: string;
+  canOpen: boolean;
+  links: {
+    detail: string;
+    history?: string;
+  };
+};
+
+type PortalBoxesResponse = {
+  items: PortalBox[];
+  count: number;
+  mode: string;
+};
+
+function getStatusColor(status: string) {
+  if (status === "online") return "green";
+  if (status === "offline") return "red";
+  if (status === "warning") return "orange";
+  return "gray";
+}
+
+export default function Home() {
+  const [boxes, setBoxes] = useState<PortalBox[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadBoxes() {
+      try {
+        setLoading(true);
+        setMessage("");
+
+        const user = auth.currentUser;
+
+        if (!user) {
+          if (active) {
+            setBoxes([]);
+            setMessage("Meld je aan om boxen te bekijken");
+          }
+          return;
+        }
+
+        const token = await user.getIdToken();
+
+        const res = await fetch("http://localhost:8080/portal/boxes", {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          if (active) {
+            setBoxes([]);
+            setMessage(data.message || "Kon boxen niet ophalen");
+          }
+          return;
+        }
+
+        if (active) {
+          const typed = data as PortalBoxesResponse;
+          setBoxes(typed.items);
+        }
+      } catch (error) {
+        if (active) {
+          setBoxes([]);
+          setMessage("Netwerkfout bij ophalen van boxen");
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+
+    const unsubscribe = auth.onAuthStateChanged(() => {
+      loadBoxes();
+    });
+
+    loadBoxes();
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
+  return (
+    <main style={{ padding: "20px", fontFamily: "sans-serif" }}>
+      <h1>Gridbox Portal</h1>
+      <p>Overzicht van alle boxen</p>
+
+      <AuthPanel />
+      <DebugTokenPanel />
+
+      {loading && <p>Boxen laden...</p>}
+      {message && <p>{message}</p>}
+
+      <div style={{ marginTop: "20px" }}>
+        {boxes.map((box) => (
+          <Link key={box.id} href={box.links.detail} style={{ textDecoration: "none" }}>
+            <div
+              style={{
+                border: "1px solid #ccc",
+                padding: "12px",
+                marginBottom: "12px",
+                borderRadius: "8px",
+                cursor: "pointer"
+              }}
+            >
+              <h2 style={{ margin: "0 0 8px 0" }}>{box.displayName}</h2>
+
+              <p>
+                <strong>Site:</strong> {box.siteName}
+              </p>
+
+              <p>
+                <strong>Status:</strong>{" "}
+                <span style={{ color: getStatusColor(box.status) }}>
+                  {box.status}
+                </span>
+              </p>
+
+              <p>
+                <strong>Laatste heartbeat:</strong>{" "}
+                {box.lastHeartbeat || "Onbekend"}
+              </p>
+
+              <p>
+                <strong>Open mogelijk:</strong>{" "}
+                {box.canOpen ? "Ja" : "Nee"}
+              </p>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </main>
+  );
+}
+
+
+===== PORTAL ADMIN PAGE =====
+
+"use client";
+
+import { FormEvent, useEffect, useState } from "react";
+import { auth } from "@/lib/firebase";
+
+type CustomerItem = {
+  id: string;
+  name?: string;
+  active?: boolean;
+  createdAt?: string;
+  addedBy?: string;
+};
+
+type MembershipItem = {
+  id: string;
+  email?: string;
+  customerId?: string;
+  role?: string;
+};
+
+type CustomerBoxAccessItem = {
+  id: string;
+  customerId?: string;
+  boxId?: string;
+  active?: boolean;
+  createdAt?: string;
+  addedBy?: string;
+};
+
+type AdminBoxItem = {
+  id: string;
+  boxId?: string;
+  siteId?: string | null;
+  customerId?: string | null;
+  updatedAt?: string | null;
+};
+
+function getActiveColor(active?: boolean) {
+  return active ? "green" : "red";
+}
+
+function getCustomerName(customerId: string | undefined, customers: CustomerItem[]) {
+  if (!customerId) {
+    return "-";
+  }
+
+  const match = customers.find((item) => item.id === customerId);
+  return match?.name || customerId;
+}
+
+function getBoxLabel(box: AdminBoxItem) {
+  const id = box.boxId || box.id;
+  const site = box.siteId || "geen-site";
+  return `${id} (${site})`;
+}
+
+function getBoxName(boxId: string | undefined, boxes: AdminBoxItem[]) {
+  if (!boxId) {
+    return "-";
+  }
+
+  const match = boxes.find((item) => item.id === boxId || item.boxId === boxId);
+  return match ? getBoxLabel(match) : boxId;
+}
+
+export default function AdminPage() {
+  const [customers, setCustomers] = useState<CustomerItem[]>([]);
+  const [memberships, setMemberships] = useState<MembershipItem[]>([]);
+  const [customerBoxAccess, setCustomerBoxAccess] = useState<CustomerBoxAccessItem[]>([]);
+  const [boxes, setBoxes] = useState<AdminBoxItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+
+  const [newCustomerId, setNewCustomerId] = useState("");
+  const [newCustomerName, setNewCustomerName] = useState("");
+
+  const [membershipEmail, setMembershipEmail] = useState("");
+  const [membershipCustomerId, setMembershipCustomerId] = useState("");
+  const [membershipRole, setMembershipRole] = useState("customerAdmin");
+
+  const [accessCustomerId, setAccessCustomerId] = useState("");
+  const [accessBoxId, setAccessBoxId] = useState("");
+
+  const selectableCustomers = customers
+    .filter((item) => item.active === true)
+    .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+
+  const sortedBoxes = [...boxes].sort((a, b) => getBoxLabel(a).localeCompare(getBoxLabel(b)));
+
+  async function loadAdminData(clearFeedback = false) {
+    try {
+      setLoading(true);
+
+      if (clearFeedback) {
+        setErrorMessage("");
+        setSuccessMessage("");
+      }
+
+      const user = auth.currentUser;
+
+      if (!user) {
+        setCustomers([]);
+        setMemberships([]);
+        setCustomerBoxAccess([]);
+        setBoxes([]);
+        setErrorMessage("Meld je aan om admingegevens te bekijken");
+        return;
+      }
+
+      const token = await user.getIdToken();
+
+      const [customersRes, membershipsRes, customerBoxAccessRes, boxesRes] = await Promise.all([
+        fetch("http://localhost:8080/admin/customers", {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }),
+        fetch("http://localhost:8080/admin/memberships", {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }),
+        fetch("http://localhost:8080/admin/customer-box-access", {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }),
+        fetch("http://localhost:8080/admin/boxes", {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        })
+      ]);
+
+      const customersData = await customersRes.json();
+      const membershipsData = await membershipsRes.json();
+      const customerBoxAccessData = await customerBoxAccessRes.json();
+      const boxesData = await boxesRes.json();
+
+      if (!customersRes.ok) {
+        setErrorMessage(customersData.message || "Kon customers niet ophalen");
+        return;
+      }
+
+      if (!membershipsRes.ok) {
+        setErrorMessage(membershipsData.message || "Kon memberships niet ophalen");
+        return;
+      }
+
+      if (!customerBoxAccessRes.ok) {
+        setErrorMessage(customerBoxAccessData.message || "Kon customerBoxAccess niet ophalen");
+        return;
+      }
+
+      if (!boxesRes.ok) {
+        setErrorMessage(boxesData.message || "Kon boxen niet ophalen");
+        return;
+      }
+
+      setCustomers(customersData.items || []);
+      setMemberships(membershipsData.items || []);
+      setCustomerBoxAccess(customerBoxAccessData.items || []);
+      setBoxes(boxesData.items || []);
+      setErrorMessage("");
+    } catch (error) {
+      setErrorMessage("Netwerkfout bij admingegevens");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    let active = true;
+
+    const unsubscribe = auth.onAuthStateChanged(async () => {
+      if (!active) {
+        return;
+      }
+
+      await loadAdminData();
+    });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
+  async function postJson(url: string, body: object) {
+    const user = auth.currentUser;
+
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    if (!user) {
+      setErrorMessage("Niet aangemeld");
+      return false;
+    }
+
+    const token = await user.getIdToken();
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify(body)
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      setErrorMessage(data.message || "Opslaan mislukt");
+      return false;
+    }
+
+    return true;
+  }
+
+  async function handleCreateCustomer(e: FormEvent) {
+    e.preventDefault();
+
+    const customerId = newCustomerId.trim();
+    const customerName = newCustomerName.trim();
+
+    if (!customerId) {
+      setErrorMessage("Customer id is verplicht");
+      setSuccessMessage("");
+      return;
+    }
+
+    if (!customerName) {
+      setErrorMessage("Customer naam is verplicht");
+      setSuccessMessage("");
+      return;
+    }
+
+    const ok = await postJson("http://localhost:8080/admin/customers", {
+      id: customerId,
+      name: customerName
+    });
+
+    if (!ok) {
+      return;
+    }
+
+    setNewCustomerId("");
+    setNewCustomerName("");
+    setSuccessMessage("Customer opgeslagen");
+    await loadAdminData(false);
+  }
+
+  async function handleCreateMembership(e: FormEvent) {
+    e.preventDefault();
+
+    const email = membershipEmail.trim();
+    const customerId = membershipCustomerId.trim();
+
+    if (!email) {
+      setErrorMessage("Email is verplicht");
+      setSuccessMessage("");
+      return;
+    }
+
+    if (!customerId) {
+      setErrorMessage("Kies een customer");
+      setSuccessMessage("");
+      return;
+    }
+
+    const ok = await postJson("http://localhost:8080/admin/memberships", {
+      email,
+      customerId,
+      role: membershipRole
+    });
+
+    if (!ok) {
+      return;
+    }
+
+    setMembershipEmail("");
+    setMembershipCustomerId("");
+    setMembershipRole("customerAdmin");
+    setSuccessMessage("Membership opgeslagen");
+    await loadAdminData(false);
+  }
+
+  async function handleCreateAccess(e: FormEvent) {
+    e.preventDefault();
+
+    const customerId = accessCustomerId.trim();
+    const boxId = accessBoxId.trim();
+
+    if (!customerId) {
+      setErrorMessage("Kies een customer");
+      setSuccessMessage("");
+      return;
+    }
+
+    if (!boxId) {
+      setErrorMessage("Kies een box");
+      setSuccessMessage("");
+      return;
+    }
+
+    const ok = await postJson("http://localhost:8080/admin/customer-box-access", {
+      customerId,
+      boxId
+    });
+
+    if (!ok) {
+      return;
+    }
+
+    setAccessCustomerId("");
+    setAccessBoxId("");
+    setSuccessMessage("Box-toegang opgeslagen");
+    await loadAdminData(false);
+  }
+
+  const activeCustomers = customers.filter((item) => item.active === true).length;
+  const inactiveCustomers = customers.filter((item) => item.active !== true).length;
+
+  return (
+    <main style={{ padding: "20px", fontFamily: "sans-serif" }}>
+      <h1>Admin</h1>
+      <p>Beheer van customers, memberships en klant-box toegang</p>
+
+      {loading && <p>Admingegevens laden...</p>}
+      {errorMessage && <p style={{ color: "red" }}>{errorMessage}</p>}
+      {successMessage && <p style={{ color: "green" }}>{successMessage}</p>}
+
+      <section style={{ marginTop: "20px" }}>
+        <h2>Nieuwe customer</h2>
+        <form onSubmit={handleCreateCustomer} style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "12px" }}>
+          <p>
+            <input
+              value={newCustomerId}
+              onChange={(e) => setNewCustomerId(e.target.value)}
+              placeholder="customer id, bv umicore"
+              style={{ width: "100%", padding: "8px", marginBottom: "8px" }}
+            />
+          </p>
+          <p>
+            <input
+              value={newCustomerName}
+              onChange={(e) => setNewCustomerName(e.target.value)}
+              placeholder="customer naam"
+              style={{ width: "100%", padding: "8px", marginBottom: "8px" }}
+            />
+          </p>
+          <button type="submit" style={{ padding: "8px 12px" }}>
+            Customer opslaan
+          </button>
+        </form>
+      </section>
+
+      <section style={{ marginTop: "24px" }}>
+        <h2>Nieuwe membership</h2>
+        <form onSubmit={handleCreateMembership} style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "12px" }}>
+          <p>
+            <input
+              value={membershipEmail}
+              onChange={(e) => setMembershipEmail(e.target.value)}
+              placeholder="email"
+              style={{ width: "100%", padding: "8px", marginBottom: "8px" }}
+            />
+          </p>
+          <p>
+            <select
+              value={membershipCustomerId}
+              onChange={(e) => setMembershipCustomerId(e.target.value)}
+              style={{ width: "100%", padding: "8px", marginBottom: "8px" }}
+            >
+              <option value="">kies actieve customer</option>
+              {selectableCustomers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name || customer.id} ({customer.id})
+                </option>
+              ))}
+            </select>
+          </p>
+          <p>
+            <select
+              value={membershipRole}
+              onChange={(e) => setMembershipRole(e.target.value)}
+              style={{ width: "100%", padding: "8px", marginBottom: "8px" }}
+            >
+              <option value="customerAdmin">customerAdmin</option>
+              <option value="platformAdmin">platformAdmin</option>
+              <option value="viewer">viewer</option>
+            </select>
+          </p>
+          <button type="submit" style={{ padding: "8px 12px" }}>
+            Membership opslaan
+          </button>
+        </form>
+      </section>
+
+      <section style={{ marginTop: "24px" }}>
+        <h2>Nieuwe box-toegang</h2>
+        <form onSubmit={handleCreateAccess} style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "12px" }}>
+          <p>
+            <select
+              value={accessCustomerId}
+              onChange={(e) => setAccessCustomerId(e.target.value)}
+              style={{ width: "100%", padding: "8px", marginBottom: "8px" }}
+            >
+              <option value="">kies actieve customer</option>
+              {selectableCustomers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name || customer.id} ({customer.id})
+                </option>
+              ))}
+            </select>
+          </p>
+          <p>
+            <select
+              value={accessBoxId}
+              onChange={(e) => setAccessBoxId(e.target.value)}
+              style={{ width: "100%", padding: "8px", marginBottom: "8px" }}
+            >
+              <option value="">kies box</option>
+              {sortedBoxes.map((box) => (
+                <option key={box.id} value={box.id}>
+                  {getBoxLabel(box)}
+                </option>
+              ))}
+            </select>
+          </p>
+          <button type="submit" style={{ padding: "8px 12px" }}>
+            Box-toegang opslaan
+          </button>
+        </form>
+      </section>
+
+      {!loading && (
+        <>
+          <section style={{ marginTop: "24px" }}>
+            <h2>Overzicht</h2>
+            <div style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "12px" }}>
+              <p><strong>Aantal customers:</strong> {customers.length}</p>
+              <p><strong>Actieve customers:</strong> {activeCustomers}</p>
+              <p><strong>Inactieve customers:</strong> {inactiveCustomers}</p>
+              <p><strong>Aantal memberships:</strong> {memberships.length}</p>
+              <p><strong>Aantal box-toewijzingen:</strong> {customerBoxAccess.length}</p>
+              <p><strong>Aantal boxen:</strong> {boxes.length}</p>
+            </div>
+          </section>
+
+          <section style={{ marginTop: "24px" }}>
+            <h2>Customers</h2>
+            <div style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "12px" }}>
+              {customers.length === 0 ? (
+                <p>Geen customers gevonden</p>
+              ) : (
+                customers.map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      borderBottom: "1px solid #eee",
+                      padding: "10px 0",
+                      opacity: item.active === true ? 1 : 0.7
+                    }}
+                  >
+                    <p><strong>ID:</strong> {item.id}</p>
+                    <p><strong>Naam:</strong> {item.name || "-"}</p>
+                    <p>
+                      <strong>Status:</strong>{" "}
+                      <span style={{ color: getActiveColor(item.active) }}>
+                        {item.active ? "actief" : "inactief"}
+                      </span>
+                    </p>
+                    <p><strong>Toegevoegd door:</strong> {item.addedBy || "-"}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+
+          <section style={{ marginTop: "24px" }}>
+            <h2>Memberships</h2>
+            <div style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "12px" }}>
+              {memberships.length === 0 ? (
+                <p>Geen memberships gevonden</p>
+              ) : (
+                memberships.map((item) => {
+                  const customer = customers.find((c) => c.id === item.customerId);
+
+                  return (
+                    <div
+                      key={item.id}
+                      style={{
+                        borderBottom: "1px solid #eee",
+                        padding: "10px 0"
+                      }}
+                    >
+                      <p><strong>Email:</strong> {item.email || "-"}</p>
+                      <p><strong>Customer:</strong> {getCustomerName(item.customerId, customers)}</p>
+                      <p><strong>Rol:</strong> {item.role || "-"}</p>
+                      <p>
+                        <strong>Customer status:</strong>{" "}
+                        <span style={{ color: getActiveColor(customer?.active) }}>
+                          {customer?.active ? "actief" : "inactief"}
+                        </span>
+                      </p>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </section>
+
+          <section style={{ marginTop: "24px" }}>
+            <h2>Customer Box Access</h2>
+            <div style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "12px" }}>
+              {customerBoxAccess.length === 0 ? (
+                <p>Geen customer-box access records gevonden</p>
+              ) : (
+                customerBoxAccess.map((item) => {
+                  const customer = customers.find((c) => c.id === item.customerId);
+
+                  return (
+                    <div
+                      key={item.id}
+                      style={{
+                        borderBottom: "1px solid #eee",
+                        padding: "10px 0"
+                      }}
+                    >
+                      <p><strong>Customer:</strong> {getCustomerName(item.customerId, customers)}</p>
+                      <p><strong>Box:</strong> {getBoxName(item.boxId, boxes)}</p>
+                      <p>
+                        <strong>Customer status:</strong>{" "}
+                        <span style={{ color: getActiveColor(customer?.active) }}>
+                          {customer?.active ? "actief" : "inactief"}
+                        </span>
+                      </p>
+                      <p>
+                        <strong>Toewijzing actief:</strong>{" "}
+                        <span style={{ color: getActiveColor(item.active) }}>
+                          {item.active ? "ja" : "nee"}
+                        </span>
+                      </p>
+                      <p><strong>Toegevoegd door:</strong> {item.addedBy || "-"}</p>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </section>
+        </>
+      )}
+    </main>
+  );
+}
+
+
+===== PORTAL BOX DETAIL PAGE =====
+
+BESTAAT NIET: .\gridbox-portal\src\app\portal\boxes\[id]\page.tsx
+
+===== PORTAL OPEN BOX BUTTON =====
+
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { auth } from "@/lib/firebase";
+
+type OpenBoxButtonProps = {
+  boxId: string;
+  canOpen: boolean;
+};
+
+type CommandResponse = {
+  commandId: string;
+};
+
+type CommandDetail = {
+  id: string;
+  command: string;
+  status: string;
+};
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getStatusColor(status: string) {
+  if (status === "completed") return "green";
+  if (status === "failed") return "red";
+  if (status === "pending") return "orange";
+  if (status === "started") return "orange";
+  return "gray";
+}
+
+export default function OpenBoxButton({ boxId, canOpen }: OpenBoxButtonProps) {
+  const router = useRouter();
+
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [commandStatus, setCommandStatus] = useState("");
+
+  async function pollCommand(commandId: string): Promise<void> {
+    const user = auth.currentUser;
+
+    if (!user) {
+      setMessage("Niet aangemeld");
+      return;
+    }
+
+    const token = await user.getIdToken();
+
+    for (let i = 0; i < 15; i++) {
+      const res = await fetch(`http://localhost:8080/portal/boxes/${boxId}/commands/${commandId}`, {
+        method: "GET",
+        cache: "no-store",
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) {
+        await wait(1500);
+        continue;
+      }
+
+      const data: CommandDetail = await res.json();
+      const normalizedStatus = String(data.status || "").toLowerCase();
+
+      setCommandStatus(normalizedStatus);
+
+      if (normalizedStatus === "completed") {
+        setMessage("Box succesvol geopend");
+
+        setTimeout(() => {
+          router.refresh();
+        }, 1000);
+
+        return;
+      }
+
+      if (normalizedStatus === "failed") {
+        setMessage("Open-commando is mislukt");
+        return;
+      }
+
+      if (normalizedStatus === "pending") {
+        setMessage("Commando staat in wachtrij...");
+      } else {
+        setMessage("Open-commando wordt uitgevoerd...");
+      }
+
+      await wait(1500);
+    }
+
+    setMessage("Nog geen bevestiging ontvangen. Controleer de box of probeer later opnieuw.");
+  }
+
+  async function handleOpen() {
+    if (busy || !canOpen) {
+      return;
+    }
+
+    try {
+      setBusy(true);
+      setMessage("");
+      setCommandStatus("");
+
+      const user = auth.currentUser;
+
+      if (!user) {
+        setMessage("Niet aangemeld");
+        return;
+      }
+
+      const token = await user.getIdToken();
+
+      const res = await fetch(`http://localhost:8080/portal/boxes/${boxId}/open`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMessage(data.message || "Openen mislukt");
+        return;
+      }
+
+      const typed = data as CommandResponse;
+
+      if (!typed.commandId) {
+        setMessage("Geen command-id ontvangen");
+        return;
+      }
+
+      setMessage("Commando verstuurd...");
+      await pollCommand(typed.commandId);
+    } catch (error) {
+      setMessage("Netwerkfout bij openen");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const buttonLabel = busy ? "Bezig..." : "Open box";
+
+  return (
+    <div style={{ marginTop: "12px" }}>
+      <button
+        onClick={handleOpen}
+        disabled={!canOpen || busy}
+        style={{
+          padding: "10px 16px",
+          cursor: !canOpen || busy ? "not-allowed" : "pointer",
+          opacity: !canOpen || busy ? 0.6 : 1
+        }}
+      >
+        {buttonLabel}
+      </button>
+
+      {message && (
+        <p style={{ marginTop: "10px" }}>
+          {message}
+        </p>
+      )}
+
+      {commandStatus && (
+        <p style={{ marginTop: "6px" }}>
+          <strong>Laatste command-status:</strong>{" "}
+          <span style={{ color: getStatusColor(commandStatus) }}>
+            {commandStatus}
+          </span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+
+===== PORTAL AUTH PANEL =====
+
+"use client";
+
+import { useEffect, useState } from "react";
+import { auth, googleProvider } from "@/lib/firebase";
+import {
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged,
+  User
+} from "firebase/auth";
+
+export default function AuthPanel() {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+      setUser(nextUser);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  async function handleLogin() {
+    try {
+      setMessage("");
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      setMessage("Inloggen mislukt");
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      setMessage("");
+      await signOut(auth);
+    } catch (error) {
+      setMessage("Uitloggen mislukt");
+    }
+  }
+
+  if (loading) {
+    return <p>Authenticatie laden...</p>;
+  }
+
+  return (
+    <div
+      style={{
+        border: "1px solid #ccc",
+        borderRadius: "8px",
+        padding: "12px",
+        marginBottom: "20px"
+      }}
+    >
+      {user ? (
+        <>
+          <p>
+            <strong>Aangemeld als:</strong> {user.displayName || user.email}
+          </p>
+          <p>
+            <strong>E-mail:</strong> {user.email}
+          </p>
+          <button onClick={handleLogout} style={{ padding: "8px 12px" }}>
+            Afmelden
+          </button>
+        </>
+      ) : (
+        <>
+          <p>Niet aangemeld</p>
+          <button onClick={handleLogin} style={{ padding: "8px 12px" }}>
+            Aanmelden met Google
+          </button>
+        </>
+      )}
+
+      {message && <p style={{ marginTop: "10px" }}>{message}</p>}
+    </div>
+  );
+}
+
+
+===== PORTAL FIREBASE LIB =====
+
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCmwIzuvHO4KW8qGMGlNFK4cnBzrVivtQE",
+  authDomain: "gridbox-platform.firebaseapp.com",
+  projectId: "gridbox-platform",
+  storageBucket: "gridbox-platform.firebasestorage.app",
+  messagingSenderId: "960191535038",
+  appId: "1:960191535038:web:af62e61a8daf768a8acbef"
+};
+
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+
+export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
+

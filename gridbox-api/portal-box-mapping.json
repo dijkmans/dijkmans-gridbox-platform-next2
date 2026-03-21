@@ -1,0 +1,78 @@
+[
+  {
+    "id": "gbox-001",
+    "displayName": "Gridbox Geel",
+    "siteId": "geel",
+    "siteName": "Geel",
+    "status": "warning",
+    "canOpen": true,
+    "links": {
+      "detail": "/portal/boxes/gbox-001",
+      "history": "/portal/boxes/gbox-001/events"
+    }
+  },
+  {
+    "id": "gbox-002",
+    "displayName": "Gridbox Winkelomheide 1",
+    "siteId": "winkelomheide",
+    "siteName": "Winkelomheide",
+    "status": "online",
+    "lastHeartbeat": "2025-12-17T21:23:54.206Z",
+    "canOpen": true,
+    "links": {
+      "detail": "/portal/boxes/gbox-002",
+      "history": "/portal/boxes/gbox-002/events"
+    }
+  },
+  {
+    "id": "gbox-003",
+    "displayName": "Gridbox Winkelomheide 1",
+    "siteId": "winkelomheide",
+    "siteName": "Winkelomheide",
+    "status": "online",
+    "lastHeartbeat": "2025-12-17T21:23:54.206Z",
+    "canOpen": true,
+    "links": {
+      "detail": "/portal/boxes/gbox-003",
+      "history": "/portal/boxes/gbox-003/events"
+    }
+  },
+  {
+    "id": "gbox-004",
+    "displayName": "Gridbox Geel",
+    "siteId": "geel",
+    "siteName": "Geel",
+    "status": "online",
+    "lastHeartbeat": "2026-03-11T13:41:20.053374+00:00",
+    "canOpen": true,
+    "links": {
+      "detail": "/portal/boxes/gbox-004",
+      "history": "/portal/boxes/gbox-004/events"
+    }
+  },
+  {
+    "id": "gbox-005",
+    "displayName": "Gridbox Winkel Geel",
+    "siteId": "powergrid-geel",
+    "siteName": "Winkel Geel",
+    "status": "online",
+    "lastHeartbeat": "2026-03-19T04:47:42.474202+01:00",
+    "canOpen": true,
+    "links": {
+      "detail": "/portal/boxes/gbox-005",
+      "history": "/portal/boxes/gbox-005/events"
+    }
+  },
+  {
+    "id": "pi-test-001",
+    "displayName": "Raspberry Pi Test Unit",
+    "siteId": "unknown-site",
+    "siteName": "Onbekende site",
+    "status": "online",
+    "canOpen": true,
+    "links": {
+      "detail": "/portal/boxes/pi-test-001",
+      "history": "/portal/boxes/pi-test-001/events"
+    }
+  }
+]

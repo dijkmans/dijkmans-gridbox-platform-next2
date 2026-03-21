@@ -1,4 +1,4 @@
-﻿import { PortalBoxDetail } from "../types/portalBoxDetail";
+import { PortalBoxDetail } from "../types/portalBoxDetail";
 import { FirestoreBoxDocument } from "../repositories/boxRepository";
 import { FirestoreSiteDocument } from "../repositories/siteRepository";
 import { PortalEvent } from "../types/portalEvent";
@@ -201,12 +201,10 @@ export function mapFirestoreBoxToPortalBoxDetail(
     lastHeartbeat: pickLastHeartbeat(doc.data),
     lastSeen: pickLastHeartbeat(doc.data),
     availableActions: {
-      open: doc.data.active !== false && doc.data.ui?.hidden !== true,
-      close: doc.data.active !== false && doc.data.ui?.hidden !== true
+      open: doc.data.active !== false && doc.data.ui?.hidden !== true
     },
     connectivitySummary: pickConnectivitySummary(doc.data),
     hardwareSummary: pickHardwareSummary(doc.data),
     recentEvents: buildRecentEvents(doc.data)
   };
 }
-

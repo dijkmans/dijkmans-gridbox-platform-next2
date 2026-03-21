@@ -1,4 +1,4 @@
-﻿import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore } from "firebase-admin/firestore";
 
 export async function addBoxCommand(
   boxId: string,
@@ -61,24 +61,4 @@ export async function getBoxCommandById(
     id: doc.id,
     data: doc.data() as Record<string, any>
   };
-}
-
-export async function listBoxCommands(
-  boxId: string,
-  limitCount = 20
-): Promise<Array<{ id: string; data: Record<string, any> }>> {
-  const db = getFirestore();
-
-  const snapshot = await db
-    .collection("boxes")
-    .doc(boxId)
-    .collection("commands")
-    .orderBy("createdAt", "desc")
-    .limit(limitCount)
-    .get();
-
-  return snapshot.docs.map((doc) => ({
-    id: doc.id,
-    data: doc.data() as Record<string, any>
-  }));
 }

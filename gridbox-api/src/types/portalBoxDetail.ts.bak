@@ -1,4 +1,4 @@
-﻿import { PortalEvent } from "./portalEvent";
+import { PortalEvent } from "./portalEvent";
 import { PortalBoxStatus } from "./portalBox";
 
 export interface PortalBoxDetail {
@@ -10,10 +10,8 @@ export interface PortalBoxDetail {
   lastSeen?: string;
   availableActions: {
     open: boolean;
-    close: boolean;
   };
   connectivitySummary?: string;
   hardwareSummary?: string;
   recentEvents: PortalEvent[];
 }
-
