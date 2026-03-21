@@ -1,61 +1,95 @@
-# GRIDBOX PLATFORM - MASTER CONTEXT
+﻿# GRIDBOX PLATFORM - MASTER CONTEXT
 
-## Doel van het project
+## Doel van het platform
+
 Het Gridbox platform is een multi-tenant systeem waarmee klanten toegang krijgen tot fysieke Gridboxen.
 
 Functionaliteit:
 - gebruikers loggen in via Firebase Auth
-- backend bepaalt toegang via memberships
+- toegang wordt bepaald via memberships
 - klanten krijgen toegang tot specifieke boxen
 - boxen kunnen geopend worden via het platform
+- monitoring en device communicatie lopen mee in dezelfde architectuur
 
-Het platform moet schaalbaar zijn naar meerdere klanten en sites.
+## Architectuur (verplicht model)
 
-## Tech stack
-Frontend:
-- Next.js (App Router)
-- Firebase Auth
+### Frontend
+- locatie: `/gridbox-portal`
+- technologie: Next.js
+- praat met: API
 
-Backend:
-- Node.js (Express)
-- Cloud Run (target)
-- Firebase Admin SDK
+De frontend bevat:
+- portal
+- admin
+- box-weergave
+- sessie- en gebruikersinteractie
 
-Database:
-- Firestore
+### Backend
+- locatie: `/gridbox-api`
+- technologie: Node.js (Express)
+- praat met: Firestore
 
-## Architectuur
-Frontend ? API ? Firestore
+De backend:
+- beheert alle business logic
+- doet alle autorisatie
+- is de enige centrale toegang tot Firestore voor platformfunctionaliteit
 
-Belangrijk:
-- frontend praat NOOIT rechtstreeks met Firestore
-- alle security zit in de API
+### Device laag
+- locatie: `/src`
+- technologie: Python
+- runtime: Raspberry Pi
+
+De device laag:
+- draait `listener.py`
+- verwerkt box acties
+- stuurt status naar Firestore
+- verwerkt camera en sensoren
+- doet filtering van camerabeelden lokaal op de Pi
+
+### Ondersteunende lagen
+
+#### Cloud Functions
+- ondersteunend
+- niet leidend
+- alleen gebruiken voor specifieke cloudtaken of triggers
+
+#### Legacy frontend
+- root `index.html`
+- root `404.html`
+- legacy en niet meer leidend
+
+#### `/web`
+- onduidelijk
+- niet gebruiken voor nieuwe features
+- behandelen als onzeker of legacy tot expliciete beslissing
 
 ## Autorisatiemodel
-1 membership per email:
-- email ? membership
 
-Membership:
+Membership per email:
 - email
 - customerId
 - role
 
 Roles:
-- platformAdmin ? alles
-- customerAdmin ? eigen customer
-- viewer ? lezen
+- platformAdmin
+- customerAdmin
+- viewer
 
-Extra:
-- customer.active bepaalt toegang
-- customerBoxAccess bepaalt box-toegang
+## Belangrijk principe
 
-## Huidige status
-? Admin pagina werkt
-? Customers CRUD
-? Memberships CRUD (overschrijft bestaande email)
-? Customer-box koppeling werkt
-? Dropdowns werken
+Frontend -> API -> Firestore
 
-## Volgende stap
-- UI beschermen tegen overschrijven van platformAdmin
-- duplicate preventie
+Niet toegelaten:
+Frontend -> Firestore
+
+## Huidige focus
+
+- admin stabiliseren
+- duplicates voorkomen
+- platformAdmin beschermen
+- data model correct zetten via `sites` en `boxes`
+- camera-architectuur correct opnemen in device en portal
+
+## Regel
+
+Niet verder bouwen voor admin stabiel is en de architectuur duidelijk blijft.

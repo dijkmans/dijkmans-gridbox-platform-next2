@@ -1,13 +1,34 @@
-# ARCHITECTURE & DATA MODEL
+﻿# ARCHITECTURE AND DATA MODEL
+
+## Overzicht
+
+Het Gridbox platform bestaat uit 3 kernlagen:
+
+1. frontend -> `/gridbox-portal`
+2. backend -> `/gridbox-api`
+3. device -> `/src`
+
+Ondersteunend:
+- `/cloud-functions`
+- legacy frontend in de repo-root
+- `/web` als onzekere of legacy zone
+
+## Hoofdregels
+
+- frontend praat nooit rechtstreeks met Firestore
+- API is de centrale toegang voor business logic en autorisatie
+- device code in `/src` is operationeel en draait op de Raspberry Pi
+- `/web` is niet leidend
+- root `index.html` is legacy
 
 ## Flow
 
-Frontend -> API -> Firestore
+Frontend -> API -> Firestore  
+Device -> Firestore voor operationele data en devicegedrag
 
 ## Collections
 
 ### customers
-
 - id
 - name
 - active
@@ -15,108 +36,132 @@ Frontend -> API -> Firestore
 - addedBy
 
 ### memberships
-
-- email (uniek)
+- email
 - customerId
 - role
-- createdAt / updatedAt
+- createdAt
+- updatedAt
+
+### sites
+`sites` is de enige bron van waarheid voor locaties.
+
+Velden:
+- id
+- customerId
+- name
+- address
+- number
+- postalCode
+- city
+- country
 
 ### boxes
+Een box verwijst naar een locatie via `siteId`.
 
-- id
+Velden:
 - boxId
-- siteId
 - customerId
+- siteId
+
+Niet leidend als locatiebron:
+- `Portal.Site`
+- `info.site`
+- `site.name`
+- `location.city`
 
 ### customerBoxAccess
-
-Doc ID = customerId__boxId
-
 - customerId
 - boxId
 - active
 - updatedAt
 
-### sites
+## Device model
 
-`sites` is de enige bron van waarheid voor locaties.
+De Raspberry Pi code in `/src`:
+- draait `listener.py`
+- leest configuratie
+- stuurt status updates
+- verwerkt acties
+- verwerkt camera en snapshots
 
-Een site-document bevat de locatiegegevens van een fysieke locatie, bijvoorbeeld:
+`gridbox.service` start `src/listener.py` op de Pi.
 
-- id
-- customerId
-- name
-- adresvelden
+`START_HIER.ps1` wordt gebruikt voor provisioning van nieuwe installaties en SD-kaarten.
 
-Locaties worden alleen hier aangemaakt en aangepast.
+## Camera architectuur
 
-## API
+### Doel
+Efficiënt capteren en opslaan van relevante camerabeelden tijdens een open sessie, met minimale opslag, upload en verwerking.
 
-- /admin/customers
-- /admin/memberships
-- /admin/customer-box-access
-- /admin/boxes
+### Hoofdkeuze
+De Raspberry Pi neemt frequent snapshots, filtert lokaal en slaat alleen relevante beelden op in Google Cloud Storage. Firestore bevat alleen metadata.
 
-## Security
+### Sessiemodel
+Een sessie is één open-close cyclus van een box.
 
-- requirePlatformAdmin()
-- role check via memberships
+- `session start` = box open
+- `session end` = box close
+- elke sessie krijgt een unieke `sessionId`
 
-## Rules
+### Capture logica
+1. Bij openen van de box:
+   - altijd een startfoto opslaan
+   - `captureReason = open_start`
 
-- frontend geen Firestore
-- API beslist alles
+2. Tijdens open toestand:
+   - snapshot elke 5 seconden
+   - vergelijken met het laatst opgeslagen beeld
+   - alleen opslaan bij betekenisvolle wijziging
+   - `captureReason = change_detected`
 
-## Locatiemodel
+3. Bij sluiten van de box:
+   - altijd een eindfoto opslaan
+   - `captureReason = open_end`
 
-### sites
+### Filtering op de Pi
+Versie 1 blijft eenvoudig:
+- beeld verkleinen
+- omzetten naar grijswaarden
+- verschil berekenen met het laatst opgeslagen beeld
+- score vergelijken met een drempel
+- cooldown toepassen tussen twee opgeslagen beelden
+- een relevante beeldregio gebruiken waar mogelijk
 
-`sites` is de enige bron van waarheid voor locaties.
+### Storage
+Google Cloud Storage:
+- alleen geselecteerde beelden
 
-Een site-document bevat de locatiegegevens van een fysieke locatie, bijvoorbeeld:
+Voorbeeldpad:
+`/boxes/{boxId}/sessions/{sessionId}/{timestamp}.jpg`
 
-- id
-- customerId
-- name
-- address / number / postalCode / city / country
-- of een geneste location-structuur als dat later bewust zo gekozen wordt
+Firestore:
+- alleen metadata
 
-Locaties worden alleen hier aangemaakt en aangepast.
-
-### boxes
-
-Een box-document verwijst naar een locatie via:
-
+Voorstel metadata velden:
 - boxId
-- customerId
-- siteId
+- sessionId
+- timestamp
+- storagePath
+- diffScore
+- captureReason
 
-Een box mag dus geen eigen losse locatie als bron van waarheid hebben.
+Mogelijke `captureReason` waarden:
+- open_start
+- change_detected
+- open_end
 
-Niet leidend:
+### Portal weergave
+Het portal toont per sessie een compacte tijdlijn:
+- startbeeld
+- relevante wijzigingsbeelden
+- eindbeeld
 
-- Portal.Site
-- info.site
-- site.name
-- location.city
-
-Deze velden zijn alleen legacy of fallback tijdens migratie.
+Geen volledige ruwe reeks snapshots tonen.
 
 ## Migratierichting
 
-Het gewenste model is:
-
-- locatiebeheer in `sites`
-- box verwijst via `siteId`
-- `gbox-005` geldt als referentie voor het gewenste boxmodel
-
-## Praktische afspraak
-
-Voor nieuwe of gemigreerde boxen geldt:
-
-- `boxes/{boxId}` bevat een expliciete `boxId`
-- `boxes/{boxId}` bevat een expliciete `customerId`
-- `boxes/{boxId}` bevat een expliciete `siteId`
-- locatiegegevens zelf staan alleen in `sites/{siteId}`
-
-De portal toont locaties op basis van `siteId` en de gekoppelde site in `sites`.
+- legacy locatievelden afbouwen
+- `sites` verplicht maken als locatiebron
+- boxen koppelen via `siteId`
+- portal verder bouwen in `gridbox-portal`
+- `/web` niet meer gebruiken als actieve richting

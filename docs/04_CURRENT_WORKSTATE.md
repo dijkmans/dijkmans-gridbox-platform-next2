@@ -1,45 +1,76 @@
-# CURRENT WORKSTATE
+﻿# CURRENT WORKSTATE
 
 ## Status
 
 - admin werkt
 - dropdowns werken
-- API stabiel
+- API is de centrale backend
+- basisarchitectuur is vastgelegd
+
+## Architectuur (vastgelegd)
+
+- frontend = `/gridbox-portal`
+- backend = `/gridbox-api`
+- device laag = root `/src`
+- `cloud-functions` = ondersteunend
+- root `index.html` = legacy
+- `/web` = onzeker of legacy en niet leidend
 
 ## Problemen
 
-- membership overschrijven
-- geen duplicate preventie UI
-- geen delete/deactivate
+- memberships kunnen overschreven worden
+- duplicate preventie ontbreekt of is onvoldoende
+- delete en deactivate zijn nog niet voldoende uitgewerkt
+- UI validatie moet sterker
 
-## Relevante files
+## Regels
 
-- admin/page.tsx
-- routes/admin.ts
+- niet verder bouwen op de verkeerde frontend
+- geen nieuwe features in `/web`
+- geen nieuwe platformfunctionaliteit in root `index.html`
+- frontend blijft via API werken
+- architectuur eerst respecteren, dan uitbreiden
+
+## Locatiemodel (vastgelegd)
+
+- `sites` is de enige bron van waarheid voor locaties
+- `boxes` verwijst via `siteId`
+- legacy locatievelden op boxniveau zijn niet leidend
+
+## Huidige richting camera
+
+Vastgelegd:
+- filtering gebeurt op de Raspberry Pi
+- snapshots worden genomen elke 5 seconden
+- vergelijking gebeurt altijd met het laatst opgeslagen beeld
+- `session start` = box open
+- `session end` = box close
+- startbeeld wordt altijd opgeslagen
+- eindbeeld wordt altijd opgeslagen
+- tussenbeelden worden alleen opgeslagen bij betekenisvolle wijziging
+- alleen geselecteerde beelden gaan naar Google Cloud Storage
+- Firestore bevat alleen metadata
+
+Nog uit te werken:
+1. exacte diff threshold
+2. exacte cooldownwaarde
+3. keuze hoe strikt ROI in v1 wordt toegepast
+4. foutafhandeling bij uploadproblemen
+5. definitieve Firestore-structuur voor sessies en captures
+6. portal-tijdlijn per sessie
 
 ## Volgende stappen
 
 1. platformAdmin beschermen
-2. UI validatie verbeteren
-3. duplicates blokkeren
-4. admin uitbreiden
+2. duplicates blokkeren
+3. UI valideren
+4. data model verder opschonen via `sites` en `boxes`
+5. camera-architectuur implementeren in `listener.py`
+6. legacy en twijfelzones uit de actieve lijn halen
 
-## Regel
+## Belangrijk inzicht
 
-Niet verder bouwen voor admin stabiel is
+Als deze structuur niet gerespecteerd wordt, verlies je richting in code, data en documentatie.
 
-## 2026-03-19 - Huidige richting locaties
-
-Vastgelegd:
-
-- `sites` is de enige bron van waarheid voor locaties
-- `boxes` verwijst alleen via `siteId`
-- `gbox-005` is referentie voor het gewenste boxmodel
-- legacy velden op boxniveau zijn niet leidend
-
-Eerstvolgende focus:
-
-1. bestaande boxen inventariseren en per box juiste `siteId` bepalen
-2. oude boxdocs migreren naar expliciete `customerId` en `siteId`
-3. pas daarna portal-overzicht per locatie bouwen
-4. fallbacklogica later afbouwen
+Dus:
+eerst structuur, dan features
