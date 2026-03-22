@@ -22,7 +22,7 @@ from db_manager import get_db
 
 # =========================================================
 # GRIDBOX SERVICE - MASTER v1.0.51
-# Één script:
+# Ã‰Ã©n script:
 # - bootstrap bij opstart
 # - runtime voor commands / knop / camera / heartbeat
 # - GEEN auto-update
@@ -57,6 +57,9 @@ box_is_open = False
 snapshot_thread_running = False
 last_snapshot_small = None
 last_snapshot_id = None
+current_session_id = None
+session_started_at = None
+last_saved_snapshot_at = None
 
 state_lock = threading.Lock()
 command_lock = threading.Lock()
@@ -199,7 +202,7 @@ def refresh_cached_config():
         doc = box_doc_ref.get()
         cached_config = doc.to_dict() if doc.exists else {}
     except Exception as e:
-        log(f"⚠️ cached_config kon niet vernieuwd worden: {e}")
+        log(f"âš ï¸ cached_config kon niet vernieuwd worden: {e}")
 
 def build_location_payload(location_cfg):
     payload = {
@@ -279,7 +282,7 @@ def get_latest_github_tag(force=False):
         return latest
 
     except Exception as e:
-        log(f"⚠️ GitHub tag uitlezen mislukt: {e}")
+        log(f"âš ï¸ GitHub tag uitlezen mislukt: {e}")
         github_tag_cache = {
             "value": "error",
             "fetched_at": now_ts
@@ -403,7 +406,7 @@ def mark_update_failed(message, target_version=None):
         "lastError": message,
         "lastUpdateAttemptAt": now_iso()
     })
-    log(f"❌ Software update mislukt: {message}")
+    log(f"âŒ Software update mislukt: {message}")
 
 
 # =========================================================
@@ -485,7 +488,7 @@ def ensure_customer_exists():
         payload["createdBy"] = f"gridbox-service-{VERSION}"
 
     ref.set(payload, merge=True)
-    log(f"🏢 Customer verzekerd: customers/{customer_id}")
+    log(f"ðŸ¢ Customer verzekerd: customers/{customer_id}")
     return customer_id
 
 def ensure_site_exists(customer_id):
@@ -517,7 +520,7 @@ def ensure_site_exists(customer_id):
         payload["createdBy"] = f"gridbox-service-{VERSION}"
 
     ref.set(payload, merge=True)
-    log(f"📍 Site verzekerd: sites/{site_id}")
+    log(f"ðŸ“ Site verzekerd: sites/{site_id}")
     return site_id
 
 def ensure_bootstrap_admin_user():
@@ -552,7 +555,7 @@ def ensure_bootstrap_admin_user():
         payload["createdBy"] = f"gridbox-service-{VERSION}"
 
     ref.set(payload, merge=True)
-    log(f"👤 Bootstrap admin verzekerd: boxes/{DOCUMENT_ID}/authorizedUsers/{user_id}")
+    log(f"ðŸ‘¤ Bootstrap admin verzekerd: boxes/{DOCUMENT_ID}/authorizedUsers/{user_id}")
 
 def ensure_legacy_mirror_if_enabled(customer_id, site_id):
     compatibility_cfg = box_config.get("compatibility", {})
@@ -568,7 +571,7 @@ def ensure_legacy_mirror_if_enabled(customer_id, site_id):
             "mirroredAt": now_iso(),
             "mirroredBy": f"gridbox-service-{VERSION}"
         }, merge=True)
-        log(f"🪞 Legacy customer mirror gezet onder box: {customer_id}")
+        log(f"ðŸªž Legacy customer mirror gezet onder box: {customer_id}")
 
     if site_id and has_site_config():
         site_cfg = box_config.get("site", {})
@@ -584,7 +587,7 @@ def ensure_legacy_mirror_if_enabled(customer_id, site_id):
             site_payload["location"] = build_location_payload(site_cfg["location"])
 
         box_doc_ref.collection("sites").document(site_id).set(site_payload, merge=True)
-        log(f"🪞 Legacy site mirror gezet onder box: {site_id}")
+        log(f"ðŸªž Legacy site mirror gezet onder box: {site_id}")
 
 def bootstrap_if_needed():
     customer_id = ensure_customer_exists()
@@ -644,7 +647,7 @@ def bootstrap_if_needed():
     final_payload["updatedBy"] = f"gridbox-service-{VERSION}"
 
     box_doc_ref.set(final_payload, merge=True)
-    log(f"🧱 Bootstrap gecontroleerd voor boxes/{DOCUMENT_ID}")
+    log(f"ðŸ§± Bootstrap gecontroleerd voor boxes/{DOCUMENT_ID}")
 
     ensure_bootstrap_admin_user()
     ensure_legacy_mirror_if_enabled(customer_id, site_id)
@@ -672,7 +675,7 @@ def update_box_state(is_open, action_source):
             }
         }, merge=True)
     except Exception as e:
-        log(f"⚠️ Kon state niet opslaan: {e}")
+        log(f"âš ï¸ Kon state niet opslaan: {e}")
 
 def load_box_state_from_firestore():
     global box_is_open
@@ -681,9 +684,9 @@ def load_box_state_from_firestore():
         data = doc.to_dict() if doc.exists else {}
         with state_lock:
             box_is_open = bool(data.get("state", {}).get("boxIsOpen", False))
-        log(f"📦 Herstelde box_is_open = {box_is_open}")
+        log(f"ðŸ“¦ Herstelde box_is_open = {box_is_open}")
     except Exception as e:
-        log(f"⚠️ Kon box state niet laden: {e}")
+        log(f"âš ï¸ Kon box state niet laden: {e}")
 
 
 # =========================================================
@@ -745,13 +748,13 @@ def update_pi_status():
 
         refresh_cached_config()
         log(
-            f"⚙️ Heartbeat OK | latestGithub={latest_github} | "
+            f"âš™ï¸ Heartbeat OK | latestGithub={latest_github} | "
             f"versionRaspberry={version_raspberry} | targetVersion={target_version} | "
             f"deploymentStatus={deployment_status} | updateStatus={update_status}"
         )
 
     except Exception as e:
-        log(f"⚠️ Sync fout: {e}")
+        log(f"âš ï¸ Sync fout: {e}")
 
 
 # =========================================================
@@ -788,10 +791,10 @@ def maybe_process_software_request():
                 "lastError": None,
                 "lastUpdateAttemptAt": now_iso()
             })
-            log("ℹ️ softwareUpdateRequested was true, maar box draait al op targetVersion.")
+            log("â„¹ï¸ softwareUpdateRequested was true, maar box draait al op targetVersion.")
             return
 
-        log(f"🚀 Software update gevraagd naar {target_version}")
+        log(f"ðŸš€ Software update gevraagd naar {target_version}")
         software_action_in_progress = True
 
         write_software_fields({
@@ -820,7 +823,7 @@ def maybe_process_software_request():
             "lastRestartRequestedAt": now_iso()
         })
 
-        log(f"🔁 Restart ingepland naar versie {target_version}")
+        log(f"ðŸ” Restart ingepland naar versie {target_version}")
         schedule_service_restart()
 
         time.sleep(1)
@@ -880,12 +883,90 @@ def remember_snapshot_reference(small_image, snapshot_id):
         last_snapshot_small = small_image
         last_snapshot_id = snapshot_id
 
+def build_session_id():
+    return f"session_{int(time.time() * 1000)}"
+
+def start_snapshot_session():
+    global current_session_id, session_started_at, last_saved_snapshot_at, last_snapshot_small, last_snapshot_id
+
+    started_at = now_iso()
+    session_id = build_session_id()
+
+    with snapshot_lock:
+        current_session_id = session_id
+        session_started_at = started_at
+        last_saved_snapshot_at = None
+        last_snapshot_small = None
+        last_snapshot_id = None
+
+    log(f"Snapshot sessie gestart: {session_id}")
+    return session_id
+
+def end_snapshot_session():
+    global current_session_id, session_started_at
+
+    with snapshot_lock:
+        session_id = current_session_id
+        started_at = session_started_at
+        current_session_id = None
+        session_started_at = None
+
+    if session_id:
+        log(f"Snapshot sessie beëindigd: {session_id}")
+
+    return session_id, started_at
+
+def get_snapshot_cooldown_seconds():
+    cam_cfg = get_camera_config()
+    try:
+        return float(cam_cfg.get("saveCooldownSeconds", 10))
+    except Exception:
+        return 10.0
+
+def get_force_save_threshold_multiplier():
+    cam_cfg = get_camera_config()
+    try:
+        return float(cam_cfg.get("forceSaveThresholdMultiplier", 2.0))
+    except Exception:
+        return 2.0
+
+def should_store_snapshot(phase, change_detected, change_score, threshold):
+    global last_saved_snapshot_at
+
+    forced_phases = {"startup_test", "open_start", "open_end"}
+    if phase in forced_phases:
+        return True, "forced_phase"
+
+    now_ts = time.time()
+    cooldown_seconds = get_snapshot_cooldown_seconds()
+    force_multiplier = get_force_save_threshold_multiplier()
+    force_threshold = float(threshold) * float(force_multiplier)
+
+    with snapshot_lock:
+        previous_saved_at = last_saved_snapshot_at
+
+    cooldown_ok = previous_saved_at is None or (now_ts - previous_saved_at) >= cooldown_seconds
+    force_save = float(change_score) >= force_threshold
+
+    if not change_detected and not force_save:
+        return False, "below_threshold"
+
+    if cooldown_ok:
+        return True, "change_detected"
+
+    if force_save:
+        return True, "force_save"
+
+    return False, "cooldown_active"
+
 
 # =========================================================
 # CAMERA
 # =========================================================
 
 def take_snapshot(phase="manual", sequence_number=None):
+    global last_saved_snapshot_at
+
     cam_cfg = get_camera_config()
     if not cam_cfg.get("enabled", False):
         return
@@ -901,7 +982,7 @@ def take_snapshot(phase="manual", sequence_number=None):
 
         resp = requests.get(url, auth=auth, timeout=10)
         if resp.status_code != 200:
-            log(f"❌ Camera gaf status {resp.status_code}")
+            log(f"Camera gaf status {resp.status_code}")
             return
 
         content_type = resp.headers.get("Content-Type", "image/jpeg")
@@ -913,9 +994,31 @@ def take_snapshot(phase="manual", sequence_number=None):
         width, height = image.size
         small_image, change_detected, change_score, previous_snapshot_id, threshold = analyze_snapshot_change(image)
 
+        capture_reason = phase
+        if phase not in {"startup_test", "open_start", "open_end"}:
+            capture_reason = "change_detected"
+
+        should_store, store_reason = should_store_snapshot(
+            phase=phase,
+            change_detected=change_detected,
+            change_score=change_score,
+            threshold=threshold
+        )
+
+        if not should_store:
+            log(
+                f"Snapshot overgeslagen | fase={phase} | seq={sequence_number} | "
+                f"score={change_score} | reden={store_reason}"
+            )
+            return
+
         timestamp_ms = int(time.time() * 1000)
         filename = f"snapshot_{timestamp_ms}.jpg"
         snapshot_id = safe_doc_id(filename.rsplit(".", 1)[0])
+
+        with snapshot_lock:
+            session_id = current_session_id
+            session_started = session_started_at
 
         storage_path = f"snapshots/{DOCUMENT_ID}/{filename}"
         bucket = storage_client.bucket(BUCKET_NAME)
@@ -928,11 +1031,15 @@ def take_snapshot(phase="manual", sequence_number=None):
         snapshot_payload = {
             "snapshotId": snapshot_id,
             "boxId": DOCUMENT_ID,
+            "sessionId": session_id,
+            "sessionStartedAt": session_started,
             "filename": filename,
             "storagePath": storage_path,
             "bucket": BUCKET_NAME,
             "capturedAt": captured_at,
             "phase": phase,
+            "captureReason": capture_reason,
+            "storeReason": store_reason,
             "sequenceNumber": int(sequence_number) if sequence_number is not None else None,
             "changeDetected": bool(change_detected),
             "changeScore": float(change_score),
@@ -955,17 +1062,20 @@ def take_snapshot(phase="manual", sequence_number=None):
             indexed_text = "indexed"
         except Exception as metadata_error:
             indexed_text = "storage-only"
-            log(f"⚠️ Snapshot metadata opslaan mislukt: {metadata_error}")
+            log(f"Snapshot metadata opslaan mislukt: {metadata_error}")
 
         remember_snapshot_reference(small_image, snapshot_id)
 
+        with snapshot_lock:
+            last_saved_snapshot_at = time.time()
+
         log(
-            f"📸 Snapshot geüpload | fase={phase} | seq={sequence_number} | "
-            f"score={change_score} | changed={change_detected} | {indexed_text}"
+            f"Snapshot opgeslagen | fase={phase} | reason={capture_reason} | seq={sequence_number} | "
+            f"score={change_score} | storeReason={store_reason} | {indexed_text}"
         )
 
     except Exception as e:
-        log(f"❌ Camera fout: {e}")
+        log(f"Camera fout: {e}")
 
 def snapshot_loop():
     global snapshot_thread_running
@@ -999,6 +1109,7 @@ def snapshot_loop():
             time.sleep(interval)
 
     finally:
+        end_snapshot_session()
         with state_lock:
             snapshot_thread_running = False
 
@@ -1020,7 +1131,7 @@ def ensure_snapshot_thread():
 def stop_shutter_motors():
     shutter_open.off()
     shutter_close.off()
-    log("🛑 Motor stroom uitgeschakeld")
+    log("ðŸ›‘ Motor stroom uitgeschakeld")
 
 def mark_command(doc_ref, status, extra=None):
     if not doc_ref:
@@ -1044,7 +1155,7 @@ def mark_command(doc_ref, status, extra=None):
     try:
         doc_ref.set(payload, merge=True)
     except Exception as e:
-        log(f"⚠️ Command status opslaan mislukt: {e}")
+        log(f"âš ï¸ Command status opslaan mislukt: {e}")
 
 def handle_command(doc_ref, data):
     global shutter_motor_timer, light_off_timer
@@ -1062,7 +1173,10 @@ def handle_command(doc_ref, data):
             lighting_cfg = hw_cfg.get("lighting", {})
 
             if cmd == "OPEN":
-                log(f"🔓 OPEN commando ontvangen (Bron: {source})")
+                log(f"OPEN commando ontvangen (Bron: {source})")
+
+                with state_lock:
+                    was_open_before = bool(box_is_open)
 
                 shutter_close.off()
                 time.sleep(0.1)
@@ -1071,7 +1185,14 @@ def handle_command(doc_ref, data):
                 if lighting_cfg.get("onWhenOpen", True):
                     light.on()
 
+                if not was_open_before:
+                    start_snapshot_session()
+
                 update_box_state(True, source)
+
+                if not was_open_before:
+                    take_snapshot(phase="open_start", sequence_number=0)
+
                 ensure_snapshot_thread()
 
                 duration = float(shutter_cfg.get("openDurationSeconds", 30))
@@ -1081,11 +1202,17 @@ def handle_command(doc_ref, data):
                 cancel_timer(light_off_timer)
 
             elif cmd == "CLOSE":
-                log(f"🔒 CLOSE commando ontvangen (Bron: {source})")
+                log(f"CLOSE commando ontvangen (Bron: {source})")
+
+                with state_lock:
+                    was_open_before = bool(box_is_open)
 
                 shutter_open.off()
                 time.sleep(0.1)
                 shutter_close.on()
+
+                if was_open_before:
+                    take_snapshot(phase="open_end", sequence_number=999999)
 
                 update_box_state(False, source)
 
@@ -1104,7 +1231,7 @@ def handle_command(doc_ref, data):
                 mark_command(doc_ref, "completed")
 
         except Exception as e:
-            log(f"❌ Commando fout: {e}")
+            log(f"âŒ Commando fout: {e}")
             if doc_ref:
                 mark_command(doc_ref, "failed", {"error": str(e)})
 
@@ -1137,7 +1264,7 @@ try:
     box_doc_ref = db.collection("boxes").document(DOCUMENT_ID)
 
 except Exception as e:
-    log(f"❌ Startup fout: {e}")
+    log(f"âŒ Startup fout: {e}")
     raise SystemExit(1)
 
 STARTUP_GIT_COMMIT = get_repo_commit()
@@ -1153,14 +1280,14 @@ try:
     bootstrap_if_needed()
     update_pi_status()
 
-    log("📸 Startup test snapshot uitvoeren...")
+    log("ðŸ“¸ Startup test snapshot uitvoeren...")
     threading.Thread(
         target=lambda: take_snapshot(phase="startup-test", sequence_number=0),
         daemon=True
     ).start()
 
 except Exception as e:
-    log(f"❌ Bootstrap/init fout: {e}")
+    log(f"âŒ Bootstrap/init fout: {e}")
 
 query = box_doc_ref.collection("commands").where(filter=FieldFilter("status", "==", "pending"))
 query_watch = query.on_snapshot(on_commands_snapshot)
@@ -1174,16 +1301,16 @@ def handle_physical_button():
     with state_lock:
         target = "CLOSE" if box_is_open else "OPEN"
 
-    log(f"🔘 Fysieke knop ingedrukt. Actie: {target}")
+    log(f"ðŸ”˜ Fysieke knop ingedrukt. Actie: {target}")
     handle_command(None, {"command": target, "source": "Fysieke Knop"})
 
 if platform.system() != "Windows" and GPIO_AVAILABLE:
     try:
         btn = Button(CLOSE_BUTTON_PIN, pin_factory=BUTTON_FACTORY, pull_up=True, bounce_time=0.2)
         btn.when_pressed = handle_physical_button
-        log(f"🔘 Slimme toggle-schakelaar actief op GPIO {CLOSE_BUTTON_PIN}")
+        log(f"ðŸ”˜ Slimme toggle-schakelaar actief op GPIO {CLOSE_BUTTON_PIN}")
     except Exception as e:
-        log(f"⚠️ Schakelaar fout: {e}")
+        log(f"âš ï¸ Schakelaar fout: {e}")
 
 
 # =========================================================
@@ -1210,10 +1337,15 @@ try:
         time.sleep(1)
 
 except Exception:
-    log("🛑 Stop.")
+    log("ðŸ›‘ Stop.")
 
 finally:
     cancel_timer(light_off_timer)
     cancel_timer(shutter_motor_timer)
     stop_shutter_motors()
     light.off()
+
+
+
+
+
