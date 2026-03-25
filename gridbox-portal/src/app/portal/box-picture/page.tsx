@@ -1,12 +1,25 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { auth } from "@/lib/firebase";
+import { apiUrl } from "@/lib/api";
 
-export default function BoxPicturePage() {
-  const params = useParams<{ id: string }>();
-  const boxId = params.id;
+const actionButtonStyle = {
+  display: "inline-block",
+  padding: "8px 12px",
+  border: "1px solid #ccc",
+  borderRadius: "6px",
+  textDecoration: "none",
+  color: "inherit",
+  background: "#fff",
+  cursor: "pointer"
+} as const;
+
+function PageContentRouter() {
+  const searchParams = useSearchParams();
+  const boxId = searchParams.get("id") || "";
 
   const [imageUrl, setImageUrl] = useState("");
   const [loading, setLoading] = useState(true);
@@ -16,6 +29,12 @@ export default function BoxPicturePage() {
     try {
       setLoading(true);
       setMessage("");
+
+      if (!boxId) {
+        setImageUrl("");
+        setMessage("Geen box-id opgegeven");
+        return;
+      }
 
       const user = auth.currentUser;
 
@@ -27,7 +46,7 @@ export default function BoxPicturePage() {
 
       const token = await user.getIdToken();
 
-      const res = await fetch(`http://localhost:8080/portal/boxes/${boxId}/picture`, {
+      const res = await fetch(apiUrl(`/portal/boxes/${boxId}/picture`), {
         headers: {
           Authorization: `Bearer ${token}`
         },
@@ -35,16 +54,16 @@ export default function BoxPicturePage() {
       });
 
       if (!res.ok) {
-        let errorMessage = "Kon picture niet ophalen";
+        let errorText = "Kon picture niet ophalen";
 
         try {
           const data = await res.json();
-          errorMessage = data.message || errorMessage;
+          errorText = data.message || errorText;
         } catch {
         }
 
         setImageUrl("");
-        setMessage(errorMessage);
+        setMessage(errorText);
         return;
       }
 
@@ -58,7 +77,7 @@ export default function BoxPicturePage() {
 
         return objectUrl;
       });
-    } catch (error) {
+    } catch {
       setImageUrl("");
       setMessage("Netwerkfout bij ophalen van picture");
     } finally {
@@ -95,12 +114,18 @@ export default function BoxPicturePage() {
 
   return (
     <main style={{ padding: "20px", fontFamily: "sans-serif" }}>
-      <h1>Box picture - {boxId}</h1>
+      <h1>Box picture - {boxId || "-"}</h1>
 
-      <div style={{ margin: "16px 0" }}>
+      <div style={{ margin: "16px 0", display: "flex", gap: "12px", flexWrap: "wrap" }}>
         <button type="button" onClick={() => void loadPicture()} style={{ padding: "8px 12px" }}>
           Refresh
         </button>
+
+        {boxId && (
+          <Link href={`/portal/box?id=${encodeURIComponent(boxId)}`} style={actionButtonStyle}>
+            TERUG NAAR BOX
+          </Link>
+        )}
       </div>
 
       {loading && <p>Picture laden...</p>}
@@ -116,5 +141,12 @@ export default function BoxPicturePage() {
         </div>
       )}
     </main>
+  );
+}
+export default function Page() {
+  return (
+    <Suspense fallback={<main style={{ padding: "24px", fontFamily: "sans-serif" }}><p>Pagina laden...</p></main>}>
+      <PageContentRouter />
+    </Suspense>
   );
 }

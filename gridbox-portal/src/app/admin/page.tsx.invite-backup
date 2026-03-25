@@ -1,9 +1,7 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, useEffect, useState } from "react";
 import { auth } from "@/lib/firebase";
-import { apiUrl } from "@/lib/api";
-import AuthPanel from "@/components/AuthPanel";
 
 type CustomerItem = {
   id: string;
@@ -65,10 +63,6 @@ function getBoxName(boxId: string | undefined, boxes: AdminBoxItem[]) {
   return match ? getBoxLabel(match) : boxId;
 }
 
-function isValidEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
-}
-
 export default function AdminPage() {
   const [customers, setCustomers] = useState<CustomerItem[]>([]);
   const [memberships, setMemberships] = useState<MembershipItem[]>([]);
@@ -81,12 +75,9 @@ export default function AdminPage() {
   const [newCustomerId, setNewCustomerId] = useState("");
   const [newCustomerName, setNewCustomerName] = useState("");
 
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteDisplayName, setInviteDisplayName] = useState("");
-  const [inviteCustomerId, setInviteCustomerId] = useState("");
-  const [inviteRole, setInviteRole] = useState("customerAdmin");
-  const [invitePermissions, setInvitePermissions] = useState("");
-  const [lastInviteUrl, setLastInviteUrl] = useState("");
+  const [membershipEmail, setMembershipEmail] = useState("");
+  const [membershipCustomerId, setMembershipCustomerId] = useState("");
+  const [membershipRole, setMembershipRole] = useState("customerAdmin");
 
   const [accessCustomerId, setAccessCustomerId] = useState("");
   const [accessBoxId, setAccessBoxId] = useState("");
@@ -120,22 +111,22 @@ export default function AdminPage() {
       const token = await user.getIdToken();
 
       const [customersRes, membershipsRes, customerBoxAccessRes, boxesRes] = await Promise.all([
-        fetch(apiUrl("/admin/customers"), {
+        fetch("http://localhost:8080/admin/customers", {
           headers: {
             Authorization: `Bearer ${token}`
           }
         }),
-        fetch(apiUrl("/admin/memberships"), {
+        fetch("http://localhost:8080/admin/memberships", {
           headers: {
             Authorization: `Bearer ${token}`
           }
         }),
-        fetch(apiUrl("/admin/customer-box-access"), {
+        fetch("http://localhost:8080/admin/customer-box-access", {
           headers: {
             Authorization: `Bearer ${token}`
           }
         }),
-        fetch(apiUrl("/admin/boxes"), {
+        fetch("http://localhost:8080/admin/boxes", {
           headers: {
             Authorization: `Bearer ${token}`
           }
@@ -204,7 +195,7 @@ export default function AdminPage() {
 
     if (!user) {
       setErrorMessage("Niet aangemeld");
-      return null;
+      return false;
     }
 
     const token = await user.getIdToken();
@@ -222,10 +213,10 @@ export default function AdminPage() {
 
     if (!res.ok) {
       setErrorMessage(data.message || "Opslaan mislukt");
-      return null;
+      return false;
     }
 
-    return data;
+    return true;
   }
 
   async function handleCreateCustomer(e: FormEvent) {
@@ -246,12 +237,12 @@ export default function AdminPage() {
       return;
     }
 
-    const result = await postJson(apiUrl("/admin/customers"), {
+    const ok = await postJson("http://localhost:8080/admin/customers", {
       id: customerId,
       name: customerName
     });
 
-    if (!result) {
+    if (!ok) {
       return;
     }
 
@@ -261,22 +252,25 @@ export default function AdminPage() {
     await loadAdminData(false);
   }
 
-  async function handleCreateInvite(e: FormEvent) {
+  async function handleCreateMembership(e: FormEvent) {
     e.preventDefault();
 
-    const email = inviteEmail.trim();
+    const email = membershipEmail.trim();
     const normalizedEmail = email.toLowerCase();
-    const customerId = inviteCustomerId.trim();
-    const displayName = inviteDisplayName.trim();
+    const customerId = membershipCustomerId.trim();
 
-    if (!email) {
-      setErrorMessage("Email is verplicht");
+    const existingMembership = memberships.find(
+      (item) => (item.email || "").toLowerCase() === normalizedEmail
+    );
+
+    if (existingMembership?.role === "platformAdmin") {
+      setErrorMessage("Bestaande platformAdmin membership kan niet overschreven worden");
       setSuccessMessage("");
       return;
     }
 
-    if (!isValidEmail(email)) {
-      setErrorMessage("Vul een geldig e-mailadres in");
+    if (!email) {
+      setErrorMessage("Email is verplicht");
       setSuccessMessage("");
       return;
     }
@@ -287,42 +281,20 @@ export default function AdminPage() {
       return;
     }
 
-    const existingMembership = memberships.find(
-      (item) => (item.email || "").toLowerCase() === normalizedEmail && item.customerId === customerId
-    );
-
-    if (existingMembership?.role === "platformAdmin") {
-      setErrorMessage("Bestaande platformAdmin membership kan niet via uitnodiging overschreven worden");
-      setSuccessMessage("");
-      return;
-    }
-
-    const permissions = invitePermissions
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
-
-    const body = {
+    const ok = await postJson("http://localhost:8080/admin/memberships", {
       email,
-      displayName: displayName || undefined,
       customerId,
-      role: inviteRole,
-      scope: permissions.length > 0 ? { permissions } : {}
-    };
+      role: membershipRole
+    });
 
-    const result = await postJson(apiUrl("/admin/invites"), body);
-
-    if (!result) {
+    if (!ok) {
       return;
     }
 
-    setInviteEmail("");
-    setInviteDisplayName("");
-    setInviteCustomerId("");
-    setInviteRole("customerAdmin");
-    setInvitePermissions("");
-    setLastInviteUrl(result.inviteUrl || "");
-    setSuccessMessage("Uitnodiging aangemaakt");
+    setMembershipEmail("");
+    setMembershipCustomerId("");
+    setMembershipRole("customerAdmin");
+    setSuccessMessage("Membership opgeslagen");
     await loadAdminData(false);
   }
 
@@ -344,12 +316,12 @@ export default function AdminPage() {
       return;
     }
 
-    const result = await postJson(apiUrl("/admin/customer-box-access"), {
+    const ok = await postJson("http://localhost:8080/admin/customer-box-access", {
       customerId,
       boxId
     });
 
-    if (!result) {
+    if (!ok) {
       return;
     }
 
@@ -358,13 +330,12 @@ export default function AdminPage() {
     setSuccessMessage("Box-toegang opgeslagen");
     await loadAdminData(false);
   }
-
   async function handleSetCustomerStatus(customerId: string, active: boolean) {
-    const result = await postJson(apiUrl(`/admin/customers/${encodeURIComponent(customerId)}/status`), {
+    const ok = await postJson(`http://localhost:8080/admin/customers/${encodeURIComponent(customerId)}/status`, {
       active
     });
 
-    if (!result) {
+    if (!ok) {
       return;
     }
 
@@ -373,11 +344,11 @@ export default function AdminPage() {
   }
 
   async function handleSetAccessStatus(accessId: string, active: boolean) {
-    const result = await postJson(apiUrl(`/admin/customer-box-access/${encodeURIComponent(accessId)}/status`), {
+    const ok = await postJson(`http://localhost:8080/admin/customer-box-access/${encodeURIComponent(accessId)}/status`, {
       active
     });
 
-    if (!result) {
+    if (!ok) {
       return;
     }
 
@@ -385,18 +356,6 @@ export default function AdminPage() {
     await loadAdminData(false);
   }
 
-  async function handleCopyInviteLink() {
-    if (!lastInviteUrl) {
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(lastInviteUrl);
-      setSuccessMessage("Invite-link gekopieerd");
-    } catch (error) {
-      setErrorMessage("Kon invite-link niet kopiëren");
-    }
-  }
 
   const activeCustomers = customers.filter((item) => item.active === true).length;
   const inactiveCustomers = customers.filter((item) => item.active !== true).length;
@@ -404,9 +363,7 @@ export default function AdminPage() {
   return (
     <main style={{ padding: "20px", fontFamily: "sans-serif" }}>
       <h1>Admin</h1>
-      <p>Beheer van customers, uitnodigingen en klant-box toegang</p>
-
-      <AuthPanel />
+      <p>Beheer van customers, memberships en klant-box toegang</p>
 
       {loading && <p>Admingegevens laden...</p>}
       {errorMessage && <p style={{ color: "red" }}>{errorMessage}</p>}
@@ -438,28 +395,20 @@ export default function AdminPage() {
       </section>
 
       <section style={{ marginTop: "24px" }}>
-        <h2>Nieuwe uitnodiging</h2>
-        <form onSubmit={handleCreateInvite} style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "12px" }}>
+        <h2>Nieuwe membership</h2>
+        <form onSubmit={handleCreateMembership} style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "12px" }}>
           <p>
             <input
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
+              value={membershipEmail}
+              onChange={(e) => setMembershipEmail(e.target.value)}
               placeholder="email"
               style={{ width: "100%", padding: "8px", marginBottom: "8px" }}
             />
           </p>
           <p>
-            <input
-              value={inviteDisplayName}
-              onChange={(e) => setInviteDisplayName(e.target.value)}
-              placeholder="display name optioneel"
-              style={{ width: "100%", padding: "8px", marginBottom: "8px" }}
-            />
-          </p>
-          <p>
             <select
-              value={inviteCustomerId}
-              onChange={(e) => setInviteCustomerId(e.target.value)}
+              value={membershipCustomerId}
+              onChange={(e) => setMembershipCustomerId(e.target.value)}
               style={{ width: "100%", padding: "8px", marginBottom: "8px" }}
             >
               <option value="">kies actieve customer</option>
@@ -472,36 +421,19 @@ export default function AdminPage() {
           </p>
           <p>
             <select
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value)}
+              value={membershipRole}
+              onChange={(e) => setMembershipRole(e.target.value)}
               style={{ width: "100%", padding: "8px", marginBottom: "8px" }}
             >
               <option value="customerAdmin">customerAdmin</option>
+              <option value="platformAdmin">platformAdmin</option>
               <option value="viewer">viewer</option>
             </select>
           </p>
-          <p>
-            <input
-              value={invitePermissions}
-              onChange={(e) => setInvitePermissions(e.target.value)}
-              placeholder="permissions, bv boxes.read,shares.create"
-              style={{ width: "100%", padding: "8px", marginBottom: "8px" }}
-            />
-          </p>
           <button type="submit" style={{ padding: "8px 12px" }}>
-            Uitnodiging aanmaken
+            Membership opslaan
           </button>
         </form>
-
-        {lastInviteUrl && (
-          <div style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "12px", marginTop: "12px" }}>
-            <p><strong>Laatste invite-link:</strong></p>
-            <p style={{ wordBreak: "break-all" }}>{lastInviteUrl}</p>
-            <button type="button" onClick={() => void handleCopyInviteLink()} style={{ padding: "8px 12px" }}>
-              Kopieer invite-link
-            </button>
-          </div>
-        )}
       </section>
 
       <section style={{ marginTop: "24px" }}>
@@ -619,10 +551,16 @@ export default function AdminPage() {
                 <p>Geen memberships gevonden</p>
               ) : (
                 memberships.map((item) => {
-                  const customer = customers.find((customerItem) => customerItem.id === item.customerId);
+                  const customer = customers.find((c) => c.id === item.customerId);
 
                   return (
-                    <div key={item.id} style={{ borderBottom: "1px solid #eee", padding: "10px 0" }}>
+                    <div
+                      key={item.id}
+                      style={{
+                        borderBottom: "1px solid #eee",
+                        padding: "10px 0"
+                      }}
+                    >
                       <p><strong>Email:</strong> {item.email || "-"}</p>
                       <p><strong>Customer:</strong> {getCustomerName(item.customerId, customers)}</p>
                       <p><strong>Rol:</strong> {item.role || "-"}</p>
@@ -646,10 +584,16 @@ export default function AdminPage() {
                 <p>Geen customer-box access records gevonden</p>
               ) : (
                 customerBoxAccess.map((item) => {
-                  const customer = customers.find((customerItem) => customerItem.id === item.customerId);
+                  const customer = customers.find((c) => c.id === item.customerId);
 
                   return (
-                    <div key={item.id} style={{ borderBottom: "1px solid #eee", padding: "10px 0" }}>
+                    <div
+                      key={item.id}
+                      style={{
+                        borderBottom: "1px solid #eee",
+                        padding: "10px 0"
+                      }}
+                    >
                       <p><strong>Customer:</strong> {getCustomerName(item.customerId, customers)}</p>
                       <p><strong>Box:</strong> {getBoxName(item.boxId, boxes)}</p>
                       <p>
@@ -665,33 +609,6 @@ export default function AdminPage() {
                         </span>
                       </p>
                       <p><strong>Toegevoegd door:</strong> {item.addedBy || "-"}</p>
-                      <div style={{ marginTop: "10px" }}>
-                        {item.active ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (window.confirm(`Box-toegang ${item.id} deactiveren?`)) {
-                                void handleSetAccessStatus(item.id, false);
-                              }
-                            }}
-                            style={{ padding: "8px 12px" }}
-                          >
-                            Deactiveer box-toegang
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (window.confirm(`Box-toegang ${item.id} activeren?`)) {
-                                void handleSetAccessStatus(item.id, true);
-                              }
-                            }}
-                            style={{ padding: "8px 12px" }}
-                          >
-                            Activeer box-toegang
-                          </button>
-                        )}
-                      </div>
                     </div>
                   );
                 })
@@ -703,8 +620,4 @@ export default function AdminPage() {
     </main>
   );
 }
-
-
-
-
 

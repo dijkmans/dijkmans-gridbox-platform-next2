@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { auth } from "@/lib/firebase";
+import { apiUrl } from "@/lib/api";
 
 type PortalEventItem = {
   id: string;
@@ -108,7 +109,7 @@ export default function BoxEventsPage() {
 
       const token = await user.getIdToken();
 
-      const res = await fetch(`http://localhost:8080/portal/boxes/${boxId}/events`, {
+      const res = await fetch(apiUrl(`/portal/boxes/${boxId}/events`), {
         headers: {
           Authorization: `Bearer ${token}`
         },
@@ -195,3 +196,6 @@ export default function BoxEventsPage() {
     </main>
   );
 }
+
+
+

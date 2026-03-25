@@ -1,4 +1,4 @@
-{
+﻿{
   "functions": {
     "source": "cloud-functions",
     "codebase": "default",
@@ -6,17 +6,15 @@
     "disallowLegacyRuntimeConfig": true
   },
   "hosting": {
-    "public": ".",
+    "public": "gridbox-portal/out",
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**",
-      "src/**",
-      "web/**",
-      "docs/**",
-      "cloud-functions/**",
       "service-account.json",
       "*.ps1"
-    ]
+    ],
+    "cleanUrls": true,
+    "trailingSlash": false
   }
 }

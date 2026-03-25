@@ -1,11 +1,12 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import OpenBoxButton from "@/components/OpenBoxButton";
 import CloseBoxButton from "@/components/CloseBoxButton";
 import { auth } from "@/lib/firebase";
+import { apiUrl } from "@/lib/api";
 
 type BoxDetail = {
   id: string;
@@ -53,9 +54,9 @@ const actionButtonStyle = {
   cursor: "pointer"
 } as const;
 
-export default function BoxDetailPage() {
-  const params = useParams<{ id: string }>();
-  const boxId = params.id;
+function PageContentRouter() {
+  const searchParams = useSearchParams();
+  const boxId = searchParams.get("id") || "";
 
   const [box, setBox] = useState<BoxDetail | null>(null);
   const [shares, setShares] = useState<BoxShareItem[]>([]);
@@ -85,6 +86,16 @@ export default function BoxDetailPage() {
         setSharesMessage("");
         setPhotosMessage("");
 
+        if (!boxId) {
+          if (active) {
+            setBox(null);
+            setShares([]);
+            setPhotos([]);
+            setMessage("Geen box-id opgegeven");
+          }
+          return;
+        }
+
         const user = auth.currentUser;
 
         if (!user) {
@@ -102,19 +113,19 @@ export default function BoxDetailPage() {
         const token = await user.getIdToken();
 
         const [boxRes, sharesRes, photosRes] = await Promise.all([
-          fetch(`http://localhost:8080/portal/boxes/${boxId}`, {
+          fetch(apiUrl(`/portal/boxes/${boxId}`), {
             headers: {
               Authorization: `Bearer ${token}`
             },
             cache: "no-store"
           }),
-          fetch(`http://localhost:8080/portal/boxes/${boxId}/shares`, {
+          fetch(apiUrl(`/portal/boxes/${boxId}/shares`), {
             headers: {
               Authorization: `Bearer ${token}`
             },
             cache: "no-store"
           }),
-          fetch(`http://localhost:8080/portal/boxes/${boxId}/photos`, {
+          fetch(apiUrl(`/portal/boxes/${boxId}/photos`), {
             headers: {
               Authorization: `Bearer ${token}`
             },
@@ -204,7 +215,7 @@ export default function BoxDetailPage() {
 
     const token = await user.getIdToken();
 
-    const sharesRes = await fetch(`http://localhost:8080/portal/boxes/${boxId}/shares`, {
+    const sharesRes = await fetch(apiUrl(`/portal/boxes/${boxId}/shares`), {
       headers: {
         Authorization: `Bearer ${token}`
       },
@@ -233,7 +244,7 @@ export default function BoxDetailPage() {
 
     const token = await user.getIdToken();
 
-    const photosRes = await fetch(`http://localhost:8080/portal/boxes/${boxId}/photos`, {
+    const photosRes = await fetch(apiUrl(`/portal/boxes/${boxId}/photos`), {
       headers: {
         Authorization: `Bearer ${token}`
       },
@@ -275,7 +286,7 @@ export default function BoxDetailPage() {
 
       const token = await user.getIdToken();
 
-      const createRes = await fetch(`http://localhost:8080/portal/boxes/${boxId}/shares`, {
+      const createRes = await fetch(apiUrl(`/portal/boxes/${boxId}/shares`), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -331,7 +342,7 @@ export default function BoxDetailPage() {
       const token = await user.getIdToken();
 
       const res = await fetch(
-        `http://localhost:8080/portal/boxes/${boxId}/photos/content?filename=${encodeURIComponent(filename)}`,
+        apiUrl(`/portal/boxes/${boxId}/photos/content?filename=${encodeURIComponent(filename)}`),
         {
           headers: {
             Authorization: `Bearer ${token}`
@@ -341,15 +352,15 @@ export default function BoxDetailPage() {
       );
 
       if (!res.ok) {
-        let errorMessage = "Kon foto niet ophalen";
+        let errorText = "Kon foto niet ophalen";
 
         try {
           const data = await res.json();
-          errorMessage = data.message || errorMessage;
+          errorText = data.message || errorText;
         } catch {
         }
 
-        setPhotosMessage(errorMessage);
+        setPhotosMessage(errorText);
         return;
       }
 
@@ -405,11 +416,11 @@ export default function BoxDetailPage() {
             <OpenBoxButton boxId={box.id} canOpen={box.availableActions.open} />
             <CloseBoxButton boxId={box.id} canClose={box.availableActions.close} />
 
-            <Link href={`/portal/boxes/${box.id}/events`} style={actionButtonStyle}>
+            <Link href={`/portal/box-events?id=${encodeURIComponent(box.id)}`} style={actionButtonStyle}>
               HISTORIEK
             </Link>
 
-            <Link href={`/portal/boxes/${box.id}/picture`} style={actionButtonStyle}>
+            <Link href={`/portal/box-picture?id=${encodeURIComponent(box.id)}`} style={actionButtonStyle}>
               PICTURE
             </Link>
 
@@ -426,159 +437,123 @@ export default function BoxDetailPage() {
               onClick={() => setPhotosOpen((current) => !current)}
               style={actionButtonStyle}
             >
-              FOTO&apos;S
+              FOTO'S
             </button>
           </div>
 
+          <div style={{ marginTop: "16px" }}>
+            <Link href="/" style={actionButtonStyle}>
+              TERUG NAAR OVERZICHT
+            </Link>
+          </div>
+
           {sharesOpen && (
-            <>
-              <hr style={{ margin: "20px 0" }} />
-
-              <h2>Delen met eindklant</h2>
-              <p>Bestaande sms-shares voor deze Gridbox.</p>
-
-              <div
-                style={{
-                  border: "1px solid #ccc",
-                  borderRadius: "8px",
-                  padding: "12px",
-                  marginTop: "12px",
-                  marginBottom: "12px",
-                  display: "grid",
-                  gap: "10px"
-                }}
-              >
-                <input
-                  value={sharePhoneNumber}
-                  onChange={(e) => setSharePhoneNumber(e.target.value)}
-                  placeholder="Gsm-nummer, bv +32471234567"
-                  style={{ padding: "8px" }}
-                />
-                <input
-                  value={shareLabel}
-                  onChange={(e) => setShareLabel(e.target.value)}
-                  placeholder="Optioneel label of opmerking"
-                  style={{ padding: "8px" }}
-                />
-                <div>
-                  <button
-                    type="button"
-                    onClick={handleCreateShare}
-                    disabled={shareSubmitting}
-                    style={{ padding: "8px 12px" }}
-                  >
-                    {shareSubmitting ? "Bezig..." : "Delen"}
-                  </button>
-                </div>
-              </div>
-
+            <section style={{ marginTop: "24px" }}>
+              <h2>Shares</h2>
               {sharesMessage && <p>{sharesMessage}</p>}
 
-              {!sharesMessage && shares.length === 0 && (
-                <p>Geen shares gevonden.</p>
-              )}
+              <div style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "12px", marginBottom: "16px" }}>
+                <h3 style={{ marginTop: 0 }}>Nieuwe share</h3>
 
-              {shares.length > 0 && (
-                <div style={{ display: "grid", gap: "12px", marginTop: "12px" }}>
-                  {shares.map((item) => (
-                    <div
-                      key={item.id}
-                      style={{
-                        border: "1px solid #ccc",
-                        borderRadius: "8px",
-                        padding: "12px"
-                      }}
-                    >
-                      <p><strong>GSM / id:</strong> {item.id}</p>
-                      <p><strong>Type:</strong> {item.typeGuess || "-"}</p>
-                      <p><strong>Status:</strong> {item.active ? "Actief" : "Niet actief"}</p>
+                <p>
+                  <input
+                    value={sharePhoneNumber}
+                    onChange={(e) => setSharePhoneNumber(e.target.value)}
+                    placeholder="Gsm-nummer"
+                    style={{ width: "100%", padding: "8px", marginBottom: "8px" }}
+                  />
+                </p>
+
+                <p>
+                  <input
+                    value={shareLabel}
+                    onChange={(e) => setShareLabel(e.target.value)}
+                    placeholder="Naam of label"
+                    style={{ width: "100%", padding: "8px", marginBottom: "8px" }}
+                  />
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => void handleCreateShare()}
+                  disabled={shareSubmitting}
+                  style={{ padding: "8px 12px" }}
+                >
+                  {shareSubmitting ? "Opslaan..." : "Share aanmaken"}
+                </button>
+              </div>
+
+              <div style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "12px" }}>
+                <p>Bestaande sms-shares voor deze Gridbox.</p>
+
+                {shares.length === 0 ? (
+                  <p>Geen shares gevonden</p>
+                ) : (
+                  shares.map((item) => (
+                    <div key={item.id} style={{ borderTop: "1px solid #eee", padding: "10px 0" }}>
+                      <p><strong>ID:</strong> {item.id}</p>
                       <p><strong>Label:</strong> {item.label || "-"}</p>
                       <p><strong>Email:</strong> {item.email || "-"}</p>
                       <p><strong>Rol:</strong> {item.role || "-"}</p>
+                      <p><strong>Actief:</strong> {item.active ? "Ja" : "Nee"}</p>
                       <p><strong>Toegevoegd door:</strong> {item.addedBy || "-"}</p>
-                      <p><strong>Aangemaakt op:</strong> {item.createdAt || "-"}</p>
                     </div>
-                  ))}
-                </div>
-              )}
-            </>
+                  ))
+                )}
+              </div>
+            </section>
           )}
 
           {photosOpen && (
-            <>
-              <hr style={{ margin: "20px 0" }} />
-
-              <h2>Foto&apos;s</h2>
-              <p>Opgeslagen snapshots tijdens open en kort daarna.</p>
-
+            <section style={{ marginTop: "24px" }}>
+              <h2>Foto's</h2>
               {photosMessage && <p>{photosMessage}</p>}
 
-              {!photosMessage && photos.length === 0 && (
-                <p>Geen foto&apos;s gevonden.</p>
-              )}
+              <div style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "12px" }}>
+                {photos.length === 0 ? (
+                  <p>Geen foto's gevonden</p>
+                ) : (
+                  photos.map((item) => (
+                    <div key={item.id} style={{ borderTop: "1px solid #eee", padding: "10px 0" }}>
+                      <p><strong>Bestand:</strong> {item.filename}</p>
+                      <p><strong>Updated:</strong> {item.updatedAt || "-"}</p>
+                      <button
+                        type="button"
+                        onClick={() => void handleLoadPhoto(item.filename)}
+                        disabled={photoPreviewLoading && selectedPhotoFilename === item.filename}
+                        style={{ padding: "8px 12px" }}
+                      >
+                        {photoPreviewLoading && selectedPhotoFilename === item.filename ? "Laden..." : "Bekijk"}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
 
-              {photoPreviewLoading && (
-                <p style={{ marginTop: "16px" }}>Foto laden...</p>
-              )}
-
-              {selectedPhotoUrl && !photoPreviewLoading && (
+              {selectedPhotoUrl && (
                 <div
                   id="photo-preview"
-                  style={{
-                    marginTop: "16px",
-                    marginBottom: "16px",
-                    border: "1px solid #ccc",
-                    borderRadius: "8px",
-                    padding: "12px"
-                  }}
+                  style={{ marginTop: "16px", border: "1px solid #ccc", borderRadius: "8px", padding: "12px" }}
                 >
-                  <p><strong>Geselecteerd:</strong> {selectedPhotoFilename}</p>
+                  <h3 style={{ marginTop: 0 }}>Preview - {selectedPhotoFilename}</h3>
                   <img
                     src={selectedPhotoUrl}
                     alt={selectedPhotoFilename}
-                    style={{
-                      maxWidth: "100%",
-                      height: "auto",
-                      border: "1px solid #ccc",
-                      borderRadius: "8px"
-                    }}
+                    style={{ maxWidth: "100%", height: "auto", display: "block" }}
                   />
                 </div>
               )}
-
-              {photos.length > 0 && (
-                <div style={{ display: "grid", gap: "12px", marginTop: "12px" }}>
-                  {photos.map((item) => (
-                    <div
-                      key={item.id}
-                      style={{
-                        border: "1px solid #ccc",
-                        borderRadius: "8px",
-                        padding: "12px"
-                      }}
-                    >
-                      <p><strong>Bestand:</strong> {item.filename}</p>
-                      <p><strong>Updated:</strong> {item.updatedAt || "-"}</p>
-                      <p><strong>Grootte:</strong> {item.size || "-"}</p>
-                      <div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void handleLoadPhoto(item.filename);
-                          }}
-                          style={{ padding: "8px 12px" }}
-                        >
-                          Toon foto
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
+            </section>
           )}
         </>
       )}
     </main>
+  );
+}
+export default function Page() {
+  return (
+    <Suspense fallback={<main style={{ padding: "24px", fontFamily: "sans-serif" }}><p>Pagina laden...</p></main>}>
+      <PageContentRouter />
+    </Suspense>
   );
 }

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { auth, googleProvider } from "@/lib/firebase";
@@ -18,6 +18,7 @@ export default function AuthPanel() {
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser);
       setLoading(false);
+      setMessage("");
     });
 
     return () => unsubscribe();
@@ -79,3 +80,5 @@ export default function AuthPanel() {
     </div>
   );
 }
+
+

@@ -379,15 +379,31 @@ router.post("/admin/memberships", async (req, res) => {
       const existingDoc = snapshot.docs[0];
       const existingData = existingDoc.data() as Record<string, any>;
 
-      return res.status(409).json({
-        error: "MEMBERSHIP_EMAIL_ALREADY_EXISTS",
-        message: "Er bestaat al een membership voor dit e-mailadres. Overschrijven is niet toegestaan.",
-        existing: {
-          id: existingDoc.id,
-          email: existingData.email ?? trimmedEmail,
-          customerId: existingData.customerId ?? null,
-          role: existingData.role ?? null
-        }
+      if (existingData.role === "platformAdmin") {
+        return res.status(409).json({
+          error: "PLATFORM_ADMIN_PROTECTED",
+          message: "Bestaande platformAdmin membership kan niet overschreven worden"
+        });
+      }
+
+      await existingDoc.ref.set(
+        {
+          email: trimmedEmail,
+          customerId: trimmedCustomerId,
+          role: trimmedRole,
+          updatedAt: new Date().toISOString(),
+          updatedBy: context.portalUser.email
+        },
+        { merge: true }
+      );
+
+      return res.json({
+        ok: true,
+        id: existingDoc.id,
+        email: trimmedEmail,
+        customerId: trimmedCustomerId,
+        role: trimmedRole,
+        mode: "updated"
       });
     }
 

@@ -165,3 +165,16 @@ Geen volledige ruwe reeks snapshots tonen.
 - boxen koppelen via `siteId`
 - portal verder bouwen in `gridbox-portal`
 - `/web` niet meer gebruiken als actieve richting
+
+## Technische uitwerking invite-procedure
+
+De uitvoerbare procedure voor invites en activatie staat verder uitgewerkt in:
+
+- `docs/05_INVITE_PROCEDURE.md`
+
+Deze procedure is leidend voor:
+
+- Firestore datamodel van invites en memberships
+- API-endpoints voor invite create, validate en accept
+- activatieflow in de portal
+- koppeling van membership aan `authUid`

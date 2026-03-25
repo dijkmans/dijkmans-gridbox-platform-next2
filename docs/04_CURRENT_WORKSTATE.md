@@ -74,3 +74,26 @@ Als deze structuur niet gerespecteerd wordt, verlies je richting in code, data e
 
 Dus:
 eerst structuur, dan features
+
+## 2026-03-22 - Invite-procedure technisch uitgewerkt
+
+Toegevoegd:
+
+- apart technisch document `docs/05_INVITE_PROCEDURE.md`
+
+Doel:
+
+- invite-flow omzetten van richting naar uitvoerbare procedure
+- vaste regels voor create, validate en accept
+- memberships pas activeren na login en gsm-verificatie
+- autorisatie baseren op `authUid` en actieve membership
+
+Nieuwe praktische volgorde:
+
+1. Firestore model finaliseren
+2. `POST /admin/invites`
+3. `POST /invites/validate`
+4. Firebase login in activatiescherm
+5. Firebase phone verification
+6. `POST /invites/accept`
+7. middleware op actieve membership

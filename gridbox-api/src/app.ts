@@ -1,9 +1,10 @@
-import express from "express";
+﻿import express from "express";
 import cors from "cors";
 import healthRoutes from "./routes/health";
 import meRoutes from "./routes/me";
 import boxRoutes from "./routes/boxes";
 import adminRoutes from "./routes/admin";
+import invitesRoutes from "./routes/invites";
 
 export function createApp() {
   const app = express();
@@ -15,6 +16,7 @@ export function createApp() {
   app.use(meRoutes);
   app.use(boxRoutes);
   app.use(adminRoutes);
+  app.use(invitesRoutes);
 
   app.use((_req, res) => {
     res.status(404).json({
@@ -25,3 +27,4 @@ export function createApp() {
 
   return app;
 }
+

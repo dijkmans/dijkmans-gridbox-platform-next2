@@ -1,9 +1,10 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import AuthPanel from "@/components/AuthPanel";
 import { auth } from "@/lib/firebase";
+import { apiUrl } from "@/lib/api";
 
 type PortalBox = {
   id: string;
@@ -57,7 +58,7 @@ export default function Home() {
 
         const token = await user.getIdToken();
 
-        const res = await fetch("http://localhost:8080/portal/boxes", {
+        const res = await fetch(apiUrl("/portal/boxes"), {
           headers: {
             Authorization: `Bearer ${token}`
           }
@@ -113,7 +114,7 @@ export default function Home() {
 
       <div style={{ marginTop: "20px" }}>
         {boxes.map((box) => (
-          <Link key={box.id} href={box.links.detail} style={{ textDecoration: "none" }}>
+          <Link key={box.id} href={`/portal/box?id=${encodeURIComponent(box.id)}`} style={{ textDecoration: "none" }}>
             <div
               style={{
                 border: "1px solid #ccc",
@@ -152,3 +153,7 @@ export default function Home() {
     </main>
   );
 }
+
+
+
+

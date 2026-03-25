@@ -1,8 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
+import { apiUrl } from "@/lib/api";
 
 type OpenBoxButtonProps = {
   boxId: string;
@@ -49,7 +50,7 @@ export default function OpenBoxButton({ boxId, canOpen }: OpenBoxButtonProps) {
     const token = await user.getIdToken();
 
     for (let i = 0; i < 15; i++) {
-      const res = await fetch(`http://localhost:8080/portal/boxes/${boxId}/commands/${commandId}`, {
+      const res = await fetch(apiUrl(`/portal/boxes/${boxId}/commands/${commandId}`), {
         method: "GET",
         cache: "no-store",
         headers: {
@@ -113,7 +114,7 @@ export default function OpenBoxButton({ boxId, canOpen }: OpenBoxButtonProps) {
 
       const token = await user.getIdToken();
 
-      const res = await fetch(`http://localhost:8080/portal/boxes/${boxId}/open`, {
+      const res = await fetch(apiUrl(`/portal/boxes/${boxId}/open`), {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`
@@ -182,3 +183,5 @@ export default function OpenBoxButton({ boxId, canOpen }: OpenBoxButtonProps) {
     </div>
   );
 }
+
+

@@ -53,3 +53,26 @@ Gevolgen:
 Referentie:
 
 - `gbox-005` geldt als referentie voor het gewenste boxmodel
+
+## 2026-03-22 - Invite-procedure technisch vastgezet
+
+Beslissing:
+
+De invite-flow wordt niet alleen conceptueel maar ook technisch vastgelegd in een apart document.
+
+Referentie:
+
+- `docs/05_INVITE_PROCEDURE.md`
+
+Afspraken:
+
+- invite en membership blijven gescheiden entiteiten
+- raw invite token wordt niet opgeslagen, alleen hash
+- acceptatie vereist login via Firebase Authentication
+- acceptatie vereist e-mailmatch met invite
+- acceptatie vereist verplichte gsm-verificatie
+- autorisatie gebeurt op actieve membership gekoppeld aan `authUid`
+
+Gevolg:
+
+nieuwe implementatie van admin en portal moet deze procedure volgen
