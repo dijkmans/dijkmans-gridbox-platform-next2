@@ -304,6 +304,7 @@ router.get("/portal/boxes/:id/shares", async (req, res) => {
     });
   }
 });
+
 router.post("/portal/boxes/:id/shares", async (req, res) => {
   try {
     const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
@@ -406,6 +407,7 @@ router.post("/portal/boxes/:id/shares", async (req, res) => {
     });
   }
 });
+
 router.get("/portal/boxes/:id/commands/latest", async (req, res) => {
   try {
     const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
@@ -797,6 +799,64 @@ router.post("/portal/boxes/:id/close", async (req, res) => {
   }
 });
 
+/**
+ * NEW ROUTE: Snapshots via Firestore (voor Fotorol en Moment-Viewer)
+ */
+router.get("/portal/boxes/:id/snapshots", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    const limit = parseInt(req.query.limit as string) || 40;
+    const startDate = req.query.startDate as string;
+    const endDate = req.query.endDate as string;
+    const phase = req.query.phase as string;
+
+    const db = getFirestore();
+    let query: any = db.collection("boxes").doc(boxId).collection("snapshots")
+      .orderBy("capturedAt", "desc");
+
+    if (startDate) {
+      query = query.where("capturedAt", ">=", startDate);
+    }
+    if (endDate) {
+      query = query.where("capturedAt", "<=", endDate);
+    }
+    if (phase) {
+      query = query.where("phase", "==", phase);
+    }
+
+    const snapshotDocs = await query.limit(limit).get();
+    
+    const items = snapshotDocs.docs.map((doc: any) => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    return res.json({
+      boxId,
+      items,
+      count: items.length,
+      mode: "firestore-snapshots"
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen toegang" });
+    
+    console.error("FOUT in GET /portal/boxes/:id/snapshots", error);
+    return res.status(500).json({ error: "SNAPSHOTS_FETCH_FAILED", message: "Kon snapshots niet ophalen" });
+  }
+});
 
 router.get("/portal/boxes/:id/photos", async (req, res) => {
   try {
@@ -883,6 +943,7 @@ router.get("/portal/boxes/:id/photos", async (req, res) => {
     });
   }
 });
+
 router.get("/portal/boxes/:id/photos/content", async (req, res) => {
   try {
     const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
@@ -974,13 +1035,15 @@ router.get("/portal/boxes/:id/photos/content", async (req, res) => {
     });
   }
 });
+
+// Aangepaste 'PICTURE' route (haalt de laatste foto uit Storage op)
 router.get("/portal/boxes/:id/picture", async (req, res) => {
   try {
     const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
     const context = await requireCustomerContext(portalUser.email);
     const boxId = req.params.id;
 
-    console.log("PORTAL BOX PICTURE REQUEST", {
+    console.log("PORTAL BOX PICTURE REQUEST (LATEST)", {
       boxId,
       user: portalUser,
       customerId: context.membership.customerId
@@ -1013,46 +1076,36 @@ router.get("/portal/boxes/:id/picture", async (req, res) => {
       });
     }
 
-    const snapshotUrl = camera.snapshotUrl;
-    const username = camera.username;
-    const password = camera.password;
+    const bucket = getStorage().bucket("gridbox-platform.firebasestorage.app");
+    const prefix = `snapshots/${boxId}/`;
 
-    if (typeof snapshotUrl !== "string" || snapshotUrl.trim().length === 0) {
-      return res.status(404).json({
-        error: "SNAPSHOT_URL_MISSING",
-        message: "Snapshot URL ontbreekt"
+    const [files] = await bucket.getFiles({ prefix });
+    
+    // Filter the root folder and sort them
+    const validFiles = files.filter(f => !f.name.endsWith("/"));
+    
+    if (validFiles.length === 0) {
+       return res.status(404).json({
+        error: "NO_PICTURES_YET",
+        message: "Er zijn nog geen foto's beschikbaar voor deze box"
       });
     }
 
-    if (typeof username !== "string" || typeof password !== "string") {
-      return res.status(500).json({
-        error: "CAMERA_CREDENTIALS_MISSING",
-        message: "Camera credentials ontbreken"
-      });
-    }
-
-    const auth = Buffer.from(`${username}:${password}`).toString("base64");
-
-    const snapshotRes = await fetch(snapshotUrl, {
-      headers: {
-        Authorization: `Basic ${auth}`
-      }
+    // Sort by updated time, newest first
+    validFiles.sort((a, b) => {
+      const timeA = new Date(a.metadata.updated || 0).getTime();
+      const timeB = new Date(b.metadata.updated || 0).getTime();
+      return timeB - timeA;
     });
 
-    if (!snapshotRes.ok) {
-      return res.status(502).json({
-        error: "SNAPSHOT_FETCH_FAILED",
-        message: `Snapshot ophalen mislukt (${snapshotRes.status})`
-      });
-    }
+    const latestFile = validFiles[0];
+    const [metadata] = await latestFile.getMetadata();
+    const [buffer] = await latestFile.download();
 
-    const contentType = snapshotRes.headers.get("content-type") || "image/jpeg";
-    const arrayBuffer = await snapshotRes.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Type", metadata.contentType || "image/jpeg");
     res.setHeader("Cache-Control", "no-store");
     return res.status(200).send(buffer);
+
   } catch (error) {
     const statusCode = getStatusCode(error);
 
@@ -1080,5 +1133,3 @@ router.get("/portal/boxes/:id/picture", async (req, res) => {
 });
 
 export default router;
-
-
