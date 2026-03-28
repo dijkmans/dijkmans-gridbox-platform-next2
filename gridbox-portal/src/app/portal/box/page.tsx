@@ -11,11 +11,12 @@
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { auth, db } from "@/lib/firebase"; 
+import { auth, db } from "@/lib/firebase";
 import { collection, query, orderBy, limit, onSnapshot } from "firebase/firestore";
 import { apiUrl } from "@/lib/api";
-import OpenBoxButton from "@/components/OpenBoxButton";
-import CloseBoxButton from "@/components/CloseBoxButton";
+
+// Onze nieuwe slimme knop!
+import SmartToggleButton from "@/components/SmartToggleButton";
 
 // --- DESIGN SYSTEM ---
 const THEME = {
@@ -28,87 +29,87 @@ const THEME = {
 };
 
 const STYLES = {
-  container: { 
-    padding: "48px 24px", 
-    maxWidth: "1100px", 
-    margin: "0 auto", 
-    fontFamily: "'Inter', sans-serif", 
+  container: {
+    padding: "48px 24px",
+    maxWidth: "1100px",
+    margin: "0 auto",
+    fontFamily: "'Inter', sans-serif",
     color: THEME.primary,
     backgroundColor: "#fff",
     minHeight: "100vh"
   },
   buttonDock: {
-    display: "flex", 
-    alignItems: "center", 
-    gap: "12px", 
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
     padding: "10px",
-    backgroundColor: "#f1f5f9", 
-    borderRadius: "20px", 
+    backgroundColor: "#f1f5f9",
+    borderRadius: "20px",
     border: `1px solid ${THEME.border}`,
-    marginBottom: "40px", 
-    width: "fit-content", 
+    marginBottom: "40px",
+    width: "fit-content",
     boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
     flexWrap: "wrap" as const
   },
   navButton: {
-    display: "flex", 
-    alignItems: "center", 
-    justifyContent: "center", 
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
     height: "48px",
-    minWidth: "160px", 
-    padding: "0 20px", 
-    borderRadius: "12px", 
+    minWidth: "160px",
+    padding: "0 20px",
+    borderRadius: "12px",
     fontSize: "13px",
-    fontWeight: "700", 
-    textDecoration: "none", 
-    color: THEME.primary, 
+    fontWeight: "700",
+    textDecoration: "none",
+    color: THEME.primary,
     background: "#fff",
-    border: `1px solid ${THEME.border}`, 
-    transition: "all 0.2s ease", 
+    border: `1px solid ${THEME.border}`,
+    transition: "all 0.2s ease",
     cursor: "pointer"
   },
   panelCard: {
-    marginBottom: "40px", 
-    padding: "32px", 
-    borderRadius: "24px", 
+    marginBottom: "40px",
+    padding: "32px",
+    borderRadius: "24px",
     backgroundColor: "#fff",
-    border: `1px solid ${THEME.border}`, 
+    border: `1px solid ${THEME.border}`,
     boxShadow: "0 10px 15px -3px rgba(0,0,0,0.05)",
     animation: "slideIn 0.3s ease-out"
   },
   inputField: {
-    padding: "14px 16px", 
-    borderRadius: "12px", 
+    padding: "14px 16px",
+    borderRadius: "12px",
     border: `1px solid ${THEME.border}`,
-    fontSize: "14px", 
-    outline: "none", 
+    fontSize: "14px",
+    outline: "none",
     width: "100%",
     backgroundColor: THEME.surface
   },
   toast: {
-    position: "fixed" as const, 
-    bottom: "40px", 
-    right: "40px", 
+    position: "fixed" as const,
+    bottom: "40px",
+    right: "40px",
     background: THEME.primary,
-    color: "#fff", 
-    padding: "18px 32px", 
-    borderRadius: "24px", 
+    color: "#fff",
+    padding: "18px 32px",
+    borderRadius: "24px",
     zIndex: 10000,
-    boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)", 
-    display: "flex", 
+    boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)",
+    display: "flex",
     alignItems: "center",
-    gap: "15px", 
+    gap: "15px",
     animation: "toastUp 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
   },
   cameraCanvas: {
-    width: "100%", 
-    maxWidth: "900px", 
-    aspectRatio: "16/9", 
-    background: "#000", 
-    borderRadius: "32px", 
-    overflow: "hidden", 
-    border: "10px solid #1e293b", 
-    boxShadow: "0 30px 60px -12px rgba(0,0,0,0.3)", 
+    width: "100%",
+    maxWidth: "900px",
+    aspectRatio: "16/9",
+    background: "#000",
+    borderRadius: "32px",
+    overflow: "hidden",
+    border: "10px solid #1e293b",
+    boxShadow: "0 30px 60px -12px rgba(0,0,0,0.3)",
     position: "relative" as const
   }
 };
@@ -120,11 +121,10 @@ function PageContentRouter() {
   const [box, setBox] = useState<any>(null);
   const [shares, setShares] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   const [refreshKey, setRefreshKey] = useState(Date.now());
   const [toast, setToast] = useState({ visible: false, msg: "" });
-  
-  // DEZE VARIABELE REGELT HET SCHERMPJE:
+
   const [sharesOpen, setSharesOpen] = useState(false);
 
   const [sharePhone, setSharePhone] = useState("");
@@ -213,24 +213,30 @@ function PageContentRouter() {
       </header>
 
       <div style={STYLES.buttonDock}>
-        <OpenBoxButton boxId={boxId} canOpen={box?.availableActions?.open || false} onNotify={notify} />
-        <CloseBoxButton boxId={boxId} canClose={box?.availableActions?.close || false} onNotify={notify} />
         
+        {/* HIER ZIT ONZE NIEUWE ARCHITECTUUR */}
+        <SmartToggleButton 
+          boxId={boxId} 
+          canOpen={box?.availableActions?.open || false} 
+          canClose={box?.availableActions?.close || false} 
+          onNotify={notify} 
+        />
+
         <div style={{ width: "2px", height: "30px", background: THEME.border, margin: "0 10px" }}></div>
-        
+
         <Link href={`/portal/box-events?id=${boxId}`} style={STYLES.navButton}>
           📋 HISTORIEK
         </Link>
-        
-        <button 
-          onClick={() => { setSharesOpen(!sharesOpen); notify(sharesOpen ? "Toegangbeheer gesloten" : "Toegangbeheer open..."); }} 
+
+        <button
+          onClick={() => { setSharesOpen(!sharesOpen); notify(sharesOpen ? "Toegangbeheer gesloten" : "Toegangbeheer open..."); }}
           style={{ ...STYLES.navButton, background: sharesOpen ? THEME.primary : "#fff", color: sharesOpen ? "#fff" : THEME.primary }}
         >
           👥 GRIDBOX DELEN
         </button>
-        
-        <button 
-          onClick={() => { void loadDashboardData(); notify("Dashboard ververst!"); }} 
+
+        <button
+          onClick={() => { void loadDashboardData(); notify("Dashboard ververst!"); }}
           style={{ background: "none", border: "none", cursor: "pointer", padding: "0 15px", fontSize: "20px" }}
         >
           🔄
@@ -242,23 +248,23 @@ function PageContentRouter() {
         <section style={STYLES.panelCard}>
           <h2 style={{ marginTop: 0, fontSize: "22px", fontWeight: "800" }}>Delen met eindklant (SMS)</h2>
           <p style={{ color: THEME.muted, marginBottom: "25px" }}>Voeg nummers toe die de kluis mogen openen. Er wordt automatisch een SMS verstuurd.</p>
-          
+
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: "15px", marginBottom: "30px" }}>
-            <input 
-              style={STYLES.inputField} 
-              value={sharePhone} 
-              onChange={e => setSharePhone(e.target.value)} 
-              placeholder="Gsm nummer (bijv. +32470123456)" 
+            <input
+              style={STYLES.inputField}
+              value={sharePhone}
+              onChange={e => setSharePhone(e.target.value)}
+              placeholder="Gsm nummer (bijv. +32470123456)"
             />
-            <input 
-              style={STYLES.inputField} 
-              value={shareLabel} 
-              onChange={e => setShareLabel(e.target.value)} 
-              placeholder="Naam / Label (bijv. Koerier PostNL)" 
+            <input
+              style={STYLES.inputField}
+              value={shareLabel}
+              onChange={e => setShareLabel(e.target.value)}
+              placeholder="Naam / Label (bijv. Koerier PostNL)"
             />
-            <button 
-              onClick={handleCreateShare} 
-              disabled={isSubmitting} 
+            <button
+              onClick={handleCreateShare}
+              disabled={isSubmitting}
               style={{ ...STYLES.navButton, background: THEME.primary, color: "#fff", border: "none", minWidth: "120px" }}
             >
               {isSubmitting ? "BEZIG..." : "DELEN"}
@@ -287,10 +293,10 @@ function PageContentRouter() {
           <span className="live-dot"></span> LIVE MONITORING
         </h3>
         <div style={STYLES.cameraCanvas}>
-          <img 
-            src={apiUrl(`/portal/boxes/${boxId}/picture?t=${refreshKey}`)} 
-            alt="Real-time Feed" 
-            style={{ width: "100%", height: "100%", objectFit: "cover" }} 
+          <img
+            src={apiUrl(`/portal/boxes/${boxId}/picture?t=${refreshKey}`)}
+            alt="Real-time Feed"
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
           <div style={{ position: "absolute", top: "25px", right: "25px", color: "#00ff41", fontFamily: "monospace", fontWeight: "bold", fontSize: "11px", border: "1px solid #00ff41", padding: "4px 10px", borderRadius: "8px", background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}>
             STREAM_OK // 1080p
@@ -307,7 +313,7 @@ function PageContentRouter() {
 
       <footer style={{ marginTop: "100px", paddingBottom: "40px", borderTop: `1px solid ${THEME.border}`, paddingTop: "30px" }}>
          <Link href="/" style={{ color: THEME.muted, textDecoration: "none", fontWeight: "600", fontSize: "14px" }}>
-            ← TERUG NAAR OVERZICHT
+           ← TERUG NAAR OVERZICHT
          </Link>
       </footer>
 
