@@ -368,9 +368,12 @@ router.post("/portal/boxes/:id/shares", async (req, res) => {
       });
     }
 
+    // --- DE ACTIE: Status aanpassen naar PENDING (Klaargezet) ---
+    // De SMS wordt NIET verstuurd (active: false)
     await shareRef.set({
       name: normalizedLabel,
-      status: "active",
+      status: "pending", // Status changed from 'active' to 'pending'
+      active: false,    // Set to false to prevent SMS trigger
       createdAt: new Date().toISOString(),
       addedBy: portalUser.email || "portal-user"
     });
@@ -380,7 +383,7 @@ router.post("/portal/boxes/:id/shares", async (req, res) => {
       boxId,
       phoneNumber: normalizedPhoneNumber,
       label: normalizedLabel || null,
-      status: "active"
+      status: "pending"
     });
   } catch (error) {
     const statusCode = getStatusCode(error);
@@ -408,7 +411,78 @@ router.post("/portal/boxes/:id/shares", async (req, res) => {
   }
 });
 
-// --- NIEUWE ROUTE: VERWIJDEREN VAN EEN SHARE ---
+// --- NIEUWE ROUTE: ACTIVEREN VAN EEN SHARE (De koerier / staged delivery) ---
+router.put("/portal/boxes/:id/shares/:shareId/activate", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+    const shareId = req.params.shareId;
+
+    console.log("PORTAL BOX ACTIVATE SHARE REQUEST (COURIER DROP)", {
+      boxId,
+      shareId,
+      user: portalUser,
+      customerId: context.membership.customerId
+    });
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+    if (!hasAccess) {
+      return res.status(403).json({ error: "FORBIDDEN", message: "Geen toegang" });
+    }
+
+    const boxDoc = await getBoxById(boxId);
+    if (!boxDoc) {
+      return res.status(404).json({ error: "BOX_NOT_FOUND", message: "Box niet gevonden" });
+    }
+
+    const db = getFirestore();
+    const shareRef = db.collection("boxes").doc(boxId).collection("shares").doc(shareId);
+    const existingShare = await shareRef.get();
+
+    if (!existingShare.exists) {
+      return res.status(404).json({ error: "SHARE_NOT_FOUND", message: "Share niet gevonden" });
+    }
+
+    const shareData = existingShare.data() as Record<string, any>;
+    // ROBUUSTHEIDSCHECK: Alleen pending shares kunnen geactiveerd worden
+    if (shareData.status !== "pending") {
+      return res.status(409).json({
+        error: "ALREADY_ACTIVE",
+        message: "Dit gsm-nummer is al actief of niet klaargezet"
+      });
+    }
+
+    // --- DE ACTIE: Status aanpassen naar ACTIEF ---
+    await shareRef.update({
+      status: "active", // This triggers the SMS via backend logic
+      active: true,   // Important to set true explicitly in Firestore
+      activatedAt: new Date().toISOString(),
+      activatedBy: portalUser.email || "courier-portal"
+    });
+
+    // --- DE SMS-TRIGGER (Toekomstige stap) ---
+    // Voorlopig simuleren we de trigger met een console.log.
+    // Dit is de plek waar je de daadwerkelijke SMS-service zou aanroepen.
+    console.log(`[SMS TRIGGER] Share activated and SMS sent to +${shareId} for Gridbox ${boxId}.`);
+
+    return res.json({
+      ok: true,
+      boxId,
+      shareId,
+      status: "active"
+    });
+
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen toegang" });
+    console.error("FOUT in PUT /portal/boxes/:id/shares/:shareId/activate", error);
+    return res.status(500).json({ error: "SHARE_ACTIVATE_FAILED", message: "Kon share niet activeren" });
+  }
+});
+// -------------------------------------------------------------------------
+
 router.delete("/portal/boxes/:id/shares/:shareId", async (req, res) => {
   try {
     const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
@@ -485,7 +559,6 @@ router.delete("/portal/boxes/:id/shares/:shareId", async (req, res) => {
     });
   }
 });
-// ------------------------------------------------
 
 router.get("/portal/boxes/:id/commands/latest", async (req, res) => {
   try {
@@ -795,6 +868,7 @@ router.post("/portal/boxes/:id/open", async (req, res) => {
     });
   }
 });
+
 
 router.post("/portal/boxes/:id/close", async (req, res) => {
   try {
