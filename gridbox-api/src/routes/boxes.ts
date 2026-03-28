@@ -408,6 +408,85 @@ router.post("/portal/boxes/:id/shares", async (req, res) => {
   }
 });
 
+// --- NIEUWE ROUTE: VERWIJDEREN VAN EEN SHARE ---
+router.delete("/portal/boxes/:id/shares/:shareId", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+    const shareId = req.params.shareId;
+
+    console.log("PORTAL BOX DELETE SHARE REQUEST", {
+      boxId,
+      shareId,
+      user: portalUser,
+      customerId: context.membership.customerId
+    });
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    const boxDoc = await getBoxById(boxId);
+
+    if (!boxDoc) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    const db = getFirestore();
+    const shareRef = db.collection("boxes").doc(boxId).collection("shares").doc(shareId);
+    const existingShare = await shareRef.get();
+
+    if (!existingShare.exists) {
+      return res.status(404).json({
+        error: "SHARE_NOT_FOUND",
+        message: "Share niet gevonden"
+      });
+    }
+
+    await shareRef.delete();
+
+    return res.json({
+      ok: true,
+      boxId,
+      shareId,
+      deleted: true
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in DELETE /portal/boxes/:id/shares/:shareId", error);
+
+    return res.status(500).json({
+      error: "BOX_SHARE_DELETE_FAILED",
+      message: "Kon share niet verwijderen"
+    });
+  }
+});
+// ------------------------------------------------
+
 router.get("/portal/boxes/:id/commands/latest", async (req, res) => {
   try {
     const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
@@ -569,13 +648,10 @@ router.get("/portal/boxes/:id/events", async (req, res) => {
       const source = typeof item.data.source === "string" ? item.data.source : "Onbekende bron";
       const timestamp = typeof item.data.createdAt === "string" ? item.data.createdAt : new Date().toISOString();
 
-      // --- DOORDACHTE KOPPELING: Zoek snapshots binnen 1 minuut vóór en 15 minuten ná de opdracht ---
       const relatedPhotos = allSnapshots.filter((snap: any) => {
         const snapTime = new Date(snap.capturedAt).getTime();
         const cmdTime = new Date(timestamp).getTime();
-        
-        // Window: -1 minuut tot +15 minuten
-        return snapTime >= (cmdTime - 60000) && snapTime <= (cmdTime + 900000); 
+        return snapTime >= (cmdTime - 60000) && snapTime <= (cmdTime + 900000);
       });
 
       return {
@@ -720,7 +796,6 @@ router.post("/portal/boxes/:id/open", async (req, res) => {
   }
 });
 
-
 router.post("/portal/boxes/:id/close", async (req, res) => {
   try {
     const boxId = req.params.id;
@@ -851,7 +926,7 @@ router.get("/portal/boxes/:id/snapshots", async (req, res) => {
     }
 
     const snapshotDocs = await query.limit(limit).get();
-    
+
     const items = snapshotDocs.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data()
@@ -867,7 +942,7 @@ router.get("/portal/boxes/:id/snapshots", async (req, res) => {
     const statusCode = getStatusCode(error);
     if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
     if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen toegang" });
-    
+
     console.error("FOUT in GET /portal/boxes/:id/snapshots", error);
     return res.status(500).json({ error: "SNAPSHOTS_FETCH_FAILED", message: "Kon snapshots niet ophalen" });
   }
@@ -959,7 +1034,6 @@ router.get("/portal/boxes/:id/photos", async (req, res) => {
   }
 });
 
-// GEWIJZIGD: Publiek toegankelijk voor <img> tags in de browser
 router.get("/portal/boxes/:id/photos/content", async (req, res) => {
   try {
     const boxId = req.params.id;
@@ -1011,7 +1085,6 @@ router.get("/portal/boxes/:id/photos/content", async (req, res) => {
   }
 });
 
-// GEWIJZIGD: Publiek toegankelijk voor de Live Preview op het Dashboard
 router.get("/portal/boxes/:id/picture", async (req, res) => {
   try {
     const boxId = req.params.id;
@@ -1033,9 +1106,9 @@ router.get("/portal/boxes/:id/picture", async (req, res) => {
     const prefix = `snapshots/${boxId}/`;
 
     const [files] = await bucket.getFiles({ prefix });
-    
+
     const validFiles = files.filter(f => !f.name.endsWith("/"));
-    
+
     if (validFiles.length === 0) {
        return res.status(404).json({
         error: "NO_PICTURES_YET",
@@ -1054,7 +1127,6 @@ router.get("/portal/boxes/:id/picture", async (req, res) => {
     const [buffer] = await latestFile.download();
 
     res.setHeader("Content-Type", metadata.contentType || "image/jpeg");
-    // No-cache headers om live effect te garanderen
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     return res.status(200).send(buffer);
 

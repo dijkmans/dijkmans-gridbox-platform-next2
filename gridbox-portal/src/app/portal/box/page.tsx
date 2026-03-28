@@ -55,12 +55,12 @@ const STYLES = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    height: "48px",
+    height: "56px",
     minWidth: "160px",
     padding: "0 20px",
     borderRadius: "12px",
-    fontSize: "13px",
-    fontWeight: "700",
+    fontSize: "14px",
+    fontWeight: "800",
     textDecoration: "none",
     color: THEME.primary,
     background: "#fff",
@@ -78,13 +78,15 @@ const STYLES = {
     animation: "slideIn 0.3s ease-out"
   },
   inputField: {
-    padding: "14px 16px",
+    padding: "16px 20px",
+    minHeight: "56px",
     borderRadius: "12px",
     border: `1px solid ${THEME.border}`,
-    fontSize: "14px",
+    fontSize: "16px",
     outline: "none",
     width: "100%",
-    backgroundColor: THEME.surface
+    backgroundColor: THEME.surface,
+    boxSizing: "border-box" as const
   },
   toast: {
     position: "fixed" as const,
@@ -127,7 +129,7 @@ function PageContentRouter() {
 
   const [sharesOpen, setSharesOpen] = useState(false);
 
-  const [sharePhone, setSharePhone] = useState("");
+  const [sharePhone, setSharePhone] = useState("+32");
   const [shareLabel, setShareLabel] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -172,7 +174,7 @@ function PageContentRouter() {
   }, [boxId]);
 
   const handleCreateShare = async () => {
-    if (!sharePhone.trim()) { notify("Vul a.u.b. een telefoonnummer in."); return; }
+    if (!sharePhone.trim() || sharePhone === "+32") { notify("Vul a.u.b. een geldig telefoonnummer in."); return; }
     try {
       setIsSubmitting(true);
       const token = await auth.currentUser?.getIdToken();
@@ -182,7 +184,7 @@ function PageContentRouter() {
         body: JSON.stringify({ phoneNumber: sharePhone, label: shareLabel })
       });
       if (res.ok) {
-        setSharePhone(""); setShareLabel(""); notify("Toegang succesvol gedeeld! ✅");
+        setSharePhone("+32"); setShareLabel(""); notify("Toegang succesvol gedeeld! ✅");
         void loadDashboardData();
       } else {
         notify("Fout bij aanmaken share.");
@@ -191,6 +193,33 @@ function PageContentRouter() {
       notify("Netwerkfout.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // --- NIEUWE FUNCTIE: VERWIJDEREN VAN EEN SHARE ---
+  const handleDeleteShare = async (shareId: string) => {
+    // 1. Veiligheidscheck (voorkomt per ongeluk wissen)
+    const isConfirmed = window.confirm(`Weet je zeker dat je de toegang voor ${shareId} definitief wilt intrekken?`);
+    if (!isConfirmed) return;
+
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      // De + in +32 moet goed naar de API gestuurd worden via encodeURIComponent
+      const encodedShareId = encodeURIComponent(shareId);
+      
+      const res = await fetch(apiUrl(`/portal/boxes/${boxId}/shares/${encodedShareId}`), {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        notify("Toegang definitief ingetrokken! 🗑️");
+        void loadDashboardData(); // Lijst direct verversen
+      } else {
+        notify("Fout bij intrekken toegang. ❌");
+      }
+    } catch (e) {
+      notify("Netwerkfout bij verwijderen. ⚠️");
     }
   };
 
@@ -213,8 +242,6 @@ function PageContentRouter() {
       </header>
 
       <div style={STYLES.buttonDock}>
-        
-        {/* HIER ZIT ONZE NIEUWE ARCHITECTUUR */}
         <SmartToggleButton 
           boxId={boxId} 
           canOpen={box?.availableActions?.open || false} 
@@ -243,20 +270,21 @@ function PageContentRouter() {
         </button>
       </div>
 
-      {/* DIT IS DE HERSTELDE MOTOR: HET INVULFORMULIER */}
       {sharesOpen && (
         <section style={STYLES.panelCard}>
           <h2 style={{ marginTop: 0, fontSize: "22px", fontWeight: "800" }}>Delen met eindklant (SMS)</h2>
           <p style={{ color: THEME.muted, marginBottom: "25px" }}>Voeg nummers toe die de kluis mogen openen. Er wordt automatisch een SMS verstuurd.</p>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: "15px", marginBottom: "30px" }}>
+          <div className="share-grid">
             <input
+              type="tel"
               style={STYLES.inputField}
               value={sharePhone}
               onChange={e => setSharePhone(e.target.value)}
               placeholder="Gsm nummer (bijv. +32470123456)"
             />
             <input
+              type="text"
               style={STYLES.inputField}
               value={shareLabel}
               onChange={e => setShareLabel(e.target.value)}
@@ -265,7 +293,7 @@ function PageContentRouter() {
             <button
               onClick={handleCreateShare}
               disabled={isSubmitting}
-              style={{ ...STYLES.navButton, background: THEME.primary, color: "#fff", border: "none", minWidth: "120px" }}
+              style={{ ...STYLES.navButton, background: THEME.primary, color: "#fff", border: "none", width: "100%" }}
             >
               {isSubmitting ? "BEZIG..." : "DELEN"}
             </button>
@@ -278,16 +306,40 @@ function PageContentRouter() {
                   <span style={{ fontWeight: "800", fontSize: "15px" }}>{s.id}</span>
                   <span style={{ color: THEME.muted, fontSize: "13px" }}>{s.label || "Geen label"}</span>
                 </div>
-                <span style={{ fontSize: "11px", fontWeight: "900", color: THEME.success, backgroundColor: "rgba(16,185,129,0.1)", padding: "6px 12px", borderRadius: "8px" }}>
-                  {s.active !== false ? "ACTIEF" : "INACTIEF"}
-                </span>
+                
+                {/* AANGEPASTE RECHTERKANT: STATUS EN PRULLENBAK */}
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <span style={{ fontSize: "11px", fontWeight: "900", color: THEME.success, backgroundColor: "rgba(16,185,129,0.1)", padding: "6px 12px", borderRadius: "8px" }}>
+                    {s.active !== false ? "ACTIEF" : "INACTIEF"}
+                  </span>
+                  
+                  {/* ONZE NIEUWE VERWIJDER KNOP */}
+                  <button 
+                    onClick={() => handleDeleteShare(s.id)}
+                    style={{ 
+                      background: THEME.danger, 
+                      color: "#fff", 
+                      border: "none", 
+                      borderRadius: "8px", 
+                      width: "36px", 
+                      height: "36px", 
+                      display: "flex", 
+                      alignItems: "center", 
+                      justifyContent: "center", 
+                      cursor: "pointer",
+                      boxShadow: "0 2px 4px rgba(239, 68, 68, 0.3)"
+                    }}
+                    title="Toegang intrekken"
+                  >
+                    🗑️
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         </section>
       )}
 
-      {/* LIVE VIEW */}
       <section style={{ borderTop: sharesOpen ? "none" : `1px solid ${THEME.border}`, paddingTop: sharesOpen ? "0" : "40px" }}>
         <h3 style={{ fontSize: "18px", fontWeight: "800", marginBottom: "25px", display: "flex", alignItems: "center", gap: "12px" }}>
           <span className="live-dot"></span> LIVE MONITORING
@@ -319,6 +371,10 @@ function PageContentRouter() {
 
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
+        
+        .share-grid { display: grid; grid-template-columns: 1fr; gap: 15px; margin-bottom: 30px; }
+        @media (min-width: 768px) { .share-grid { grid-template-columns: 1fr 1fr auto; } }
+
         .live-dot { width: 12px; height: 12px; background: #ef4444; border-radius: 50%; animation: pulseRing 1.5s infinite; }
         @keyframes pulseRing { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
         @keyframes toastUp { from { transform: translateY(100px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
