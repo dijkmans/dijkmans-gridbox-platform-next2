@@ -551,10 +551,17 @@ router.get("/portal/boxes/:id/events", async (req, res) => {
       });
     }
 
-    const [commands, mockEvents] = await Promise.all([
+    const db = getFirestore();
+    const [commands, snapshotsSnap, mockEvents] = await Promise.all([
       listBoxCommands(boxId, 20),
+      db.collection("boxes").doc(boxId).collection("snapshots")
+        .orderBy("capturedAt", "desc")
+        .limit(50)
+        .get(),
       Promise.resolve(mockEventsByBoxId[boxId] || [])
     ]);
+
+    const allSnapshots = snapshotsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
 
     const commandItems = commands.map((item) => {
       const command = typeof item.data.command === "string" ? item.data.command : "UNKNOWN";
@@ -562,12 +569,23 @@ router.get("/portal/boxes/:id/events", async (req, res) => {
       const source = typeof item.data.source === "string" ? item.data.source : "Onbekende bron";
       const timestamp = typeof item.data.createdAt === "string" ? item.data.createdAt : new Date().toISOString();
 
+      // --- DOORDACHTE KOPPELING: Zoek snapshots binnen 1 minuut vóór en 15 minuten ná de opdracht ---
+      const relatedPhotos = allSnapshots.filter((snap: any) => {
+        const snapTime = new Date(snap.capturedAt).getTime();
+        const cmdTime = new Date(timestamp).getTime();
+        
+        // Window: -1 minuut tot +15 minuten
+        return snapTime >= (cmdTime - 60000) && snapTime <= (cmdTime + 900000); 
+      });
+
       return {
         id: `cmd-${item.id}`,
         type: `command_${command.toLowerCase()}`,
         timestamp,
         label: `${command} via ${source} (${status})`,
-        severity: status === "failed" ? "error" : "info"
+        severity: status === "failed" ? "error" : "info",
+        photos: relatedPhotos,
+        hasPhotos: relatedPhotos.length > 0
       };
     });
 
@@ -578,7 +596,7 @@ router.get("/portal/boxes/:id/events", async (req, res) => {
     return res.json({
       items,
       count: items.length,
-      mode: "mixed"
+      mode: "live-with-photos"
     });
   } catch (error) {
     const statusCode = getStatusCode(error);
@@ -799,9 +817,6 @@ router.post("/portal/boxes/:id/close", async (req, res) => {
   }
 });
 
-/**
- * NEW ROUTE: Snapshots via Firestore (voor Fotorol en Moment-Viewer)
- */
 router.get("/portal/boxes/:id/snapshots", async (req, res) => {
   try {
     const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
@@ -944,40 +959,16 @@ router.get("/portal/boxes/:id/photos", async (req, res) => {
   }
 });
 
+// GEWIJZIGD: Publiek toegankelijk voor <img> tags in de browser
 router.get("/portal/boxes/:id/photos/content", async (req, res) => {
   try {
-    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
-    const context = await requireCustomerContext(portalUser.email);
     const boxId = req.params.id;
-    const filename =
-      typeof req.query.filename === "string"
-        ? req.query.filename.trim()
-        : "";
+    const filename = typeof req.query.filename === "string" ? req.query.filename.trim() : "";
 
     console.log("PORTAL BOX PHOTO CONTENT REQUEST", {
       boxId,
-      filename,
-      user: portalUser,
-      customerId: context.membership.customerId
+      filename
     });
-
-    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
-
-    if (!hasAccess) {
-      return res.status(403).json({
-        error: "FORBIDDEN",
-        message: "Je hebt geen toegang tot deze box"
-      });
-    }
-
-    const boxDoc = await getBoxById(boxId);
-
-    if (!boxDoc) {
-      return res.status(404).json({
-        error: "BOX_NOT_FOUND",
-        message: "Box niet gevonden"
-      });
-    }
 
     if (!filename) {
       return res.status(400).json({
@@ -1008,25 +999,9 @@ router.get("/portal/boxes/:id/photos/content", async (req, res) => {
     const [buffer] = await file.download();
 
     res.setHeader("Content-Type", metadata.contentType || "image/jpeg");
-    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Cache-Control", "public, max-age=3600");
     return res.status(200).send(buffer);
   } catch (error) {
-    const statusCode = getStatusCode(error);
-
-    if (statusCode === 401) {
-      return res.status(401).json({
-        error: "UNAUTHORIZED",
-        message: "Niet aangemeld"
-      });
-    }
-
-    if (statusCode === 403) {
-      return res.status(403).json({
-        error: "FORBIDDEN",
-        message: "Je hebt geen toegang tot deze box"
-      });
-    }
-
     console.error("FOUT in GET /portal/boxes/:id/photos/content", error);
 
     return res.status(500).json({
@@ -1036,27 +1011,14 @@ router.get("/portal/boxes/:id/photos/content", async (req, res) => {
   }
 });
 
-// Aangepaste 'PICTURE' route (haalt de laatste foto uit Storage op)
+// GEWIJZIGD: Publiek toegankelijk voor de Live Preview op het Dashboard
 router.get("/portal/boxes/:id/picture", async (req, res) => {
   try {
-    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
-    const context = await requireCustomerContext(portalUser.email);
     const boxId = req.params.id;
 
-    console.log("PORTAL BOX PICTURE REQUEST (LATEST)", {
-      boxId,
-      user: portalUser,
-      customerId: context.membership.customerId
+    console.log("PORTAL BOX PICTURE REQUEST (LATEST LIVE PREVIEW)", {
+      boxId
     });
-
-    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
-
-    if (!hasAccess) {
-      return res.status(403).json({
-        error: "FORBIDDEN",
-        message: "Je hebt geen toegang tot deze box"
-      });
-    }
 
     const boxDoc = await getBoxById(boxId);
 
@@ -1067,31 +1029,20 @@ router.get("/portal/boxes/:id/picture", async (req, res) => {
       });
     }
 
-    const camera = boxDoc.data.hardware?.camera;
-
-    if (!camera || camera.enabled !== true) {
-      return res.status(404).json({
-        error: "CAMERA_NOT_AVAILABLE",
-        message: "Camera niet beschikbaar"
-      });
-    }
-
     const bucket = getStorage().bucket("gridbox-platform.firebasestorage.app");
     const prefix = `snapshots/${boxId}/`;
 
     const [files] = await bucket.getFiles({ prefix });
     
-    // Filter the root folder and sort them
     const validFiles = files.filter(f => !f.name.endsWith("/"));
     
     if (validFiles.length === 0) {
        return res.status(404).json({
         error: "NO_PICTURES_YET",
-        message: "Er zijn nog geen foto's beschikbaar voor deze box"
+        message: "Er zijn nog geen foto's beschikbaar"
       });
     }
 
-    // Sort by updated time, newest first
     validFiles.sort((a, b) => {
       const timeA = new Date(a.metadata.updated || 0).getTime();
       const timeB = new Date(b.metadata.updated || 0).getTime();
@@ -1103,28 +1054,12 @@ router.get("/portal/boxes/:id/picture", async (req, res) => {
     const [buffer] = await latestFile.download();
 
     res.setHeader("Content-Type", metadata.contentType || "image/jpeg");
-    res.setHeader("Cache-Control", "no-store");
+    // No-cache headers om live effect te garanderen
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     return res.status(200).send(buffer);
 
   } catch (error) {
-    const statusCode = getStatusCode(error);
-
-    if (statusCode === 401) {
-      return res.status(401).json({
-        error: "UNAUTHORIZED",
-        message: "Niet aangemeld"
-      });
-    }
-
-    if (statusCode === 403) {
-      return res.status(403).json({
-        error: "FORBIDDEN",
-        message: "Je hebt geen toegang tot deze box"
-      });
-    }
-
     console.error("FOUT in GET /portal/boxes/:id/picture", error);
-
     return res.status(500).json({
       error: "PICTURE_FETCH_FAILED",
       message: "Kon picture niet ophalen"

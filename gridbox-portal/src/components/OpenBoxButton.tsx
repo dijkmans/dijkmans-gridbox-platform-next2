@@ -1,187 +1,44 @@
 ﻿"use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
 import { apiUrl } from "@/lib/api";
 
-type OpenBoxButtonProps = {
-  boxId: string;
-  canOpen: boolean;
-};
+type Props = { boxId: string; canOpen: boolean; onNotify: (msg: string) => void; };
 
-type CommandResponse = {
-  commandId: string;
-};
-
-type CommandDetail = {
-  id: string;
-  command: string;
-  status: string;
-};
-
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function getStatusColor(status: string) {
-  if (status === "completed") return "green";
-  if (status === "failed") return "red";
-  if (status === "pending") return "orange";
-  if (status === "started") return "orange";
-  return "gray";
-}
-
-export default function OpenBoxButton({ boxId, canOpen }: OpenBoxButtonProps) {
-  const router = useRouter();
-
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [commandStatus, setCommandStatus] = useState("");
-
-  async function pollCommand(commandId: string): Promise<void> {
-    const user = auth.currentUser;
-
-    if (!user) {
-      setMessage("Niet aangemeld");
-      return;
-    }
-
-    const token = await user.getIdToken();
-
-    for (let i = 0; i < 15; i++) {
-      const res = await fetch(apiUrl(`/portal/boxes/${boxId}/commands/${commandId}`), {
-        method: "GET",
-        cache: "no-store",
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      if (!res.ok) {
-        await wait(1500);
-        continue;
-      }
-
-      const data: CommandDetail = await res.json();
-      const normalizedStatus = String(data.status || "").toLowerCase();
-
-      setCommandStatus(normalizedStatus);
-
-      if (normalizedStatus === "completed") {
-        setMessage("Box succesvol geopend");
-
-        setTimeout(() => {
-          router.refresh();
-        }, 1000);
-
-        return;
-      }
-
-      if (normalizedStatus === "failed") {
-        setMessage("Open-commando is mislukt");
-        return;
-      }
-
-      if (normalizedStatus === "pending") {
-        setMessage("Commando staat in wachtrij...");
-      } else {
-        setMessage("Open-commando wordt uitgevoerd...");
-      }
-
-      await wait(1500);
-    }
-
-    setMessage("Nog geen bevestiging ontvangen. Controleer de box of probeer later opnieuw.");
-  }
+export default function OpenBoxButton({ boxId, canOpen, onNotify }: Props) {
+  const [loading, setLoading] = useState(false);
 
   async function handleOpen() {
-    if (busy || !canOpen) {
-      return;
-    }
-
+    if (!canOpen || loading) return;
+    setLoading(true);
+    onNotify("Open-commando verzonden...");
     try {
-      setBusy(true);
-      setMessage("");
-      setCommandStatus("");
-
       const user = auth.currentUser;
-
-      if (!user) {
-        setMessage("Niet aangemeld");
-        return;
-      }
-
+      if (!user) return;
       const token = await user.getIdToken();
-
       const res = await fetch(apiUrl(`/portal/boxes/${boxId}/open`), {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setMessage(data.message || "Openen mislukt");
-        return;
-      }
-
-      const typed = data as CommandResponse;
-
-      if (!typed.commandId) {
-        setMessage("Geen command-id ontvangen");
-        return;
-      }
-
-      setMessage("Commando verstuurd...");
-      await pollCommand(typed.commandId);
-    } catch (error) {
-      setMessage("Netwerkfout bij openen");
-    } finally {
-      setBusy(false);
-    }
+      if (res.ok) onNotify("Gridbox succesvol geopend! ✅");
+      else onNotify("Fout bij openen. ❌");
+    } catch { onNotify("Netwerkfout. ⚠️"); } 
+    finally { setLoading(false); }
   }
 
-  const buttonLabel = busy ? "Bezig..." : "Open box";
-
   return (
-    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start" }}>
-      <button
-        type="button"
-        onClick={handleOpen}
-        disabled={!canOpen || busy}
-        style={{
-          display: "inline-block",
-          padding: "8px 12px",
-          border: "1px solid #ccc",
-          borderRadius: "6px",
-          background: "#fff",
-          color: "inherit",
-          cursor: !canOpen || busy ? "not-allowed" : "pointer",
-          opacity: !canOpen || busy ? 0.6 : 1
-        }}
-      >
-        {buttonLabel}
-      </button>
-
-      {message && (
-        <p style={{ marginTop: "10px", marginBottom: 0 }}>
-          {message}
-        </p>
-      )}
-
-      {commandStatus && (
-        <p style={{ marginTop: "6px", marginBottom: 0 }}>
-          <strong>Laatste command-status:</strong>{" "}
-          <span style={{ color: getStatusColor(commandStatus) }}>
-            {commandStatus}
-          </span>
-        </p>
-      )}
-    </div>
+    <button
+      onClick={() => void handleOpen()}
+      disabled={!canOpen || loading}
+      style={{
+        minWidth: "160px", height: "48px", borderRadius: "12px", border: "none",
+        backgroundColor: canOpen ? "#10b981" : "#f1f5f9", color: "#fff",
+        fontWeight: "700", fontSize: "13px", cursor: canOpen ? "pointer" : "not-allowed",
+        transition: "all 0.2s ease", boxShadow: "0 4px 12px rgba(16, 185, 129, 0.2)"
+      }}
+    >
+      {loading ? "BEZIG..." : "OPEN BOX"}
+    </button>
   );
 }
-
-
