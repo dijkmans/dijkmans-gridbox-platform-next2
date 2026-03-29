@@ -1,9 +1,11 @@
 ﻿/**
  * ============================================================================
- * GRIDBOX PORTAL - FINAL COCKPIT V9.0 (SHARING RESTORED)
+ * GRIDBOX PORTAL - LOGISTICS COCKPIT V11.0 (STAGED DELIVERY)
  * ============================================================================
- * De "verloren" deel-functionaliteit is volledig teruggeplaatst en
- * naadloos geïntegreerd in het nieuwe Premium design.
+ * Deze versie bevat de volledige "Staged Delivery" workflow:
+ * 1. Admin zet nummer klaar (Status: Pending, GEEN SMS)
+ * 2. Chauffeur activeert bij drop (Status: Active, SMS trigger)
+ * 3. Volledige Live Monitoring en Smart Toggle integratie.
  * ============================================================================
  */
 "use client";
@@ -15,7 +17,7 @@ import { auth, db } from "@/lib/firebase";
 import { collection, query, orderBy, limit, onSnapshot } from "firebase/firestore";
 import { apiUrl } from "@/lib/api";
 
-// Onze nieuwe slimme knop!
+// Onze slimme component voor de slotbediening
 import SmartToggleButton from "@/components/SmartToggleButton";
 
 // --- DESIGN SYSTEM ---
@@ -23,6 +25,7 @@ const THEME = {
   primary: "#0f172a",
   muted: "#64748b",
   success: "#10b981",
+  warning: "#f59e0b", // Oranje voor 'Klaargezet'
   danger: "#ef4444",
   border: "#e2e8f0",
   surface: "#f8fafc",
@@ -156,7 +159,7 @@ function PageContentRouter() {
         setShares(d.items || []);
       }
     } catch (e) {
-      console.error("[Load Error]", e);
+      console.error("[Dashboard Load Error]", e);
     } finally {
       setLoading(false);
     }
@@ -167,24 +170,36 @@ function PageContentRouter() {
     void loadDashboardData();
   }, [loadDashboardData]);
 
+  // Real-time camera update trigger via Firestore snapshots
   useEffect(() => {
     if (!boxId) return;
     const q = query(collection(db, "boxes", boxId, "snapshots"), orderBy("capturedAt", "desc"), limit(1));
     return onSnapshot(q, () => setRefreshKey(Date.now()));
   }, [boxId]);
 
-  const handleCreateShare = async () => {
-    if (!sharePhone.trim() || sharePhone === "+32") { notify("Vul a.u.b. een geldig telefoonnummer in."); return; }
+  /**
+   * STAP 1: Toegang aanmaken (Admin stap)
+   * Hier sturen we expliciet de status "pending" of "active" mee.
+   */
+  const handleCreateShare = async (isPending: boolean) => {
+    if (!sharePhone.trim() || sharePhone === "+32") { notify("Vul a.u.b. een gsm-nummer in."); return; }
     try {
       setIsSubmitting(true);
       const token = await auth.currentUser?.getIdToken();
+      
       const res = await fetch(apiUrl(`/portal/boxes/${boxId}/shares`), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ phoneNumber: sharePhone, label: shareLabel })
+        body: JSON.stringify({ 
+          phoneNumber: sharePhone, 
+          label: shareLabel,
+          status: isPending ? "pending" : "active" // CRUCIAAL: Voorkomt te vroege SMS
+        })
       });
+
       if (res.ok) {
-        setSharePhone("+32"); setShareLabel(""); notify("Toegang succesvol gedeeld! ✅");
+        setSharePhone("+32"); setShareLabel(""); 
+        notify(isPending ? "Klaargezet voor chauffeur! 📦" : "Toegang direct gedeeld! 🚀");
         void loadDashboardData();
       } else {
         notify("Fout bij aanmaken share.");
@@ -196,30 +211,48 @@ function PageContentRouter() {
     }
   };
 
-  // --- NIEUWE FUNCTIE: VERWIJDEREN VAN EEN SHARE ---
-  const handleDeleteShare = async (shareId: string) => {
-    // 1. Veiligheidscheck (voorkomt per ongeluk wissen)
-    const isConfirmed = window.confirm(`Weet je zeker dat je de toegang voor ${shareId} definitief wilt intrekken?`);
-    if (!isConfirmed) return;
-
+  /**
+   * STAP 2: Activeren door chauffeur (SMS trigger)
+   * Wordt aangeroepen via de enveloppe-knop
+   */
+  const handleActivateShare = async (shareId: string) => {
+    if (!window.confirm("Pakket geleverd? Verstuur nu de SMS naar de klant.")) return;
     try {
       const token = await auth.currentUser?.getIdToken();
-      // De + in +32 moet goed naar de API gestuurd worden via encodeURIComponent
+      const encodedId = encodeURIComponent(shareId);
+      const res = await fetch(apiUrl(`/portal/boxes/${boxId}/shares/${encodedId}/activate`), {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        notify("SMS succesvol verstuurd! ✉️");
+        void loadDashboardData();
+      } else {
+        notify("Fout bij activeren.");
+      }
+    } catch {
+      notify("Netwerkfout.");
+    }
+  };
+
+  const handleDeleteShare = async (shareId: string) => {
+    const isConfirmed = window.confirm(`Toegang voor ${shareId} definitief intrekken?`);
+    if (!isConfirmed) return;
+    try {
+      const token = await auth.currentUser?.getIdToken();
       const encodedShareId = encodeURIComponent(shareId);
-      
       const res = await fetch(apiUrl(`/portal/boxes/${boxId}/shares/${encodedShareId}`), {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` }
       });
-
       if (res.ok) {
         notify("Toegang definitief ingetrokken! 🗑️");
-        void loadDashboardData(); // Lijst direct verversen
+        void loadDashboardData();
       } else {
-        notify("Fout bij intrekken toegang. ❌");
+        notify("Fout bij verwijderen.");
       }
-    } catch (e) {
-      notify("Netwerkfout bij verwijderen. ⚠️");
+    } catch {
+      notify("Netwerkfout.");
     }
   };
 
@@ -241,6 +274,7 @@ function PageContentRouter() {
         </div>
       </header>
 
+      {/* ACTIEBALK */}
       <div style={STYLES.buttonDock}>
         <SmartToggleButton 
           boxId={boxId} 
@@ -248,90 +282,90 @@ function PageContentRouter() {
           canClose={box?.availableActions?.close || false} 
           onNotify={notify} 
         />
-
         <div style={{ width: "2px", height: "30px", background: THEME.border, margin: "0 10px" }}></div>
-
-        <Link href={`/portal/box-events?id=${boxId}`} style={STYLES.navButton}>
-          📋 HISTORIEK
-        </Link>
-
+        <Link href={`/portal/box-events?id=${boxId}`} style={STYLES.navButton}>📋 HISTORIEK</Link>
         <button
-          onClick={() => { setSharesOpen(!sharesOpen); notify(sharesOpen ? "Toegangbeheer gesloten" : "Toegangbeheer open..."); }}
+          onClick={() => setSharesOpen(!sharesOpen)}
           style={{ ...STYLES.navButton, background: sharesOpen ? THEME.primary : "#fff", color: sharesOpen ? "#fff" : THEME.primary }}
         >
-          👥 GRIDBOX DELEN
+          👥 TOEGANG BEHEREN
         </button>
-
-        <button
-          onClick={() => { void loadDashboardData(); notify("Dashboard ververst!"); }}
-          style={{ background: "none", border: "none", cursor: "pointer", padding: "0 15px", fontSize: "20px" }}
-        >
-          🔄
-        </button>
+        <button onClick={() => { void loadDashboardData(); notify("Dashboard ververst!"); }} style={{ background: "none", border: "none", cursor: "pointer", padding: "0 15px", fontSize: "20px" }}>🔄</button>
       </div>
 
+      {/* LOGISTIEKE WORKFLOW PANEEL */}
       {sharesOpen && (
         <section style={STYLES.panelCard}>
-          <h2 style={{ marginTop: 0, fontSize: "22px", fontWeight: "800" }}>Delen met eindklant (SMS)</h2>
-          <p style={{ color: THEME.muted, marginBottom: "25px" }}>Voeg nummers toe die de kluis mogen openen. Er wordt automatisch een SMS verstuurd.</p>
+          <h2 style={{ marginTop: 0, fontSize: "22px", fontWeight: "800" }}>Logistieke Workflow</h2>
+          <p style={{ color: THEME.muted, marginBottom: "25px" }}>Zet een nummer klaar voor de chauffeur, of deel direct de toegang.</p>
 
           <div className="share-grid">
-            <input
-              type="tel"
-              style={STYLES.inputField}
-              value={sharePhone}
-              onChange={e => setSharePhone(e.target.value)}
-              placeholder="Gsm nummer (bijv. +32470123456)"
-            />
-            <input
-              type="text"
-              style={STYLES.inputField}
-              value={shareLabel}
-              onChange={e => setShareLabel(e.target.value)}
-              placeholder="Naam / Label (bijv. Koerier PostNL)"
-            />
-            <button
-              onClick={handleCreateShare}
-              disabled={isSubmitting}
-              style={{ ...STYLES.navButton, background: THEME.primary, color: "#fff", border: "none", width: "100%" }}
-            >
-              {isSubmitting ? "BEZIG..." : "DELEN"}
-            </button>
+            <input type="tel" style={STYLES.inputField} value={sharePhone} onChange={e => setSharePhone(e.target.value)} placeholder="Gsm nummer (bijv. +32...)" />
+            <input type="text" style={STYLES.inputField} value={shareLabel} onChange={e => setShareLabel(e.target.value)} placeholder="Naam / Pakket-ID" />
+            
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                onClick={() => handleCreateShare(true)} // Klaarzetten
+                disabled={isSubmitting}
+                style={{ ...STYLES.navButton, background: "#f1f5f9", border: `1px solid ${THEME.border}`, flex: 1 }}
+              >
+                KLAARZETTEN
+              </button>
+              <button
+                onClick={() => handleCreateShare(false)} // Direct
+                disabled={isSubmitting}
+                style={{ ...STYLES.navButton, background: THEME.primary, color: "#fff", border: "none", flex: 1 }}
+              >
+                DIRECT DELEN
+              </button>
+            </div>
           </div>
 
           <div style={{ display: "grid", gap: "12px" }}>
-            {shares.length === 0 ? <p style={{ color: THEME.muted }}>Geen actieve shares gevonden voor deze box.</p> : shares.map(s => (
+            {shares.length === 0 ? (
+              <p style={{ color: THEME.muted }}>Geen actieve shares voor deze kluis.</p>
+            ) : shares.map(s => (
               <div key={s.id} style={{ padding: "16px", borderRadius: "12px", border: `1px solid ${THEME.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: THEME.surface }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                   <span style={{ fontWeight: "800", fontSize: "15px" }}>{s.id}</span>
                   <span style={{ color: THEME.muted, fontSize: "13px" }}>{s.label || "Geen label"}</span>
                 </div>
                 
-                {/* AANGEPASTE RECHTERKANT: STATUS EN PRULLENBAK */}
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <span style={{ fontSize: "11px", fontWeight: "900", color: THEME.success, backgroundColor: "rgba(16,185,129,0.1)", padding: "6px 12px", borderRadius: "8px" }}>
-                    {s.active !== false ? "ACTIEF" : "INACTIEF"}
+                  {/* STATUS LABEL */}
+                  <span style={{ 
+                    fontSize: "10px", fontWeight: "900", padding: "6px 12px", borderRadius: "8px",
+                    background: s.active ? "rgba(16,185,129,0.1)" : "rgba(245,158,11,0.1)",
+                    color: s.active ? THEME.success : THEME.warning
+                  }}>
+                    {s.active ? "ACTIEF" : "KLAARGEZET"}
                   </span>
                   
-                  {/* ONZE NIEUWE VERWIJDER KNOP */}
+                  {/* CHAUFFEUR ACTIVATIE KNOP (Subtiel Lichtblauw met Donkerblauw Icoon) */}
+                  {!s.active && (
+                    <button 
+                      onClick={() => handleActivateShare(s.id)}
+                      style={{ background: "#e0e7ff", border: "none", borderRadius: "8px", width: "40px", height: "40px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "0.2s" }}
+                      title="SMS nu versturen"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3730a3" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect width="20" height="16" x="2" y="4" rx="2"/>
+                        <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                      </svg>
+                    </button>
+                  )}
+
+                  {/* VERWIJDER KNOP (Subtiel Lichtrood met Donkerrood Icoon) */}
                   <button 
                     onClick={() => handleDeleteShare(s.id)}
-                    style={{ 
-                      background: THEME.danger, 
-                      color: "#fff", 
-                      border: "none", 
-                      borderRadius: "8px", 
-                      width: "36px", 
-                      height: "36px", 
-                      display: "flex", 
-                      alignItems: "center", 
-                      justifyContent: "center", 
-                      cursor: "pointer",
-                      boxShadow: "0 2px 4px rgba(239, 68, 68, 0.3)"
-                    }}
+                    style={{ background: "#fee2e2", border: "none", borderRadius: "8px", width: "40px", height: "40px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "0.2s" }}
                     title="Toegang intrekken"
                   >
-                    🗑️
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 6h18"/>
+                      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                    </svg>
                   </button>
                 </div>
               </div>
@@ -340,7 +374,8 @@ function PageContentRouter() {
         </section>
       )}
 
-      <section style={{ borderTop: sharesOpen ? "none" : `1px solid ${THEME.border}`, paddingTop: sharesOpen ? "0" : "40px" }}>
+      {/* LIVE MONITORING SECTIE */}
+      <section style={{ paddingTop: "20px" }}>
         <h3 style={{ fontSize: "18px", fontWeight: "800", marginBottom: "25px", display: "flex", alignItems: "center", gap: "12px" }}>
           <span className="live-dot"></span> LIVE MONITORING
         </h3>
@@ -351,11 +386,12 @@ function PageContentRouter() {
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
           <div style={{ position: "absolute", top: "25px", right: "25px", color: "#00ff41", fontFamily: "monospace", fontWeight: "bold", fontSize: "11px", border: "1px solid #00ff41", padding: "4px 10px", borderRadius: "8px", background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}>
-            STREAM_OK // 1080p
+             STREAM_OK // 1080p
           </div>
         </div>
       </section>
 
+      {/* NOTIFICATIE TOAST */}
       {toast.visible && (
         <div style={STYLES.toast}>
           <div style={{ width: "28px", height: "28px", borderRadius: "50%", backgroundColor: THEME.success, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold" }}>✓</div>
@@ -364,17 +400,13 @@ function PageContentRouter() {
       )}
 
       <footer style={{ marginTop: "100px", paddingBottom: "40px", borderTop: `1px solid ${THEME.border}`, paddingTop: "30px" }}>
-         <Link href="/" style={{ color: THEME.muted, textDecoration: "none", fontWeight: "600", fontSize: "14px" }}>
-           ← TERUG NAAR OVERZICHT
-         </Link>
+         <Link href="/" style={{ color: THEME.muted, textDecoration: "none", fontWeight: "600", fontSize: "14px" }}>← TERUG NAAR OVERZICHT</Link>
       </footer>
 
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
-        
         .share-grid { display: grid; grid-template-columns: 1fr; gap: 15px; margin-bottom: 30px; }
-        @media (min-width: 768px) { .share-grid { grid-template-columns: 1fr 1fr auto; } }
-
+        @media (min-width: 768px) { .share-grid { grid-template-columns: 1fr 1fr 1fr; } }
         .live-dot { width: 12px; height: 12px; background: #ef4444; border-radius: 50%; animation: pulseRing 1.5s infinite; }
         @keyframes pulseRing { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
         @keyframes toastUp { from { transform: translateY(100px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
