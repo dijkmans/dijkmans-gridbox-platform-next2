@@ -1,6 +1,6 @@
-﻿import { PortalBoxDetail } from "../types/portalBoxDetail";
-import { FirestoreBoxDocument } from "../repositories/boxRepository";
+﻿import { FirestoreBoxDocument } from "../repositories/boxRepository";
 import { FirestoreSiteDocument } from "../repositories/siteRepository";
+import { PortalBoxDetail } from "../types/portalBoxDetail";
 import { PortalEvent } from "../types/portalEvent";
 
 function normalizeText(value: unknown): string | undefined {
@@ -12,155 +12,102 @@ function normalizeText(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function pickSiteName(
+function pickDisplayName(
+  boxId: string,
   data: Record<string, any>,
-  siteDoc?: FirestoreSiteDocument
+  siteName?: string
 ): string {
   return (
-    normalizeText(siteDoc?.data?.name) ||
-    normalizeText(data.site?.name) ||
-    normalizeText(data.Portal?.Site) ||
-    normalizeText(data.info?.site) ||
-    normalizeText(siteDoc?.data?.city) ||
-    normalizeText(data.location?.city) ||
-    "Onbekende site"
+    normalizeText(data.displayName) ||
+    normalizeText(data.name) ||
+    normalizeText(data.info?.name) ||
+    normalizeText(data.portal?.displayName) ||
+    normalizeText(data.portal?.name) ||
+    normalizeText(data.Portal?.DisplayName) ||
+    normalizeText(data.Portal?.Name) ||
+    (siteName ? `Gridbox ${siteName}` : undefined) ||
+    boxId
   );
 }
 
-function pickStatus(data: Record<string, any>): "online" | "offline" | "warning" | "unknown" {
-  const simpleStatus = normalizeText(data.status);
+function pickSiteName(data: Record<string, any>, siteDoc?: FirestoreSiteDocument): string {
+  return (
+    normalizeText(siteDoc?.data?.name) ||
+    normalizeText(data.site?.name) ||
+    normalizeText(data.info?.site) ||
+    normalizeText(data.location?.city) ||
+    normalizeText(data.Portal?.Site) ||
+    "Onbekende locatie"
+  );
+}
 
-  if (simpleStatus) {
-    const lowered = simpleStatus.toLowerCase();
+function pickStatus(data: Record<string, any>): "online" | "warning" | "offline" {
+  const heartbeat = normalizeText(data.state?.lastHeartbeatAt) || normalizeText(data.lastHeartbeatAt);
 
-    if (["online", "open", "opened"].includes(lowered)) {
-      return "online";
-    }
-
-    if (["offline"].includes(lowered)) {
-      return "offline";
-    }
-
-    if (["close", "closed", "closing"].includes(lowered)) {
-      return "warning";
-    }
-  }
-
-  if (typeof data.status === "object" && data.status !== null) {
-    if (data.status.online === true) {
-      return "online";
-    }
-
-    if (data.status.online === false) {
-      return "offline";
-    }
-
-    const state = normalizeText(data.status.state)?.toLowerCase();
-    if (state && ["closing", "opening"].includes(state)) {
-      return "warning";
-    }
-
-    if (state && ["closed", "open"].includes(state)) {
-      return "online";
-    }
-  }
-
-  const stateState = normalizeText(data.state?.state)?.toLowerCase();
-  if (stateState && ["closing", "opening"].includes(stateState)) {
+  if (!heartbeat) {
     return "warning";
   }
 
-  if (normalizeText(data.software?.lastHeartbeatIso)) {
+  const heartbeatDate = new Date(heartbeat);
+  if (Number.isNaN(heartbeatDate.getTime())) {
+    return "warning";
+  }
+
+  const minutesAgo = (Date.now() - heartbeatDate.getTime()) / 60000;
+
+  if (minutesAgo <= 5) {
     return "online";
   }
 
-  return "unknown";
-}
-
-function pickDisplayName(docId: string, data: Record<string, any>, siteName: string): string {
-  const explicitName =
-    normalizeText(data.name) ||
-    normalizeText(data.displayName) ||
-    normalizeText(data.boxName);
-
-  if (explicitName) {
-    return explicitName;
+  if (minutesAgo <= 30) {
+    return "warning";
   }
 
-  const boxNumber = data.box?.number ?? data.Portal?.BoxNumber;
-
-  if (siteName && siteName !== "Onbekende site" && boxNumber !== undefined && boxNumber !== null) {
-    return `Gridbox ${siteName} ${boxNumber}`;
-  }
-
-  if (siteName && siteName !== "Onbekende site") {
-    return `Gridbox ${siteName}`;
-  }
-
-  return docId;
+  return "offline";
 }
 
 function pickLastHeartbeat(data: Record<string, any>): string | undefined {
   return (
-    normalizeText(data.software?.lastHeartbeatIso) ||
-    normalizeText(data.updatedAt) ||
-    normalizeText(data.status?.timestamp) ||
-    normalizeText(data.lifecycle?.openedAt) ||
-    undefined
+    normalizeText(data.state?.lastHeartbeatAt) ||
+    normalizeText(data.lastHeartbeatAt) ||
+    normalizeText(data.lifecycle?.updatedAt)
   );
 }
 
 function pickConnectivitySummary(data: Record<string, any>): string | undefined {
-  if (typeof data.status === "object" && data.status?.online === true) {
-    return "Online";
+  if (normalizeText(data.network?.routerName)) {
+    return `Online via ${normalizeText(data.network?.routerName)}`;
   }
 
-  if (typeof data.status === "object" && data.status?.online === false) {
-    return "Offline";
+  const heartbeat = pickLastHeartbeat(data);
+  if (!heartbeat) {
+    return "Nog geen heartbeat ontvangen";
   }
 
-  if (normalizeText(data.software?.lastHeartbeatIso)) {
-    return "Heartbeat ontvangen";
+  return `Laatste heartbeat: ${heartbeat}`;
+}
+
+function pickHardwareSummary(data: Record<string, any>): string | undefined {
+  const relayState = normalizeText(data.hardware?.relayState);
+  const doorState = normalizeText(data.hardware?.doorState);
+
+  if (relayState && doorState) {
+    return `Relais ${relayState}, deur ${doorState}`;
+  }
+
+  if (relayState) {
+    return `Relais ${relayState}`;
+  }
+
+  if (doorState) {
+    return `Deur ${doorState}`;
   }
 
   return undefined;
 }
 
-function pickHardwareSummary(data: Record<string, any>): string | undefined {
-  const parts: string[] = [];
-
-  if (data.hardware?.camera?.enabled === true) {
-    parts.push("camera actief");
-  }
-
-  if (data.hardware?.lighting?.enabled === true || data.hardware?.lighting?.onWhenOpen === true) {
-    parts.push("verlichting actief");
-  }
-
-  if (data.hardware?.autoClose?.enabled === true) {
-    parts.push("auto-close actief");
-  }
-
-  if (parts.length === 0) {
-    return undefined;
-  }
-
-  return parts.join(", ");
-}
-
 function buildRecentEvents(data: Record<string, any>): PortalEvent[] {
   const events: PortalEvent[] = [];
-
-  const heartbeat = normalizeText(data.software?.lastHeartbeatIso);
-  if (heartbeat) {
-    events.push({
-      id: "evt-heartbeat",
-      type: "heartbeat",
-      timestamp: heartbeat,
-      label: "Laatste heartbeat",
-      severity: "info"
-    });
-  }
 
   const openedAt = normalizeText(data.lifecycle?.openedAt);
   if (openedAt) {
@@ -192,6 +139,8 @@ export function mapFirestoreBoxToPortalBoxDetail(
   siteDoc?: FirestoreSiteDocument
 ): PortalBoxDetail {
   const siteName = pickSiteName(doc.data, siteDoc);
+  const boxIsOpen = doc.data.state?.boxIsOpen === true;
+  const isBoxVisibleAndActive = doc.data.active !== false && doc.data.ui?.hidden !== true;
 
   return {
     id: normalizeText(doc.data.boxId) || doc.id,
@@ -200,13 +149,13 @@ export function mapFirestoreBoxToPortalBoxDetail(
     status: pickStatus(doc.data),
     lastHeartbeat: pickLastHeartbeat(doc.data),
     lastSeen: pickLastHeartbeat(doc.data),
+    boxIsOpen,
     availableActions: {
-      open: doc.data.active !== false && doc.data.ui?.hidden !== true,
-      close: doc.data.active !== false && doc.data.ui?.hidden !== true
+      open: isBoxVisibleAndActive && !boxIsOpen,
+      close: isBoxVisibleAndActive && boxIsOpen
     },
     connectivitySummary: pickConnectivitySummary(doc.data),
     hardwareSummary: pickHardwareSummary(doc.data),
     recentEvents: buildRecentEvents(doc.data)
   };
 }
-

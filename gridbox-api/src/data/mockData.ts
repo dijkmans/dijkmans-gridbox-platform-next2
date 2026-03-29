@@ -102,9 +102,10 @@ export const mockBoxDetailsById: Record<string, PortalBoxDetail> = {
     status: "online",
     lastHeartbeat: new Date().toISOString(),
     lastSeen: new Date().toISOString(),
+    boxIsOpen: false,
     availableActions: {
       open: true,
-      close: true
+      close: false
     },
     connectivitySummary: "Online via router",
     hardwareSummary: "Relais en deurcontact ok",
@@ -117,8 +118,9 @@ export const mockBoxDetailsById: Record<string, PortalBoxDetail> = {
     status: "warning",
     lastHeartbeat: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
     lastSeen: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
+    boxIsOpen: true,
     availableActions: {
-      open: true,
+      open: false,
       close: true
     },
     connectivitySummary: "Laattijdige heartbeat",
@@ -126,5 +128,3 @@ export const mockBoxDetailsById: Record<string, PortalBoxDetail> = {
     recentEvents: mockEventsByBoxId["box-002"]
   }
 };
-
-

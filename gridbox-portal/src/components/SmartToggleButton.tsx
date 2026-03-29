@@ -1,103 +1,71 @@
-"use client";
+﻿"use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { auth } from "@/lib/firebase";
 import { apiUrl } from "@/lib/api";
 
 type Props = {
   boxId: string;
-  canOpen: boolean;
-  canClose: boolean;
+  boxName?: string;
+  isOpen: boolean;
+  canInteract: boolean;
   onNotify: (msg: string) => void;
+  onActionComplete?: () => void | Promise<void>;
 };
 
-export default function SmartToggleButton({ boxId, canOpen, canClose, onNotify }: Props) {
-  const derivedState = canClose ? "open" : "closed";
-  const [currentState, setCurrentState] = useState<"closed" | "opening" | "open" | "closing">(derivedState);
-  const [textMode, setTextMode] = useState<"light" | "dark">(derivedState === "open" ? "dark" : "light");
-
-  useEffect(() => {
-    if (currentState === "open" && canOpen && !canClose) {
-        setCurrentState("closed");
-        setTextMode("light");
-    }
-    if (currentState === "closed" && canClose && !canOpen) {
-        setCurrentState("open");
-        setTextMode("dark");
-    }
-  }, [canOpen, canClose, currentState]);
+export default function SmartToggleButton({
+  boxId,
+  boxName,
+  isOpen,
+  canInteract,
+  onNotify,
+  onActionComplete
+}: Props) {
+  const [isProcessing, setIsProcessing] = useState(false);
 
   async function handleToggle() {
-    if (currentState === "closed") {
-      setCurrentState("opening");
-      onNotify("OPENING... ⏳");
+    if (isProcessing || !canInteract) return;
 
-      try {
-        const token = await auth.currentUser?.getIdToken();
-        const res = await fetch(apiUrl(`/portal/boxes/${boxId}/open`), {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` }
-        });
+    const action = isOpen ? "close" : "open";
+    const actionLabel = isOpen ? "sluiten" : "openen";
+    const fallbackName = boxName?.trim() ? boxName.trim() : boxId;
 
-        if (!res.ok) throw new Error("API Fout");
+    try {
+      setIsProcessing(true);
+      onNotify(`Gridbox ${fallbackName} is aan het ${actionLabel}... ⏳`);
 
-        setTimeout(() => setTextMode("dark"), 2500);
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(apiUrl(`/portal/boxes/${boxId}/${action}`), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
-        setTimeout(() => {
-          setCurrentState("open");
-          onNotify("Gridbox is open! 🔓");
-        }, 5000);
-
-      } catch (e) {
-        onNotify("Fout bij openen. ❌");
-        setCurrentState("closed");
+      if (!res.ok) {
+        throw new Error("API Fout");
       }
 
-    } else if (currentState === "open") {
-      setCurrentState("closing");
-      onNotify("CLOSING... ⏳");
-
-      try {
-        const token = await auth.currentUser?.getIdToken();
-        const res = await fetch(apiUrl(`/portal/boxes/${boxId}/close`), {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` }
-        });
-
-        if (!res.ok) throw new Error("API Fout");
-
-        setTimeout(() => setTextMode("light"), 2500);
-
-        setTimeout(() => {
-          setCurrentState("closed");
-          onNotify("Gridbox is gesloten! 🔒");
-        }, 5000);
-
-      } catch (e) {
-        onNotify("Fout bij sluiten. ❌");
-        setCurrentState("open");
-      }
+      await onActionComplete?.();
+    } catch (error) {
+      console.error(`[SmartToggleButton] Fout bij ${actionLabel}`, error);
+      onNotify(`Fout bij ${actionLabel}. ❌`);
+    } finally {
+      setIsProcessing(false);
     }
   }
 
-  const isOpenClass = currentState === "opening" || currentState === "open" ? "is-open" : "";
-  const isTextDarkClass = textMode === "dark" ? "is-open-text" : "";
-  const isAnimating = currentState === "opening" || currentState === "closing";
+  const isOpenClass = isOpen ? "is-open" : "";
+  const isTextDarkClass = isOpen ? "is-open-text" : "";
+  const buttonText = isOpen ? "CLOSE GRIDBOX 🔒" : "OPEN GRIDBOX 🔓";
 
   return (
     <>
       <button
         onClick={handleToggle}
-        disabled={isAnimating || (!canOpen && !canClose)}
-        className={`smart-btn ${isOpenClass} ${isTextDarkClass}`}
+        disabled={isProcessing || !canInteract}
+        className={`smart-btn ${isOpenClass} ${isTextDarkClass} ${isProcessing ? "is-processing" : ""}`}
       >
         <div className="shutter"></div>
-        <span className="btn-text">
-          {currentState === "closed" && "OPEN BOX 🔓"}
-          {currentState === "opening" && "OPENING... ⏳"}
-          {currentState === "open" && "CLOSE BOX 🔒"}
-          {currentState === "closing" && "CLOSING... ⏳"}
-        </span>
+        <span className="btn-text">{buttonText}</span>
       </button>
 
       <style jsx>{`
@@ -117,21 +85,33 @@ export default function SmartToggleButton({ boxId, canOpen, canClose, onNotify }
           cursor: pointer;
           background-color: #d1fae5;
           box-shadow: 0 8px 20px -4px rgba(16,185,129,0.5);
-          transition: box-shadow 0.3s ease;
+          transition: box-shadow 0.3s ease, opacity 0.2s ease;
         }
         .smart-btn:disabled {
           cursor: not-allowed;
+        }
+        .smart-btn.is-processing {
+          opacity: 0.65;
         }
         .smart-btn.is-open {
           box-shadow: none;
         }
         .shutter {
           position: absolute;
-          top: 0; left: 0; right: 0; height: 100%;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 100%;
           background-color: #10b981;
-          background-image: repeating-linear-gradient(0deg, transparent, transparent 4px, rgba(0,0,0,0.1) 4px, rgba(0,0,0,0.1) 8px);
+          background-image: repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 4px,
+            rgba(0,0,0,0.1) 4px,
+            rgba(0,0,0,0.1) 8px
+          );
           transform: translateY(0%);
-          transition: transform 5s linear;
+          transition: transform 0.35s ease;
           z-index: 1;
         }
         .smart-btn.is-open .shutter {

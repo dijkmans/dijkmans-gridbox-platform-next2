@@ -149,7 +149,7 @@ function PageContentRouter() {
       const headers = { Authorization: `Bearer ${token}` };
 
       const [resBox, resShares] = await Promise.all([
-        fetch(apiUrl(`/portal/boxes/${boxId}`), { headers, cache: "no-store" }),
+        fetch(apiUrl(`/portal/boxes/${boxId}?t=${Date.now()}`), { headers, cache: "no-store" }),
         fetch(apiUrl(`/portal/boxes/${boxId}/shares`), { headers, cache: "no-store" })
       ]);
 
@@ -166,9 +166,24 @@ function PageContentRouter() {
   }, [boxId]);
 
   useEffect(() => {
-    auth.onAuthStateChanged((u) => { if (u) void loadDashboardData(); });
+    const unsubscribe = auth.onAuthStateChanged((u) => {
+      if (u) void loadDashboardData();
+    });
+
     void loadDashboardData();
+
+    return () => unsubscribe();
   }, [loadDashboardData]);
+
+  useEffect(() => {
+    if (!boxId) return;
+
+    const intervalId = window.setInterval(() => {
+      void loadDashboardData();
+    }, 3000);
+
+    return () => window.clearInterval(intervalId);
+  }, [boxId, loadDashboardData]);
 
   // Real-time camera update trigger via Firestore snapshots
   useEffect(() => {
@@ -276,11 +291,13 @@ function PageContentRouter() {
 
       {/* ACTIEBALK */}
       <div style={STYLES.buttonDock}>
-        <SmartToggleButton 
-          boxId={boxId} 
-          canOpen={box?.availableActions?.open || false} 
-          canClose={box?.availableActions?.close || false} 
-          onNotify={notify} 
+        <SmartToggleButton
+          boxId={boxId}
+          boxName={box?.displayName}
+          isOpen={box?.boxIsOpen === true}
+          canInteract={(box?.availableActions?.open || false) || (box?.availableActions?.close || false)}
+          onNotify={notify}
+          onActionComplete={loadDashboardData}
         />
         <div style={{ width: "2px", height: "30px", background: THEME.border, margin: "0 10px" }}></div>
         <Link href={`/portal/box-events?id=${boxId}`} style={STYLES.navButton}>📋 HISTORIEK</Link>

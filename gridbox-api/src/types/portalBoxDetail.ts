@@ -8,6 +8,7 @@ export interface PortalBoxDetail {
   status: PortalBoxStatus;
   lastHeartbeat?: string;
   lastSeen?: string;
+  boxIsOpen: boolean;
   availableActions: {
     open: boolean;
     close: boolean;
@@ -16,4 +17,3 @@ export interface PortalBoxDetail {
   hardwareSummary?: string;
   recentEvents: PortalEvent[];
 }
-
