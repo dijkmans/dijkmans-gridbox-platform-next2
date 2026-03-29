@@ -1,4 +1,4 @@
-import { PortalBox, PortalBoxStatus } from "../types/portalBox";
+﻿import { PortalBox, PortalBoxStatus } from "../types/portalBox";
 import { FirestoreBoxDocument } from "../repositories/boxRepository";
 import { FirestoreSiteDocument } from "../repositories/siteRepository";
 
@@ -92,6 +92,7 @@ function pickDisplayName(
 
 function pickLastHeartbeat(data: Record<string, any>): string | undefined {
   return (
+    normalizeText(data.state?.lastHeartbeatAt) ||
     normalizeText(data.software?.lastHeartbeatIso) ||
     normalizeText(data.updatedAt) ||
     normalizeText(data.status?.timestamp) ||
@@ -101,53 +102,29 @@ function pickLastHeartbeat(data: Record<string, any>): string | undefined {
 }
 
 function pickStatus(data: Record<string, any>): PortalBoxStatus {
-  const simpleStatus = normalizeText(data.status);
+  const heartbeat = pickLastHeartbeat(data);
 
-  if (simpleStatus) {
-    const lowered = simpleStatus.toLowerCase();
-
-    if (["online", "open", "opened"].includes(lowered)) {
-      return "online";
-    }
-
-    if (["offline"].includes(lowered)) {
-      return "offline";
-    }
-
-    if (["close", "closed", "closing"].includes(lowered)) {
-      return "warning";
-    }
+  if (!heartbeat) {
+    return "unknown";
   }
 
-  if (typeof data.status === "object" && data.status !== null) {
-    if (data.status.online === true) {
-      return "online";
-    }
+  const heartbeatDate = new Date(heartbeat);
 
-    if (data.status.online === false) {
-      return "offline";
-    }
-
-    const state = normalizeText(data.status.state)?.toLowerCase();
-    if (state && ["closing", "opening"].includes(state)) {
-      return "warning";
-    }
-
-    if (state && ["closed", "open"].includes(state)) {
-      return "online";
-    }
-  }
-
-  const stateState = normalizeText(data.state?.state)?.toLowerCase();
-  if (stateState && ["closing", "opening"].includes(stateState)) {
+  if (Number.isNaN(heartbeatDate.getTime())) {
     return "warning";
   }
 
-  if (normalizeText(data.software?.lastHeartbeatIso)) {
+  const minutesAgo = (Date.now() - heartbeatDate.getTime()) / 60000;
+
+  if (minutesAgo <= 5) {
     return "online";
   }
 
-  return "unknown";
+  if (minutesAgo <= 30) {
+    return "warning";
+  }
+
+  return "offline";
 }
 
 function pickCanOpen(data: Record<string, any>): boolean {
@@ -160,6 +137,27 @@ function pickCanOpen(data: Record<string, any>): boolean {
   }
 
   return true;
+}
+
+function pickBoxIsOpen(data: Record<string, any>): boolean {
+  return data.state?.boxIsOpen === true;
+}
+
+function pickLastActionAt(data: Record<string, any>): string | undefined {
+  return (
+    normalizeText(data.state?.lastActionAt) ||
+    normalizeText(data.lifecycle?.openedAt) ||
+    normalizeText(data.lifecycle?.closedAt) ||
+    undefined
+  );
+}
+
+function pickLastActionSource(data: Record<string, any>): string | undefined {
+  return (
+    normalizeText(data.state?.lastActionSource) ||
+    normalizeText(data.lifecycle?.source) ||
+    undefined
+  );
 }
 
 export function mapFirestoreBoxToPortalBox(
@@ -179,6 +177,9 @@ export function mapFirestoreBoxToPortalBox(
     siteName,
     status: pickStatus(doc.data),
     lastHeartbeat: pickLastHeartbeat(doc.data),
+    boxIsOpen: pickBoxIsOpen(doc.data),
+    lastActionAt: pickLastActionAt(doc.data),
+    lastActionSource: pickLastActionSource(doc.data),
     canOpen: pickCanOpen(doc.data),
     links: {
       detail: `/portal/boxes/${id}`,

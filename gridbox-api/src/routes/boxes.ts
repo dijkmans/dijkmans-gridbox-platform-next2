@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import { requirePortalUser, verifyBearerToken } from "../auth/verifyBearerToken";
 import { mockEventsByBoxId } from "../data/mockData";
 import { mapFirestoreBoxToPortalBoxDetail } from "../mappers/boxDetailMapper";
@@ -7,6 +7,7 @@ import { getBoxById, listBoxes } from "../repositories/boxRepository";
 import { addBoxCommand, getBoxCommandById, getLatestBoxCommand, listBoxCommands } from "../repositories/commandRepository";
 import { hasCustomerBoxAccess, listBoxIdsForCustomer } from "../repositories/customerBoxAccessRepository";
 import { getCustomerById } from "../repositories/customerRepository";
+import { getPlatformBranding } from "../repositories/platformConfigRepository";
 import { getMembershipByEmail } from "../repositories/membershipRepository";
 import { getSiteById, listSites } from "../repositories/siteRepository";
 import { getFirestore } from "firebase-admin/firestore";
@@ -16,6 +17,29 @@ const router = Router();
 
 const ACTIVE_PORTAL_BOX_IDS = ["gbox-004", "gbox-005"];
 const ALLOWED_OPEN_EMAILS = ["gridboxbv@gmail.com", "piet.dijkmans@gmail.com"];
+const STORAGE_BUCKET_NAME = "gridbox-platform.firebasestorage.app";
+
+async function readStorageFileContent(storagePath?: string): Promise<{ buffer: Buffer; contentType: string } | null> {
+  if (!storagePath) {
+    return null;
+  }
+
+  const bucket = getStorage().bucket(STORAGE_BUCKET_NAME);
+  const file = bucket.file(storagePath);
+  const [exists] = await file.exists();
+
+  if (!exists) {
+    return null;
+  }
+
+  const [metadata] = await file.getMetadata();
+  const [buffer] = await file.download();
+
+  return {
+    buffer,
+    contentType: metadata.contentType || "application/octet-stream"
+  };
+}
 
 function applyPortalOverrides(box: any) {
   if (box.id === "gbox-005") {
@@ -95,10 +119,11 @@ router.get("/portal/boxes", async (req, res) => {
       customerId: context.membership.customerId
     });
 
-    const [boxDocs, siteDocs, allowedBoxIds] = await Promise.all([
+    const [boxDocs, siteDocs, allowedBoxIds, platformBranding] = await Promise.all([
       listBoxes(),
       listSites(),
-      listBoxIdsForCustomer(context.membership.customerId!)
+      listBoxIdsForCustomer(context.membership.customerId!),
+      getPlatformBranding()
     ]);
 
     const allowedSet = new Set(allowedBoxIds);
@@ -107,14 +132,68 @@ router.get("/portal/boxes", async (req, res) => {
       (doc) => allowedSet.has(doc.id)
     );
 
+    const db = getFirestore();
+
+    const shareSummaryEntries = await Promise.all(
+      filteredBoxDocs.map(async (doc) => {
+        const boxId = typeof doc.data?.boxId === "string" && doc.data.boxId.trim().length > 0
+          ? doc.data.boxId.trim()
+          : doc.id;
+
+        const snapshot = await db.collection("boxes").doc(boxId).collection("shares").get();
+
+        const activePhoneNumbers = snapshot.docs
+          .map((shareDoc) => {
+            const data = shareDoc.data() as Record<string, any>;
+            const shareId = shareDoc.id;
+            const active = data.active === true || data.status === "active";
+
+            if (!active) {
+              return null;
+            }
+
+            if (!/^\+\d{8,20}$/.test(shareId)) {
+              return null;
+            }
+
+            return shareId;
+          })
+          .filter((value): value is string => typeof value === "string")
+          .sort((a, b) => a.localeCompare(b));
+
+        return [
+          boxId,
+          {
+            totalActive: activePhoneNumbers.length,
+            phoneNumbers: activePhoneNumbers.slice(0, 2)
+          }
+        ] as const;
+      })
+    );
+
+    const shareSummaryByBoxId = new Map(shareSummaryEntries);
+
     const items = filteredBoxDocs
-      .map((doc) => mapFirestoreBoxToPortalBox(doc, siteDocs))
+      .map((doc) => {
+        const mapped = mapFirestoreBoxToPortalBox(doc, siteDocs);
+
+        return {
+          ...mapped,
+          shareSummary: shareSummaryByBoxId.get(mapped.id) || {
+            totalActive: 0,
+            phoneNumbers: []
+          }
+        };
+      })
       .map(applyPortalOverrides);
 
     return res.json({
       items,
       count: items.length,
-      mode: "firestore"
+      mode: "firestore",
+      branding: {
+        footerText: platformBranding?.footerText || "Powered by Gridbox"
+      }
     });
   } catch (error) {
     const statusCode = getStatusCode(error);
@@ -1213,4 +1292,135 @@ router.get("/portal/boxes/:id/picture", async (req, res) => {
   }
 });
 
+router.get("/portal/assets/gridbox-logo", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    await requireCustomerContext(portalUser.email);
+
+    const branding = await getPlatformBranding();
+    const fileData = await readStorageFileContent(branding?.gridboxLogoPath);
+
+    if (!fileData) {
+      return res.status(404).json({
+        error: "GRIDBOX_LOGO_NOT_FOUND",
+        message: "Gridbox-logo niet gevonden"
+      });
+    }
+
+    res.setHeader("Content-Type", fileData.contentType);
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    return res.status(200).send(fileData.buffer);
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot het portaal"
+      });
+    }
+
+    console.error("FOUT in GET /portal/assets/gridbox-logo", error);
+
+    return res.status(500).json({
+      error: "GRIDBOX_LOGO_FETCH_FAILED",
+      message: "Kon Gridbox-logo niet ophalen"
+    });
+  }
+});
+
+router.get("/portal/assets/gridbox-footer-logo", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    await requireCustomerContext(portalUser.email);
+
+    const branding = await getPlatformBranding();
+    const fileData = await readStorageFileContent(branding?.gridboxFooterLogoPath);
+
+    if (!fileData) {
+      return res.status(404).json({
+        error: "GRIDBOX_FOOTER_LOGO_NOT_FOUND",
+        message: "Gridbox-footerlogo niet gevonden"
+      });
+    }
+
+    res.setHeader("Content-Type", fileData.contentType);
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    return res.status(200).send(fileData.buffer);
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot het portaal"
+      });
+    }
+
+    console.error("FOUT in GET /portal/assets/gridbox-footer-logo", error);
+
+    return res.status(500).json({
+      error: "GRIDBOX_FOOTER_LOGO_FETCH_FAILED",
+      message: "Kon Gridbox-footerlogo niet ophalen"
+    });
+  }
+});
+
+router.get("/portal/assets/customer-logo", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const fileData = await readStorageFileContent(context.customer.logoPath);
+
+    if (!fileData) {
+      return res.status(404).json({
+        error: "CUSTOMER_LOGO_NOT_FOUND",
+        message: "Klantlogo niet gevonden"
+      });
+    }
+
+    res.setHeader("Content-Type", fileData.contentType);
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    return res.status(200).send(fileData.buffer);
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot het portaal"
+      });
+    }
+
+    console.error("FOUT in GET /portal/assets/customer-logo", error);
+
+    return res.status(500).json({
+      error: "CUSTOMER_LOGO_FETCH_FAILED",
+      message: "Kon klantlogo niet ophalen"
+    });
+  }
+});
+
 export default router;
+

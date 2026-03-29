@@ -1,9 +1,10 @@
-import { getFirestore } from "firebase-admin/firestore";
+﻿import { getFirestore } from "firebase-admin/firestore";
 
 export type CustomerRecord = {
   id: string;
   name?: string;
   active?: boolean;
+  logoPath?: string;
 };
 
 export async function getCustomerById(customerId: string): Promise<CustomerRecord | null> {
@@ -19,7 +20,8 @@ export async function getCustomerById(customerId: string): Promise<CustomerRecor
 
   return {
     id: doc.id,
-    name: data.name,
-    active: data.active
+    name: typeof data.name === "string" ? data.name : undefined,
+    active: data.active === true,
+    logoPath: typeof data.logoPath === "string" ? data.logoPath : undefined
   };
 }

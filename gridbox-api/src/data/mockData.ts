@@ -20,6 +20,9 @@ export const mockBoxes: PortalBox[] = [
     siteName: "Geel",
     status: "online",
     lastHeartbeat: new Date().toISOString(),
+    boxIsOpen: false,
+    lastActionAt: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
+    lastActionSource: "klant",
     canOpen: true,
     links: {
       detail: "/portal/boxes/box-001",
@@ -33,6 +36,9 @@ export const mockBoxes: PortalBox[] = [
     siteName: "Mol",
     status: "warning",
     lastHeartbeat: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
+    boxIsOpen: true,
+    lastActionAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
+    lastActionSource: "medewerker",
     canOpen: true,
     links: {
       detail: "/portal/boxes/box-002",
@@ -101,8 +107,8 @@ export const mockBoxDetailsById: Record<string, PortalBoxDetail> = {
     siteName: "Geel",
     status: "online",
     lastHeartbeat: new Date().toISOString(),
-    lastSeen: new Date().toISOString(),
     boxIsOpen: false,
+    lastSeen: new Date().toISOString(),
     availableActions: {
       open: true,
       close: false
@@ -117,8 +123,8 @@ export const mockBoxDetailsById: Record<string, PortalBoxDetail> = {
     siteName: "Mol",
     status: "warning",
     lastHeartbeat: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
-    lastSeen: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
     boxIsOpen: true,
+    lastSeen: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
     availableActions: {
       open: false,
       close: true
@@ -128,3 +134,5 @@ export const mockBoxDetailsById: Record<string, PortalBoxDetail> = {
     recentEvents: mockEventsByBoxId["box-002"]
   }
 };
+
+
