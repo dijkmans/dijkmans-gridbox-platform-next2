@@ -708,13 +708,13 @@ export default function Home() {
               {group.siteName.toUpperCase()}
             </h2>
 
-            {/* DE GEFIKSTE LAYOUT: Geforceerde breedte (500px) EN justifyContent: "start" */}
+            {/* TERUG NAAR DE PERFECTE 500PX VERSIE */}
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, 500px)", // Breedte per kolom
+                gridTemplateColumns: "repeat(auto-fill, 500px)",
                 gap: "18px",
-                justifyContent: "start", // Forceert alles naar LINKS
+                justifyContent: "start",
                 alignItems: "stretch"
               }}
             >
@@ -725,7 +725,7 @@ export default function Home() {
                   <article
                     key={box.id}
                     style={{
-                      width: "100%", // Vul de grid-kolom (500px)
+                      width: "100%",
                       background: "#ffffff",
                       borderRadius: "24px",
                       padding: "18px",
