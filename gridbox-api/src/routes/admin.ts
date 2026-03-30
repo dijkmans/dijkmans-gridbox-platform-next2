@@ -5,6 +5,53 @@ import { getFirestore } from "firebase-admin/firestore";
 
 const router = Router();
 
+type SupportedMembershipRole =
+  | "platformAdmin"
+  | "customerOperator"
+  | "customerOperatorNoCamera"
+  | "customerViewer";
+
+const SUPPORTED_MEMBERSHIP_ROLES: SupportedMembershipRole[] = [
+  "platformAdmin",
+  "customerOperator",
+  "customerOperatorNoCamera",
+  "customerViewer"
+];
+
+const ADMIN_ASSIGNABLE_ROLES = new Set<SupportedMembershipRole>([
+  "customerOperator",
+  "customerOperatorNoCamera",
+  "customerViewer"
+]);
+
+function isSupportedMembershipRole(value: string): value is SupportedMembershipRole {
+  return SUPPORTED_MEMBERSHIP_ROLES.includes(value as SupportedMembershipRole);
+}
+
+function getRoleLabel(roleId: SupportedMembershipRole, rawLabel: unknown): string {
+  if (typeof rawLabel === "string" && rawLabel.trim()) {
+    return rawLabel.trim();
+  }
+
+  if (roleId === "customerOperator") {
+    return "Operator";
+  }
+
+  if (roleId === "customerOperatorNoCamera") {
+    return "Operator zonder camera";
+  }
+
+  if (roleId === "customerViewer") {
+    return "Viewer";
+  }
+
+  if (roleId === "platformAdmin") {
+    return "Platform Admin";
+  }
+
+  return roleId;
+}
+
 function getStatusCode(error: unknown): number {
   if (typeof error === "object" && error !== null && "statusCode" in error) {
     const value = (error as any).statusCode;
@@ -134,6 +181,65 @@ router.get("/admin/boxes", async (req, res) => {
     return res.status(500).json({
       error: "ADMIN_BOXES_FAILED",
       message: "Kon boxen niet ophalen"
+    });
+  }
+});
+
+router.get("/admin/roles", async (req, res) => {
+  try {
+    const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    console.log("ADMIN ROLES REQUEST", {
+      user: context.portalUser.email
+    });
+
+    const db = getFirestore();
+    const snapshot = await db.collection("roles").get();
+
+    const items = snapshot.docs
+      .map((doc) => {
+        const data = doc.data() as Record<string, any>;
+        const id = doc.id;
+
+        return {
+          id,
+          label: isSupportedMembershipRole(id) ? getRoleLabel(id, data.label) : id,
+          active: data.active !== false,
+          assignableInAdmin: data.assignableInAdmin !== false
+        };
+      })
+      .filter((item) => isSupportedMembershipRole(item.id))
+      .filter((item) => item.active)
+      .filter((item) => item.assignableInAdmin)
+      .filter((item) => ADMIN_ASSIGNABLE_ROLES.has(item.id as SupportedMembershipRole))
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    return res.json({
+      items,
+      count: items.length
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Geen admin-toegang"
+      });
+    }
+
+    console.error("FOUT in /admin/roles", error);
+
+    return res.status(500).json({
+      error: "ADMIN_ROLES_FAILED",
+      message: "Kon rollen niet ophalen"
     });
   }
 });
@@ -754,4 +860,6 @@ router.get("/admin/invites", async (req, res) => {
 });
 
 export default router;
+
+
 

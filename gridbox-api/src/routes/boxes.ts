@@ -1,4 +1,4 @@
-﻿import { Router } from "express";
+import { Router } from "express";
 import { requirePortalUser, verifyBearerToken } from "../auth/verifyBearerToken";
 import { mockEventsByBoxId } from "../data/mockData";
 import { mapFirestoreBoxToPortalBoxDetail } from "../mappers/boxDetailMapper";
@@ -16,8 +16,11 @@ import { getStorage } from "firebase-admin/storage";
 const router = Router();
 
 const ACTIVE_PORTAL_BOX_IDS = ["gbox-004", "gbox-005"];
-const ALLOWED_OPEN_EMAILS = ["gridboxbv@gmail.com", "piet.dijkmans@gmail.com"];
 const STORAGE_BUCKET_NAME = "gridbox-platform.firebasestorage.app";
+
+function canOperateBox(role?: string | null) {
+  return role === "platformAdmin" || role === "customerOperator" || role === "customerOperatorNoCamera";
+}
 
 async function readStorageFileContent(storagePath?: string): Promise<{ buffer: Buffer; contentType: string } | null> {
   if (!storagePath) {
@@ -880,7 +883,7 @@ router.post("/portal/boxes/:id/open", async (req, res) => {
       });
     }
 
-    if (!portalUser.email || !ALLOWED_OPEN_EMAILS.includes(portalUser.email)) {
+    if (!canOperateBox(context.membership.role)) {
       return res.status(403).json({
         error: "FORBIDDEN",
         message: "Je hebt geen toegang om deze box te openen"
@@ -977,7 +980,7 @@ router.post("/portal/boxes/:id/close", async (req, res) => {
       });
     }
 
-    if (!portalUser.email || !ALLOWED_OPEN_EMAILS.includes(portalUser.email)) {
+    if (!canOperateBox(context.membership.role)) {
       return res.status(403).json({
         error: "FORBIDDEN",
         message: "Je hebt geen toegang om deze box te sluiten"
@@ -1423,4 +1426,5 @@ router.get("/portal/assets/customer-logo", async (req, res) => {
 });
 
 export default router;
+
 

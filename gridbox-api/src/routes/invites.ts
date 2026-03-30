@@ -1,4 +1,4 @@
-﻿import crypto from "crypto";
+import crypto from "crypto";
 import express, { Response } from "express";
 import type { Request } from "express";
 import { getFirestore } from "firebase-admin/firestore";
@@ -23,6 +23,16 @@ const PHONE_CODE_LENGTH = 6;
 const PHONE_CODE_TTL_MINUTES = 10;
 const PHONE_CODE_MAX_ATTEMPTS = 5;
 const PHONE_CODE_RESEND_SECONDS = 60;
+
+const ASSIGNABLE_CUSTOMER_ROLES = [
+  "customerOperator",
+  "customerOperatorNoCamera",
+  "customerViewer",
+] as const;
+
+function isAssignableCustomerRole(value: unknown): value is (typeof ASSIGNABLE_CUSTOMER_ROLES)[number] {
+  return typeof value === "string" && ASSIGNABLE_CUSTOMER_ROLES.includes(value as any);
+}
 
 function addDays(date: Date, days: number): Date {
   const result = new Date(date);
@@ -194,8 +204,11 @@ router.post("/admin/invites", async (req: Request, res: Response) => {
       });
     }
 
-    if (body.role === "platformAdmin") {
-      return res.status(403).json({ error: "FORBIDDEN_CREATE_INVITE" });
+    if (!isAssignableCustomerRole(body.role)) {
+      return res.status(400).json({
+        error: "INVALID_ROLE",
+        message: "Ongeldige klantrol voor invite",
+      });
     }
 
     const db = getFirestore();
@@ -617,3 +630,4 @@ router.post(
 );
 
 export default router;
+

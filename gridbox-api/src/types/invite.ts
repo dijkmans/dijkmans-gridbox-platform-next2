@@ -1,6 +1,6 @@
-﻿export type InviteStatus = "pending" | "accepted" | "expired" | "revoked";
+export type InviteStatus = "pending" | "accepted" | "expired" | "revoked";
 
-export type MembershipRole = "platformAdmin" | "customerAdmin" | "viewer";
+export type MembershipRole = "platformAdmin" | "customerOperator" | "customerOperatorNoCamera" | "customerViewer";
 
 export type InviteScope = {
   siteIds?: string[];
@@ -60,3 +60,4 @@ export type AcceptInviteInput = {
   displayName?: string;
   phoneNumber: string;
 };
+

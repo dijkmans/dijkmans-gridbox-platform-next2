@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, useEffect, useState } from "react";
 import { auth } from "@/lib/firebase";
@@ -46,6 +46,13 @@ type AdminBoxItem = {
   updatedAt?: string | null;
 };
 
+type AdminRoleItem = {
+  id: string;
+  label: string;
+  active?: boolean;
+  assignableInAdmin?: boolean;
+};
+
 function getBoxLabel(box: AdminBoxItem) {
   const id = box.boxId || box.id;
   const site = box.siteId || "geen-site";
@@ -62,6 +69,7 @@ export default function AdminPage() {
   const [invites, setInvites] = useState<InviteItem[]>([]);
   const [customerBoxAccess, setCustomerBoxAccess] = useState<CustomerBoxAccessItem[]>([]);
   const [boxes, setBoxes] = useState<AdminBoxItem[]>([]);
+  const [inviteRoles, setInviteRoles] = useState<AdminRoleItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -73,7 +81,7 @@ export default function AdminPage() {
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteDisplayName, setInviteDisplayName] = useState("");
-  const [inviteRole, setInviteRole] = useState("viewer");
+  const [inviteRole, setInviteRole] = useState("customerViewer");
   const [invitePermissions, setInvitePermissions] = useState("");
   const [lastInviteUrl, setLastInviteUrl] = useState("");
 
@@ -98,23 +106,39 @@ export default function AdminPage() {
       const token = await user.getIdToken();
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [customersRes, membershipsRes, customerBoxAccessRes, boxesRes, invitesRes] = await Promise.all([
+      const [customersRes, membershipsRes, customerBoxAccessRes, boxesRes, invitesRes, rolesRes] = await Promise.all([
         fetch(apiUrl("/admin/customers"), { headers }),
         fetch(apiUrl("/admin/memberships"), { headers }),
         fetch(apiUrl("/admin/customer-box-access"), { headers }),
         fetch(apiUrl("/admin/boxes"), { headers }),
-        fetch(apiUrl("/admin/invites"), { headers }).catch(() => ({ ok: false, json: async () => ({ items: [] }) } as any))
+        fetch(apiUrl("/admin/invites"), { headers }).catch(() => ({ ok: false, json: async () => ({ items: [] }) } as any)),
+        fetch(apiUrl("/admin/roles"), { headers }).catch(() => ({ ok: false, json: async () => ({ items: [] }) } as any))
       ]);
 
-      const [customersData, membershipsData, accessData, boxesData, invitesData] = await Promise.all([
-        customersRes.json(), membershipsRes.json(), customerBoxAccessRes.json(), boxesRes.json(), invitesRes.ok ? invitesRes.json() : { items: [] }
+      const [customersData, membershipsData, accessData, boxesData, invitesData, rolesData] = await Promise.all([
+        customersRes.json(),
+        membershipsRes.json(),
+        customerBoxAccessRes.json(),
+        boxesRes.json(),
+        invitesRes.ok ? invitesRes.json() : { items: [] },
+        rolesRes.ok ? rolesRes.json() : { items: [] }
       ]);
+
+      const nextRoles: AdminRoleItem[] = rolesData.items || [];
+      const defaultInviteRole =
+        nextRoles.find((role) => role.id === "customerViewer")?.id ||
+        nextRoles[0]?.id ||
+        "";
 
       setCustomers(customersData.items || []);
       setMemberships(membershipsData.items || []);
       setCustomerBoxAccess(accessData.items || []);
       setBoxes(boxesData.items || []);
       setInvites(invitesData.items || []);
+      setInviteRoles(nextRoles);
+      setInviteRole((current) =>
+        nextRoles.some((role) => role.id === current) ? current : defaultInviteRole
+      );
       setErrorMessage("");
     } catch (error) {
       setErrorMessage("Netwerkfout bij ophalen admingegevens");
@@ -162,6 +186,7 @@ export default function AdminPage() {
   async function handleCreateInvite(e: FormEvent) {
     e.preventDefault();
     if (!selectedCustomerId) return setErrorMessage("Kies eerst een bedrijf links");
+    if (!inviteRole) return setErrorMessage("Geen geldige rol beschikbaar");
     const email = inviteEmail.trim();
     if (!isValidEmail(email)) return setErrorMessage("Vul een geldig e-mailadres in");
 
@@ -173,7 +198,11 @@ export default function AdminPage() {
 
     const result = await postJson(apiUrl("/admin/invites"), body);
     if (result) {
-      setInviteEmail(""); setInviteDisplayName(""); setInviteRole("viewer"); setInvitePermissions("");
+      const defaultInviteRole =
+        inviteRoles.find((role) => role.id === "customerViewer")?.id ||
+        inviteRoles[0]?.id ||
+        "";
+      setInviteEmail(""); setInviteDisplayName(""); setInviteRole(defaultInviteRole); setInvitePermissions("");
       setLastInviteUrl(result.inviteUrl || ""); setSuccessMessage("Uitnodiging verzonden!");
       await loadAdminData(false);
     }
@@ -244,8 +273,8 @@ export default function AdminPage() {
                       {!customer.active && <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">Inactief</span>}
                     </div>
                     <div className="text-sm text-gray-500 flex gap-4 mt-2">
-                      <span>👥 {memberCount} Leden</span>
-                      <span>📦 {boxCount} Boxen</span>
+                      <span>?? {memberCount} Leden</span>
+                      <span>?? {boxCount} Boxen</span>
                     </div>
                   </div>
                 );
@@ -328,12 +357,24 @@ export default function AdminPage() {
                     </div>
                     <div className="w-32">
                       <label className="text-xs text-gray-400 mb-1 block">Rol</label>
-                      <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} className="w-full bg-[#1e2320] border border-gray-600 rounded px-3 py-2 text-white focus:border-green-500 focus:outline-none">
-                        <option value="viewer">Viewer</option>
-                        <option value="customerAdmin">Admin</option>
+                      <select
+                        value={inviteRole}
+                        onChange={(e) => setInviteRole(e.target.value)}
+                        className="w-full bg-[#1e2320] border border-gray-600 rounded px-3 py-2 text-white focus:border-green-500 focus:outline-none"
+                        disabled={inviteRoles.length === 0}
+                      >
+                        {inviteRoles.length === 0 ? (
+                          <option value="">Geen rollen gevonden</option>
+                        ) : (
+                          inviteRoles.map((role) => (
+                            <option key={role.id} value={role.id}>
+                              {role.label}
+                            </option>
+                          ))
+                        )}
                       </select>
                     </div>
-                    <button type="submit" className="bg-green-600 text-white font-bold py-2 px-4 rounded hover:bg-green-500 transition">
+                    <button type="submit" disabled={inviteRoles.length === 0} className="bg-green-600 text-white font-bold py-2 px-4 rounded hover:bg-green-500 transition disabled:opacity-50 disabled:cursor-not-allowed">
                       + Uitnodigen
                     </button>
                   </form>
@@ -380,7 +421,7 @@ export default function AdminPage() {
               </div>
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-gray-400 bg-gray-100 rounded-2xl border-2 border-dashed border-gray-300 p-12">
-                <span className="text-6xl mb-4">👈</span>
+                <span className="text-6xl mb-4">??</span>
                 <p className="text-xl">Selecteer links een bedrijf om de details, leden en boxen te beheren.</p>
               </div>
             )}
@@ -391,3 +432,4 @@ export default function AdminPage() {
     </main>
   );
 }
+
