@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import { requirePortalUser } from "../auth/verifyBearerToken";
 import { getMembershipByEmail } from "../repositories/membershipRepository";
 import { getFirestore } from "firebase-admin/firestore";
@@ -539,6 +539,61 @@ router.post("/admin/memberships", async (req, res) => {
   }
 });
 
+router.delete("/admin/memberships/:membershipId", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const membershipId = String(req.params?.membershipId || "").trim();
+
+    if (!membershipId) {
+      return res.status(400).json({
+        error: "INVALID_MEMBERSHIP_ID",
+        message: "Membership id is verplicht"
+      });
+    }
+
+    const db = getFirestore();
+    const membershipRef = db.collection("memberships").doc(membershipId);
+    const membershipSnap = await membershipRef.get();
+
+    if (!membershipSnap.exists) {
+      return res.status(404).json({
+        error: "MEMBERSHIP_NOT_FOUND",
+        message: "Membership niet gevonden"
+      });
+    }
+
+    await membershipRef.delete();
+
+    return res.status(200).json({
+      success: true,
+      membershipId
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Geen admin-toegang"
+      });
+    }
+
+    console.error("FOUT in DELETE /admin/memberships/:membershipId", error);
+
+    return res.status(500).json({
+      error: "ADMIN_MEMBERSHIP_DELETE_FAILED",
+      message: "Kon membership niet verwijderen"
+    });
+  }
+});
 router.get("/admin/customer-box-access", async (req, res) => {
   try {
     const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
@@ -860,6 +915,7 @@ router.get("/admin/invites", async (req, res) => {
 });
 
 export default router;
+
 
 
 

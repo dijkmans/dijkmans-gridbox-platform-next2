@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { FormEvent, useEffect, useState } from "react";
 import { auth } from "@/lib/firebase";
@@ -203,7 +203,7 @@ export default function AdminPage() {
         inviteRoles[0]?.id ||
         "";
       setInviteEmail(""); setInviteDisplayName(""); setInviteRole(defaultInviteRole); setInvitePermissions("");
-      setLastInviteUrl(result.inviteUrl || ""); setSuccessMessage("Uitnodiging verzonden!");
+      setLastInviteUrl(result.inviteUrl || ""); setSuccessMessage("Uitnodiging aangemaakt. Mail zelf de activatielink naar de klant.");
       await loadAdminData(false);
     }
   }
@@ -229,6 +229,50 @@ export default function AdminPage() {
     if (await postJson(apiUrl(`/admin/customer-box-access/${encodeURIComponent(accessId)}/status`), { active })) {
       setSuccessMessage(`Box-toegang ${active ? "geactiveerd" : "gedeactiveerd"}`); await loadAdminData(false);
     }
+  }
+
+  async function handleDeleteInvite(inviteId: string, email: string) {
+    if (!window.confirm(`Ben je zeker dat je de uitnodiging voor ${email} wilt verwijderen?`)) return;
+
+    const user = auth.currentUser;
+    if (!user) return setErrorMessage("Niet aangemeld");
+
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    const token = await user.getIdToken();
+    const res = await fetch(apiUrl(`/admin/invites/${encodeURIComponent(inviteId)}`), {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    const data = await res.json();
+    if (!res.ok) return setErrorMessage(data.message || "Verwijderen van uitnodiging mislukt");
+
+    setSuccessMessage("Uitnodiging verwijderd");
+    await loadAdminData(false);
+  }
+
+  async function handleDeleteMembership(membershipId: string, email: string) {
+    if (!window.confirm(`Ben je zeker dat je ${email} wilt verwijderen uit dit bedrijf?`)) return;
+
+    const user = auth.currentUser;
+    if (!user) return setErrorMessage("Niet aangemeld");
+
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    const token = await user.getIdToken();
+    const res = await fetch(apiUrl(`/admin/memberships/${encodeURIComponent(membershipId)}`), {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    const data = await res.json();
+    if (!res.ok) return setErrorMessage(data.message || "Verwijderen van persoon mislukt");
+
+    setSuccessMessage("Persoon verwijderd");
+    await loadAdminData(false);
   }
 
   const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
@@ -318,6 +362,7 @@ export default function AdminPage() {
                         <th className="pb-3 font-medium">E-mail</th>
                         <th className="pb-3 font-medium">Rol</th>
                         <th className="pb-3 font-medium">Status</th>
+                        <th className="pb-3 font-medium text-right">Acties</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -329,6 +374,14 @@ export default function AdminPage() {
                             <span className="px-2 py-1 bg-green-900 text-green-300 rounded text-xs">{member.role}</span>
                           </td>
                           <td className="py-4 text-green-400">Actief</td>
+                          <td className="py-4 text-right">
+                            <button
+                              onClick={() => handleDeleteMembership(member.id, member.email || "")}
+                              className="rounded bg-red-100 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-200"
+                            >
+                              Verwijderen
+                            </button>
+                          </td>
                         </tr>
                       ))}
                       {/* PENDING INVITES (De openstaande uitnodigingen!) */}
@@ -341,15 +394,26 @@ export default function AdminPage() {
                             <span className="px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs">{invite.role}</span>
                           </td>
                           <td className="py-4 text-yellow-500">Wachtend...</td>
+                          <td className="py-4 text-right">
+                            <button
+                              onClick={() => handleDeleteInvite(invite.id, invite.email || "")}
+                              className="rounded bg-red-100 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-200"
+                            >
+                              Uitnodiging verwijderen
+                            </button>
+                          </td>
                         </tr>
                       ))}
                       {customerMembers.length === 0 && customerInvites.length === 0 && (
-                        <tr><td colSpan={3} className="py-4 text-gray-500 text-center">Nog geen leden in dit bedrijf.</td></tr>
+                        <tr><td colSpan={4} className="py-4 text-gray-500 text-center">Nog geen leden in dit bedrijf.</td></tr>
                       )}
                     </tbody>
                   </table>
 
                   {/* UITNODIGEN FORM (Zit in the dark card nu) */}
+                  <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    Belangrijk: er wordt geen e-mail automatisch verstuurd. Na het aanmaken moet je de activatielink zelf mailen naar de klant, met je eigen uitleg erbij.
+                  </div>
                   <form onSubmit={handleCreateInvite} className="bg-[#2a302c] p-4 rounded-xl flex flex-wrap gap-3 items-end">
                     <div className="flex-1 min-w-[200px]">
                       <label className="text-xs text-gray-400 mb-1 block">Nieuw e-mailadres</label>
@@ -379,8 +443,10 @@ export default function AdminPage() {
                     </button>
                   </form>
                   {lastInviteUrl && (
-                     <div className="mt-4 p-3 bg-gray-800 rounded text-xs text-gray-300 break-all">
-                       <strong>Link:</strong> {lastInviteUrl}
+                     <div className="mt-4 rounded-xl border border-green-700 bg-gray-800 p-3 text-xs text-gray-300 break-all">
+                       <div className="mb-2 font-semibold text-white">Activatielink aangemaakt</div>
+                       <div className="mb-2 text-gray-300">Kopieer deze link en stuur ze zelf via mail naar de klant, met je eigen uitleg erbij.</div>
+                       <div><strong>Link:</strong> {lastInviteUrl}</div>
                      </div>
                   )}
                 </div>
@@ -432,4 +498,12 @@ export default function AdminPage() {
     </main>
   );
 }
+
+
+
+
+
+
+
+
 

@@ -1,4 +1,4 @@
-import crypto from "crypto";
+﻿import crypto from "crypto";
 import express, { Response } from "express";
 import type { Request } from "express";
 import { getFirestore } from "firebase-admin/firestore";
@@ -233,7 +233,7 @@ router.post("/admin/invites", async (req: Request, res: Response) => {
 
     const now = new Date();
     const expiresAt = addDays(now, DEFAULT_INVITE_EXPIRY_DAYS);
-    const portalBaseUrl = process.env.PORTAL_BASE_URL || "http://localhost:3000";
+    const portalBaseUrl = process.env.PORTAL_BASE_URL || "https://gridbox-platform.web.app";
     const inviteUrl = buildInviteUrl(portalBaseUrl, rawToken);
 
     const inviteRef = db.collection("invites").doc();
@@ -274,7 +274,8 @@ router.post("/admin/invites", async (req: Request, res: Response) => {
         status: "pending",
       },
       inviteUrl,
-      warning: "TODO_EMAIL_NOT_YET_CONNECTED",
+      emailDelivery: "manual",
+      message: "Invite aangemaakt. Er werd geen e-mail verstuurd. Stuur de activatielink zelf via mail.",
     });
   } catch (error) {
     const statusCode = getStatusCode(error);
@@ -298,6 +299,66 @@ router.post("/admin/invites", async (req: Request, res: Response) => {
   }
 });
 
+router.delete("/admin/invites/:inviteId", async (req: Request, res: Response) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const inviteId = String(req.params?.inviteId || "").trim();
+
+    if (!inviteId) {
+      return res.status(400).json({
+        error: "INVALID_INVITE_ID",
+        message: "InviteId is verplicht",
+      });
+    }
+
+    const db = getFirestore();
+    const inviteRef = db.collection("invites").doc(inviteId);
+    const inviteSnap = await inviteRef.get();
+
+    if (!inviteSnap.exists) {
+      return res.status(404).json({
+        error: "INVITE_NOT_FOUND",
+        message: "Invite niet gevonden",
+      });
+    }
+
+    const invite = inviteSnap.data() as Record<string, any>;
+
+    if (invite.status === "accepted") {
+      return res.status(409).json({
+        error: "INVITE_ALREADY_ACCEPTED",
+        message: "Deze invite is al geaccepteerd en kan niet meer verwijderd worden",
+      });
+    }
+
+    await inviteRef.delete();
+
+    return res.status(200).json({
+      success: true,
+      inviteId,
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld",
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Geen admin-toegang",
+      });
+    }
+
+    console.error("DELETE /admin/invites/:inviteId error", error);
+    return res.status(500).json({ error: "INTERNAL_ERROR" });
+  }
+});
 router.post("/invites/validate", async (req: Request, res: Response) => {
   try {
     const body = req.body as ValidateInviteInput;
@@ -630,4 +691,7 @@ router.post(
 );
 
 export default router;
+
+
+
 
