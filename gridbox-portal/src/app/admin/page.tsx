@@ -487,7 +487,7 @@ export default function AdminPage() {
               </div>
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-gray-400 bg-gray-100 rounded-2xl border-2 border-dashed border-gray-300 p-12">
-                <span className="text-6xl mb-4">??</span>
+                <span className="text-6xl mb-4">Selectie</span>
                 <p className="text-xl">Selecteer links een bedrijf om de details, leden en boxen te beheren.</p>
               </div>
             )}
