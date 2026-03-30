@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, useEffect, useState } from "react";
 import { auth } from "@/lib/firebase";
@@ -317,8 +317,8 @@ export default function AdminPage() {
                       {!customer.active && <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">Inactief</span>}
                     </div>
                     <div className="text-sm text-gray-500 flex gap-4 mt-2">
-                      <span>?? {memberCount} Leden</span>
-                      <span>?? {boxCount} Boxen</span>
+                      <span>Leden: {memberCount}</span>
+                      <span>Boxen: {boxCount}</span>
                     </div>
                   </div>
                 );
