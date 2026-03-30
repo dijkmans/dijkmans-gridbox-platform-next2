@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -127,7 +127,7 @@ function formatLastAction(box: PortalBox) {
   const timePart = formatTimeAgo(box.lastActionAt || box.lastHeartbeat);
   const statePart = box.boxIsOpen ? "open" : "dicht";
   const sourcePart = formatActionSource(box.lastActionSource);
-  return `${timePart} • ${statePart} • ${sourcePart}`;
+  return `${timePart} \u2022 ${statePart} \u2022 ${sourcePart}`;
 }
 
 async function fetchProtectedAssetUrl(token: string, path: string): Promise<string | null> {
@@ -389,7 +389,7 @@ export default function Home() {
             style={{
               background: "#ffffff",
               borderRadius: "24px",
-              padding: "16px 18px",
+              padding: "10px 14px",
               boxShadow: "0 14px 40px rgba(15, 23, 42, 0.08)",
               border: "1px solid #e5e7eb"
             }}
@@ -398,7 +398,7 @@ export default function Home() {
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: "14px",
+                gap: "8px",
                 flexWrap: "wrap"
               }}
             >
@@ -410,7 +410,7 @@ export default function Home() {
                     width: "96px",
                     height: "42px",
                     objectFit: "contain",
-                    borderRadius: "16px",
+                    borderRadius: "14px",
                     background: "#ffffff",
                     padding: "0px"
                   }}
@@ -420,7 +420,7 @@ export default function Home() {
                   style={{
                     width: "88px",
                     height: "42px",
-                    borderRadius: "18px",
+                    borderRadius: "16px",
                     background: "#0f172a",
                     color: "#ffffff",
                     display: "flex",
@@ -448,7 +448,7 @@ export default function Home() {
                 </div>
                 <div
                   style={{
-                    marginTop: "8px",
+                    marginTop: "4px",
                     color: "#059669",
                     fontWeight: 800,
                     fontSize: "14px"
@@ -471,7 +471,7 @@ export default function Home() {
           >
             <div
               style={{
-                fontSize: "12px",
+                fontSize: "11px",
                 fontWeight: 800,
                 letterSpacing: "0.12em",
                 color: "#6b7280",
@@ -486,7 +486,7 @@ export default function Home() {
                 <div style={{ fontSize: "17px", fontWeight: 800, lineHeight: 1.25 }}>
                   {user.displayName || "Onbekende gebruiker"}
                 </div>
-                <div style={{ color: "#4b5563", marginTop: "6px", marginBottom: "16px", wordBreak: "break-word" }}>
+                <div style={{ color: "#4b5563", marginTop: "6px", marginBottom: "8px", wordBreak: "break-word" }}>
                   {user.email || "Geen e-mail"}
                 </div>
 
@@ -506,7 +506,7 @@ export default function Home() {
                         width: "108px",
                         height: "42px",
                         objectFit: "contain",
-                        borderRadius: "16px",
+                        borderRadius: "14px",
                         background: "#ffffff",
                         padding: "0px"
                       }}
@@ -516,7 +516,7 @@ export default function Home() {
                       style={{
                         minWidth: "68px",
                         height: "42px",
-                        borderRadius: "16px",
+                        borderRadius: "14px",
                         background: "#eef2ff",
                         color: "#312e81",
                         display: "flex",
@@ -549,7 +549,7 @@ export default function Home() {
               </>
             ) : (
               <>
-                <div style={{ fontSize: "17px", fontWeight: 700, marginBottom: "8px" }}>
+                <div style={{ fontSize: "17px", fontWeight: 700, marginBottom: "4px" }}>
                   Niet aangemeld
                 </div>
                 <div style={{ color: "#4b5563", marginBottom: "16px" }}>
@@ -588,13 +588,13 @@ export default function Home() {
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "10px",
+              gap: "8px",
               flexWrap: "wrap"
             }}
           >
             <div
               style={{
-                fontSize: "13px",
+                fontSize: "12px",
                 fontWeight: 800,
                 letterSpacing: "0.1em",
                 color: "#6b7280",
@@ -699,7 +699,7 @@ export default function Home() {
           <section key={group.siteId} style={{ marginBottom: "26px" }}>
             <h2
               style={{
-                fontSize: "20px",
+                fontSize: "18px",
                 fontWeight: 900,
                 letterSpacing: "0.04em",
                 marginBottom: "14px"
@@ -708,11 +708,13 @@ export default function Home() {
               {group.siteName.toUpperCase()}
             </h2>
 
+            {/* DE GEFIKSTE LAYOUT: Geforceerde breedte (500px) EN justifyContent: "start" */}
             <div
               style={{
-                display: "flex",
-                flexWrap: "wrap",
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, 500px)", // Breedte per kolom
                 gap: "18px",
+                justifyContent: "start", // Forceert alles naar LINKS
                 alignItems: "stretch"
               }}
             >
@@ -723,93 +725,131 @@ export default function Home() {
                   <article
                     key={box.id}
                     style={{
-                      width: "100%",
-                      maxWidth: "520px",
+                      width: "100%", // Vul de grid-kolom (500px)
                       background: "#ffffff",
                       borderRadius: "24px",
                       padding: "18px",
-                      border: "1px solid #e5e7eb",
-                      boxShadow: "0 12px 30px rgba(15, 23, 42, 0.07)"
+                      border: "1px solid #d7dde7",
+                      boxShadow: "0 10px 24px rgba(15, 23, 42, 0.06)",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
+                      height: "100%",
+                      gap: "12px"
                     }}
                   >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        justifyContent: "space-between",
-                        gap: "12px",
-                        marginBottom: "10px"
-                      }}
-                    >
-                      <div>
-                        <div
-                          style={{
-                            fontSize: "20px",
-                            fontWeight: 900,
-                            letterSpacing: "0.05em",
-                            lineHeight: 1.1
-                          }}
-                        >
-                          {box.id.toUpperCase()}
-                        </div>
-
-                        <div
-                          style={{
-                            marginTop: "8px",
-                            color: "#374151",
-                            fontWeight: 600
-                          }}
-                        >
-                          {box.displayName}
-                        </div>
-                      </div>
-
-                      <div
-                        style={{
-                          border: `1px solid ${statusColors.border}`,
-                          background: statusColors.background,
-                          color: statusColors.color,
-                          borderRadius: "999px",
-                          padding: "7px 11px",
-                          fontSize: "12px",
-                          fontWeight: 800,
-                          letterSpacing: "0.08em",
-                          whiteSpace: "nowrap"
-                        }}
-                      >
-                        {getStatusLabel(box.status)}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        marginBottom: "16px",
-                        color: "#111827",
-                        fontWeight: 700,
-                        lineHeight: 1.4
-                      }}
-                    >
-                      Laatste actie: {formatLastAction(box)}
-                    </div>
-
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "14px",
-                        alignItems: "stretch",
-                        flexWrap: "wrap",
-                        marginBottom: "10px"
-                      }}
-                    >
+                    <div>
                       <div
                         style={{
                           display: "flex",
-                          flexDirection: "column",
-                          gap: "10px",
-                          flex: "0 0 210px",
-                          minWidth: "210px"
+                          alignItems: "flex-start",
+                          justifyContent: "space-between",
+                          gap: "12px",
+                          marginBottom: "10px"
                         }}
                       >
+                        <div>
+                          <div
+                            style={{
+                              fontSize: "18px",
+                              fontWeight: 900,
+                              letterSpacing: "0.05em",
+                              lineHeight: 1.1
+                            }}
+                          >
+                            {box.id.toUpperCase()}
+                          </div>
+                          <div
+                            style={{
+                              marginTop: "4px",
+                              color: "#374151",
+                              fontWeight: 600,
+                              fontSize: "14px"
+                            }}
+                          >
+                            {box.displayName}
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            border: `1px solid ${statusColors.border}`,
+                            background: statusColors.background,
+                            color: statusColors.color,
+                            borderRadius: "999px",
+                            padding: "6px 12px",
+                            fontSize: "11px",
+                            fontWeight: 800,
+                            letterSpacing: "0.08em",
+                            whiteSpace: "nowrap"
+                          }}
+                        >
+                          {getStatusLabel(box.status)}
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          color: "#4b5563",
+                          fontWeight: 600,
+                          fontSize: "13px"
+                        }}
+                      >
+                        Laatste actie: {formatLastAction(box)}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        background: "#f6f8fc",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: "14px",
+                        padding: "10px 12px",
+                        marginTop: "auto"
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: 800,
+                          letterSpacing: "0.08em",
+                          color: "#6b7280",
+                          marginBottom: "6px"
+                        }}
+                      >
+                        GEDEELDE GSM-NUMMERS
+                      </div>
+
+                      {box.shareSummary && box.shareSummary.totalActive > 0 ? (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            flexWrap: "wrap"
+                          }}
+                        >
+                          <span style={{ fontSize: "14px" }}>{"\u{1F4F1}"}</span>
+                          <span style={{ color: "#374151", fontWeight: 700, fontSize: "13px" }}>
+                            {box.shareSummary.totalActive} gekoppeld
+                          </span>
+                        </div>
+                      ) : (
+                        <div style={{ color: "#6b7280", fontWeight: 600, fontSize: "13px" }}>
+                          Deze Gridbox lijkt vrij
+                        </div>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: "10px",
+                        marginTop: "4px"
+                      }}
+                    >
+                      <div style={{ width: "100%", minWidth: 0 }}>
                         <SmartToggleButton
                           boxId={box.id}
                           boxName={box.displayName}
@@ -818,133 +858,30 @@ export default function Home() {
                           onNotify={(msg) => setToast(msg)}
                           onActionComplete={loadBoxes}
                         />
-
-                        <Link
-                          href={`/portal/box?id=${encodeURIComponent(box.id)}`}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            textDecoration: "none",
-                            borderRadius: "16px",
-                            border: "1px solid #d1d5db",
-                            background: "#f9fafb",
-                            color: "#111827",
-                            padding: "0 18px",
-                            minHeight: "52px",
-                            fontWeight: 800,
-                            width: "100%"
-                          }}
-                        >
-                          MEER / COCKPIT
-                        </Link>
-
-
                       </div>
 
-                      <div
+                      <Link
+                        href={`/portal/box?id=${encodeURIComponent(box.id)}`}
                         style={{
-                          flex: "1 1 320px",
-                          minWidth: "320px",
-                          background: "#f8fafc",
-                          border: "1px solid #e5e7eb",
-                          borderRadius: "18px",
-                          padding: "14px"
+                          width: "100%",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          textDecoration: "none",
+                          borderRadius: "16px",
+                          border: "1px solid #d1d5db",
+                          background: "#f9fafb",
+                          color: "#111827",
+                          padding: "0 16px",
+                          height: "46px",
+                          boxSizing: "border-box",
+                          fontWeight: 800,
+                          fontSize: "13px",
+                          whiteSpace: "nowrap"
                         }}
                       >
-                        <div
-                          style={{
-                            fontSize: "12px",
-                            fontWeight: 800,
-                            letterSpacing: "0.08em",
-                            color: "#6b7280",
-                            marginBottom: "8px"
-                          }}
-                        >
-                          GEDEELDE GSM-NUMMERS
-                        </div>
-
-                        {box.shareSummary && box.shareSummary.totalActive > 0 ? (
-                          <>
-                            <div
-                              style={{
-                                display: "flex",
-                                flexWrap: "wrap",
-                                gap: "8px",
-                                marginBottom: "10px"
-                              }}
-                            >
-                              {box.shareSummary.phoneNumbers.map((phoneNumber) => (
-                                <span
-                                  key={phoneNumber}
-                                  style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    padding: "6px 10px",
-                                    borderRadius: "999px",
-                                    background: "#eef2ff",
-                                    color: "#1f2937",
-                                    fontWeight: 700,
-                                    fontSize: "13px",
-                                    border: "1px solid #c7d2fe"
-                                  }}
-                                >
-                                  📱 {phoneNumber}
-                                </span>
-                              ))}
-
-                              {box.shareSummary.totalActive > box.shareSummary.phoneNumbers.length && (
-                                <span
-                                  style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    padding: "6px 10px",
-                                    borderRadius: "999px",
-                                    background: "#f3f4f6",
-                                    color: "#374151",
-                                    fontWeight: 700,
-                                    fontSize: "13px",
-                                    border: "1px solid #d1d5db"
-                                  }}
-                                >
-                                  + nog {box.shareSummary.totalActive - box.shareSummary.phoneNumbers.length}
-                                </span>
-                              )}
-                            </div>
-                            <div
-                              style={{
-                                color: "#4b5563",
-                                fontWeight: 600,
-                                lineHeight: 1.4
-                              }}
-                            >
-                              {box.shareSummary.totalActive} nummer{box.shareSummary.totalActive === 1 ? "" : "s"} gekoppeld
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div
-                              style={{
-                                color: "#4b5563",
-                                fontWeight: 600,
-                                lineHeight: 1.4,
-                                marginBottom: "6px"
-                              }}
-                            >
-                              Geen gedeelde nummers
-                            </div>
-                            <div
-                              style={{
-                                color: "#6b7280",
-                                fontWeight: 600,
-                                lineHeight: 1.4
-                              }}
-                            >
-                              Deze Gridbox lijkt vrij
-                            </div>
-                          </>
-                        )}
-                      </div>
+                        COCKPIT
+                      </Link>
                     </div>
                   </article>
                 );
@@ -967,7 +904,7 @@ export default function Home() {
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
-              gap: "10px",
+              gap: "8px",
               flexWrap: "wrap"
             }}
           >
@@ -996,7 +933,7 @@ export default function Home() {
             background: "#111827",
             color: "#ffffff",
             padding: "14px 18px",
-            borderRadius: "16px",
+            borderRadius: "14px",
             boxShadow: "0 16px 40px rgba(17, 24, 39, 0.28)",
             fontWeight: 700,
             maxWidth: "360px",
@@ -1009,9 +946,3 @@ export default function Home() {
     </main>
   );
 }
-
-
-
-
-
-

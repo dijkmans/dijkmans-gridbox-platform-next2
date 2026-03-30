@@ -32,7 +32,7 @@ export default function SmartToggleButton({
 
     try {
       setIsProcessing(true);
-      onNotify(`Gridbox ${fallbackName} is aan het ${actionLabel}... ⏳`);
+      onNotify(`Gridbox ${fallbackName} is aan het ${actionLabel}... ${"\u23F3"}`);
 
       const token = await auth.currentUser?.getIdToken();
       const res = await fetch(apiUrl(`/portal/boxes/${boxId}/${action}`), {
@@ -47,7 +47,7 @@ export default function SmartToggleButton({
       await onActionComplete?.();
     } catch (error) {
       console.error(`[SmartToggleButton] Fout bij ${actionLabel}`, error);
-      onNotify(`Fout bij ${actionLabel}. ❌`);
+      onNotify(`Fout bij ${actionLabel}. ${"\u274C"}`);
     } finally {
       setIsProcessing(false);
     }
@@ -55,7 +55,9 @@ export default function SmartToggleButton({
 
   const isOpenClass = isOpen ? "is-open" : "";
   const isTextDarkClass = isOpen ? "is-open-text" : "";
-  const buttonText = isOpen ? "CLOSE GRIDBOX 🔒" : "OPEN GRIDBOX 🔓";
+  
+  // Tekst compacter gemaakt voor een betere layout naast de Cockpit knop
+  const buttonText = isOpen ? `CLOSE ${"\u{1F512}"}` : `OPEN ${"\u{1F513}"}`;
 
   return (
     <>
@@ -74,18 +76,19 @@ export default function SmartToggleButton({
           display: flex;
           align-items: center;
           justify-content: center;
-          height: 56px;
-          min-width: 220px;
-          padding: 0 24px;
+          height: 46px;
+          width: 100%;
+          padding: 0 12px;
           border-radius: 16px;
-          font-size: 14px;
+          font-size: 13px;
           font-weight: 900;
           border: none;
           overflow: hidden;
           cursor: pointer;
           background-color: #d1fae5;
-          box-shadow: 0 8px 20px -4px rgba(16,185,129,0.5);
+          box-shadow: 0 8px 18px -4px rgba(16,185,129,0.45);
           transition: box-shadow 0.3s ease, opacity 0.2s ease;
+          white-space: nowrap;
         }
         .smart-btn:disabled {
           cursor: not-allowed;
@@ -120,7 +123,7 @@ export default function SmartToggleButton({
         .btn-text {
           position: relative;
           z-index: 2;
-          letter-spacing: 1px;
+          letter-spacing: 0.8px;
           color: #ffffff;
           transition: color 0.3s ease;
         }
