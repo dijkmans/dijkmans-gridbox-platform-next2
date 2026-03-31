@@ -392,7 +392,7 @@ router.post("/portal/boxes/:id/shares", async (req, res) => {
     const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
     const context = await requireCustomerContext(portalUser.email);
     const boxId = req.params.id;
-    const { phoneNumber, label } = req.body ?? {};
+    const { phoneNumber, label, status } = req.body ?? {};
 
     console.log("PORTAL BOX CREATE SHARE REQUEST", {
       boxId,
@@ -450,12 +450,13 @@ router.post("/portal/boxes/:id/shares", async (req, res) => {
       });
     }
 
-    // --- DE ACTIE: Status aanpassen naar PENDING (Klaargezet) ---
-    // De SMS wordt NIET verstuurd (active: false)
+    const normalizedStatus = status === "active" ? "active" : "pending";
+    const isActiveShare = normalizedStatus === "active";
+
     await shareRef.set({
       name: normalizedLabel,
-      status: "pending", // Status changed from 'active' to 'pending'
-      active: false,    // Set to false to prevent SMS trigger
+      status: normalizedStatus,
+      active: isActiveShare,
       createdAt: new Date().toISOString(),
       addedBy: portalUser.email || "portal-user"
     });
@@ -465,7 +466,7 @@ router.post("/portal/boxes/:id/shares", async (req, res) => {
       boxId,
       phoneNumber: normalizedPhoneNumber,
       label: normalizedLabel || null,
-      status: "pending"
+      status: normalizedStatus
     });
   } catch (error) {
     const statusCode = getStatusCode(error);
