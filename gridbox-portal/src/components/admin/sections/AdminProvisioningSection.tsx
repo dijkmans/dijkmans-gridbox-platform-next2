@@ -234,9 +234,7 @@ export default function AdminProvisioningSection({
                   <div className="mt-4 space-y-3 text-sm">
                     <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                       <span className="text-slate-500">Klant</span>
-                      <span className="font-semibold text-slate-900">
-                        {customerLabel}
-                      </span>
+                      <span className="font-semibold text-slate-900">{customerLabel}</span>
                     </div>
 
                     <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -410,6 +408,169 @@ export default function AdminProvisioningSection({
                   <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm leading-7 text-blue-900">
                     De juiste volgende backendstap is later een echte create-call die dit voorstel
                     omzet in een provisioningrecord. Niet de frontend laten doen alsof dat al gebeurd is.
+                  </div>
+                </>
+              )}
+            </div>
+          ) : selectedProvisioningStep === 2 ? (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">SD-kaart klaarleggen</h3>
+                <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
+                  Dit is bewust een simpele fysieke stap. Wout moet hier niet nadenken over software,
+                  alleen zeker zijn dat hij met de juiste lege kaart werkt.
+                </p>
+              </div>
+
+              {!stepOneReady ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
+                  Stap 1 is nog niet klaar. Kies eerst een geldige klant, site en unieke box-ID.
+                  Anders weet je nog niet voor welke box je de kaart aan het voorbereiden bent.
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <div className="text-sm font-semibold text-slate-900">
+                        Wat je nu fysiek moet doen
+                      </div>
+
+                      <div className="mt-4 space-y-3 text-sm text-slate-700">
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>Neem een lege SD-kaart voor <strong>{normalizedBoxId}</strong>.</span>
+                        </label>
+
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>Steek de kaart in je pc of kaartlezer.</span>
+                        </label>
+
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>Controleer dat je niet per ongeluk een andere schijf of werkkaart gaat overschrijven.</span>
+                        </label>
+
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>Bevestig voor jezelf dat deze kaart bij klant <strong>{customerLabel}</strong> en site <strong>{trimmedSiteId}</strong> hoort.</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <div className="text-sm font-semibold text-slate-900">
+                        Waarom deze stap apart staat
+                      </div>
+
+                      <div className="mt-4 space-y-3 text-sm leading-7 text-slate-600">
+                        <p>
+                          Omdat dit een typische foutbron is. Als Wout hier al tegelijk moet nadenken over
+                          Imager, bootstrapbestanden en netwerk, gaat hij sneller een kaart of schijf verwisselen.
+                        </p>
+                        <p>
+                          Dus eerst alleen de juiste kaart klaarleggen. Pas daarna tonen we de Imager-instellingen.
+                        </p>
+                      </div>
+
+                      <div className="mt-4 rounded-xl bg-blue-50 px-4 py-4 text-sm text-blue-900">
+                        Huidige context: <strong>{normalizedBoxId}</strong> voor <strong>{customerLabel}</strong> op <strong>{trimmedSiteId}</strong>.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm leading-7 text-blue-900">
+                    Deze stap bewaart nog niets. Het doel is alleen Wout rustig en foutarm naar de volgende fysieke stap te brengen.
+                  </div>
+                </>
+              )}
+            </div>
+          ) : selectedProvisioningStep === 3 ? (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Imager instellingen</h3>
+                <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
+                  Hier moet alles zichtbaar op het scherm staan. Wout mag niets uit het hoofd moeten onthouden.
+                </p>
+              </div>
+
+              {!stepOneReady ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
+                  Stap 1 is nog niet klaar. Eerst klant, site en geldige box-ID vastleggen.
+                  Anders kunnen de Imager-instellingen nog niet betrouwbaar voorbereid worden.
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <div className="text-sm font-semibold text-slate-900">
+                        Gebruik exact deze waarden
+                      </div>
+
+                      <div className="mt-4 space-y-3 text-sm">
+                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <span className="text-slate-500">OS</span>
+                          <span className="font-semibold text-slate-900">Raspberry Pi OS Lite 64-bit</span>
+                        </div>
+
+                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <span className="text-slate-500">Hostname</span>
+                          <span className="font-semibold text-slate-900">{normalizedBoxId}</span>
+                        </div>
+
+                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <span className="text-slate-500">Gebruiker</span>
+                          <span className="font-semibold text-slate-900">pi</span>
+                        </div>
+
+                        <div className="flex items-start justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                          <span className="text-amber-800">Wachtwoord</span>
+                          <span className="font-semibold text-amber-900">Gebruik de vaste installatiewaarde</span>
+                        </div>
+
+                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <span className="text-slate-500">SSH</span>
+                          <span className="font-semibold text-slate-900">AAN</span>
+                        </div>
+
+                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <span className="text-slate-500">Netwerk</span>
+                          <span className="font-semibold text-slate-900">Bekabeld waar mogelijk</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <div className="text-sm font-semibold text-slate-900">
+                        Controle voor Wout
+                      </div>
+
+                      <div className="mt-4 space-y-3 text-sm text-slate-700">
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>Ik heb Raspberry Pi Imager geopend.</span>
+                        </label>
+
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>Ik heb <strong>{normalizedBoxId}</strong> als hostname ingevuld.</span>
+                        </label>
+
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>Ik heb gebruiker <strong>pi</strong> en de vaste installatiewaarde gebruikt.</span>
+                        </label>
+
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>Ik heb SSH aangezet en de juiste kaart geselecteerd.</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
+                    Het wachtwoord is hier nog niet hard gekoppeld in de cockpit. Dat is bewust nog niet verzonnen in frontendcode. Gebruik voorlopig de afgesproken vaste installatiewaarde.
                   </div>
                 </>
               )}

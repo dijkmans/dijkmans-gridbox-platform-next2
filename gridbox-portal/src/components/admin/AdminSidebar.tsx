@@ -46,9 +46,9 @@ export default function AdminSidebar({
 
       <div className="border-t border-slate-800 px-6 py-5">
         <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-          <div className="text-sm font-semibold text-white">Slice 2</div>
+          <div className="text-sm font-semibold text-white">Installatierichting</div>
           <p className="mt-2 text-sm leading-6 text-slate-400">
-            We splitsen nu de veilige UI-blokken uit zodat de admin geen monoliet blijft.
+            Nieuwe boxen krijgen hier stap voor stap voorbereiding. Geen losse installatielogica verspreid door de admin.
           </p>
         </div>
       </div>

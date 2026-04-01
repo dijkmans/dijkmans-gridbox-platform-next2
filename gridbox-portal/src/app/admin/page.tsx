@@ -406,14 +406,16 @@ export default function AdminPage() {
                   Huidige werkende admin met eerste nieuwe structuur.
                 </p>
               </div>
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => setActiveSection("provisioning")}
-                  className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-black"
-                >
-                  + Nieuwe Gridbox installeren
-                </button>
+              <div className="flex flex-wrap items-center gap-3">
+                {activeSection !== "provisioning" && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveSection("provisioning")}
+                    className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-black"
+                  >
+                    + Nieuwe Gridbox installeren
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => loadAdminData(true)}
@@ -421,7 +423,9 @@ export default function AdminPage() {
                 >
                   Ververs
                 </button>
-                <AuthPanel />
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  <AuthPanel />
+                </div>
               </div>
             </div>
 
@@ -629,6 +633,7 @@ export default function AdminPage() {
     </main>
   );
 }
+
 
 
 
