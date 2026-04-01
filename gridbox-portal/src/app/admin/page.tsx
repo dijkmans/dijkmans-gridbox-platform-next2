@@ -12,87 +12,22 @@ import AdminInvitesSection from "@/components/admin/sections/AdminInvitesSection
 import AdminMembershipsSection from "@/components/admin/sections/AdminMembershipsSection";
 import AdminRolesSection from "@/components/admin/sections/AdminRolesSection";
 import AdminLogsSection from "@/components/admin/sections/AdminLogsSection";
+import type {
+  ActiveSection,
+  CustomerItem,
+  MembershipItem,
+  InviteItem,
+  CustomerBoxAccessItem,
+  AdminBoxItem,
+  AdminRoleItem
+} from "@/components/admin/types";
+import {
+  getBoxLabel,
+  isValidEmail,
+  formatDate,
+  getRoleLabel
+} from "@/components/admin/helpers";
 
-type CustomerItem = {
-  id: string;
-  name?: string;
-  active?: boolean;
-  createdAt?: string;
-  addedBy?: string;
-};
-
-type MembershipItem = {
-  id: string;
-  email?: string;
-  customerId?: string;
-  role?: string;
-};
-
-type InviteItem = {
-  id: string;
-  email?: string;
-  customerId?: string;
-  role?: string;
-  status?: string;
-  createdAt?: string;
-};
-
-type CustomerBoxAccessItem = {
-  id: string;
-  customerId?: string;
-  boxId?: string;
-  active?: boolean;
-  createdAt?: string;
-  addedBy?: string;
-};
-
-type AdminBoxItem = {
-  id: string;
-  boxId?: string;
-  siteId?: string | null;
-  customerId?: string | null;
-  updatedAt?: string | null;
-};
-
-type AdminRoleItem = {
-  id: string;
-  label: string;
-  active?: boolean;
-  assignableInAdmin?: boolean;
-};
-
-type ActiveSection =
-  | "dashboard"
-  | "provisioning"
-  | "customers"
-  | "sites"
-  | "boxes"
-  | "invites"
-  | "memberships"
-  | "roles"
-  | "logs";
-
-function getBoxLabel(box: AdminBoxItem) {
-  const id = box.boxId || box.id;
-  const site = box.siteId || "geen-site";
-  return `${id} (${site})`;
-}
-
-function isValidEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
-}
-
-function formatDate(value?: string | null) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString("nl-BE");
-}
-
-function getRoleLabel(roleId: string | undefined, roles: AdminRoleItem[]) {
-  if (!roleId) return "-";
-  return roles.find((role) => role.id === roleId)?.label || roleId;
-}
 
 export default function AdminPage() {
   const [customers, setCustomers] = useState<CustomerItem[]>([]);
@@ -756,6 +691,9 @@ export default function AdminPage() {
     </main>
   );
 }
+
+
+
 
 
 
