@@ -2,7 +2,6 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { auth } from "@/lib/firebase";
-import { apiUrl } from "@/lib/api";
 import AuthPanel from "@/components/AuthPanel";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminDashboardSection from "@/components/admin/sections/AdminDashboardSection";
@@ -12,6 +11,16 @@ import AdminInvitesSection from "@/components/admin/sections/AdminInvitesSection
 import AdminMembershipsSection from "@/components/admin/sections/AdminMembershipsSection";
 import AdminRolesSection from "@/components/admin/sections/AdminRolesSection";
 import AdminLogsSection from "@/components/admin/sections/AdminLogsSection";
+import {
+  fetchAdminCustomers,
+  fetchAdminMemberships,
+  fetchAdminCustomerBoxAccess,
+  fetchAdminBoxes,
+  fetchAdminInvites,
+  fetchAdminRoles,
+  postAdminJson,
+  deleteAdminPath
+} from "@/components/admin/adminApi";
 import type {
   ActiveSection,
   CustomerItem,
@@ -97,14 +106,14 @@ export default function AdminPage() {
         invitesRes,
         rolesRes
       ] = await Promise.all([
-        fetch(apiUrl("/admin/customers"), { headers }),
-        fetch(apiUrl("/admin/memberships"), { headers }),
-        fetch(apiUrl("/admin/customer-box-access"), { headers }),
-        fetch(apiUrl("/admin/boxes"), { headers }),
-        fetch(apiUrl("/admin/invites"), { headers }).catch(
+        fetchAdminCustomers({ token }),
+        fetchAdminMemberships({ token }),
+        fetchAdminCustomerBoxAccess({ token }),
+        fetchAdminBoxes({ token }),
+        fetchAdminInvites({ token }).catch(
           () => ({ ok: false, json: async () => ({ items: [] }) } as any)
         ),
-        fetch(apiUrl("/admin/roles"), { headers }).catch(
+        fetchAdminRoles({ token }).catch(
           () => ({ ok: false, json: async () => ({ items: [] }) } as any)
         )
       ]);
@@ -175,13 +184,9 @@ export default function AdminPage() {
     }
 
     const token = await user.getIdToken();
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify(body)
+    const res = await postAdminJson(url, {
+      token,
+      body
     });
 
     const data = await res.json();
@@ -202,7 +207,7 @@ export default function AdminPage() {
       return setErrorMessage("ID en naam zijn verplicht");
     }
 
-    const result = await postJson(apiUrl("/admin/customers"), {
+    const result = await postJson("/admin/customers", {
       id: customerId,
       name: customerName
     });
@@ -244,7 +249,7 @@ export default function AdminPage() {
       scope: permissions.length > 0 ? { permissions } : {}
     };
 
-    const result = await postJson(apiUrl("/admin/invites"), body);
+    const result = await postJson("/admin/invites", body);
     if (result) {
       const defaultInviteRole =
         inviteRoles.find((role) => role.id === "customerViewer")?.id ||
@@ -269,7 +274,7 @@ export default function AdminPage() {
       return setErrorMessage("Kies een box");
     }
 
-    const result = await postJson(apiUrl("/admin/customer-box-access"), {
+    const result = await postJson("/admin/customer-box-access", {
       customerId: selectedCustomerId,
       boxId: accessBoxId
     });
@@ -284,7 +289,7 @@ export default function AdminPage() {
   async function handleSetCustomerStatus(customerId: string, active: boolean) {
     if (
       await postJson(
-        apiUrl(`/admin/customers/${encodeURIComponent(customerId)}/status`),
+        `/admin/customers/${encodeURIComponent(customerId)}/status`,
         { active }
       )
     ) {
@@ -296,7 +301,7 @@ export default function AdminPage() {
   async function handleSetAccessStatus(accessId: string, active: boolean) {
     if (
       await postJson(
-        apiUrl(`/admin/customer-box-access/${encodeURIComponent(accessId)}/status`),
+        `/admin/customer-box-access/${encodeURIComponent(accessId)}/status`,
         { active }
       )
     ) {
@@ -319,9 +324,8 @@ export default function AdminPage() {
     setSuccessMessage("");
 
     const token = await user.getIdToken();
-    const res = await fetch(apiUrl(`/admin/invites/${encodeURIComponent(inviteId)}`), {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` }
+    const res = await deleteAdminPath(`/admin/invites/${encodeURIComponent(inviteId)}`, {
+      token
     });
 
     const data = await res.json();
@@ -347,9 +351,8 @@ export default function AdminPage() {
     setSuccessMessage("");
 
     const token = await user.getIdToken();
-    const res = await fetch(apiUrl(`/admin/memberships/${encodeURIComponent(membershipId)}`), {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` }
+    const res = await deleteAdminPath(`/admin/memberships/${encodeURIComponent(membershipId)}`, {
+      token
     });
 
     const data = await res.json();
@@ -613,6 +616,7 @@ export default function AdminPage() {
     </main>
   );
 }
+
 
 
 
