@@ -79,6 +79,10 @@ export default function AdminPage() {
 
   const [accessBoxId, setAccessBoxId] = useState("");
 
+  const [provisioningCustomerId, setProvisioningCustomerId] = useState("");
+  const [provisioningSiteId, setProvisioningSiteId] = useState("");
+  const [provisioningBoxId, setProvisioningBoxId] = useState("");
+
   const sortedBoxes = [...boxes].sort((a, b) => getBoxLabel(a).localeCompare(getBoxLabel(b)));
 
   async function loadAdminData(clearFeedback = false) {
@@ -454,6 +458,15 @@ export default function AdminPage() {
                 selectedProvisioningStep={selectedProvisioningStep}
                 provisioningSteps={provisioningSteps}
                 provisioningStepContent={provisioningStepContent}
+                customers={customers}
+                siteSummaries={siteSummaries}
+                boxes={boxes}
+                provisioningCustomerId={provisioningCustomerId}
+                provisioningSiteId={provisioningSiteId}
+                provisioningBoxId={provisioningBoxId}
+                onProvisioningCustomerChange={setProvisioningCustomerId}
+                onProvisioningSiteChange={setProvisioningSiteId}
+                onProvisioningBoxIdChange={setProvisioningBoxId}
                 onStepChange={setSelectedProvisioningStep}
               />
             )}
@@ -616,6 +629,7 @@ export default function AdminPage() {
     </main>
   );
 }
+
 
 
 
