@@ -24,9 +24,23 @@ import type {
 import {
   getBoxLabel,
   isValidEmail,
-  formatDate,
-  getRoleLabel
+  formatDate
 } from "@/components/admin/helpers";
+import {
+  navigationItems,
+  provisioningSteps,
+  provisioningStepContent,
+  getPendingInvites,
+  getCustomerSummaries,
+  getSiteSummaries,
+  getAdminRoleLabel as getDerivedAdminRoleLabel,
+  getActiveCustomersCount,
+  getActiveAccessCount,
+  getCustomerMembers,
+  getCustomerInvites,
+  getCustomerAccess,
+  getSelectedCustomer
+} from "@/components/admin/derived";
 
 
 export default function AdminPage() {
@@ -347,114 +361,22 @@ export default function AdminPage() {
     await loadAdminData(false);
   }
 
-  const selectedCustomer = customers.find((customer) => customer.id === selectedCustomerId);
-  const customerMembers = memberships.filter((member) => member.customerId === selectedCustomerId);
-  const customerInvites = invites.filter(
-    (invite) => invite.customerId === selectedCustomerId && invite.status === "pending"
-  );
-  const customerAccess = customerBoxAccess.filter(
-    (access) => access.customerId === selectedCustomerId
-  );
+  const selectedCustomer = getSelectedCustomer(customers, selectedCustomerId);
+  const customerMembers = getCustomerMembers(memberships, selectedCustomerId);
+  const customerInvites = getCustomerInvites(invites, selectedCustomerId);
+  const customerAccess = getCustomerAccess(customerBoxAccess, selectedCustomerId);
 
-  const activeCustomersCount = customers.filter((customer) => customer.active !== false).length;
+  const activeCustomersCount = getActiveCustomersCount(customers);
   const membershipCount = memberships.length;
-  const pendingInviteCount = invites.filter((invite) => invite.status === "pending").length;
-  const activeAccessCount = customerBoxAccess.filter((access) => access.active !== false).length;
+  const pendingInvites = getPendingInvites(invites);
+  const pendingInviteCount = pendingInvites.length;
+  const activeAccessCount = getActiveAccessCount(customerBoxAccess);
 
-  const siteSummaryMap = new Map<
-    string,
-    { siteId: string; boxCount: number; customerIds: Set<string> }
-  >();
+  const siteSummaries = getSiteSummaries(boxes);
+  const customerSummaries = getCustomerSummaries(customers, memberships, customerBoxAccess);
 
-  boxes.forEach((box) => {
-    const siteId = box.siteId || "geen-site";
-    const existing = siteSummaryMap.get(siteId) || {
-      siteId,
-      boxCount: 0,
-      customerIds: new Set<string>()
-    };
-
-    existing.boxCount += 1;
-    if (box.customerId) {
-      existing.customerIds.add(box.customerId);
-    }
-
-    siteSummaryMap.set(siteId, existing);
-  });
-
-  const siteSummaries = Array.from(siteSummaryMap.values()).sort((a, b) =>
-    a.siteId.localeCompare(b.siteId)
-  );
-
-  const customerSummaries = customers.map((customer) => ({
-    id: customer.id,
-    name: customer.name,
-    active: customer.active,
-    memberCount: memberships.filter((membership) => membership.customerId === customer.id).length,
-    accessCount: customerBoxAccess.filter((access) => access.customerId === customer.id).length
-  }));
-  const navigationItems: Array<{ id: ActiveSection; label: string }> = [
-    { id: "dashboard", label: "Dashboard" },
-    { id: "provisioning", label: "Installatiecockpit" },
-    { id: "customers", label: "Klanten" },
-    { id: "sites", label: "Sites" },
-    { id: "boxes", label: "Boxen" },
-    { id: "invites", label: "Uitnodigingen" },
-    { id: "memberships", label: "Gebruikerstoegang" },
-    { id: "roles", label: "Rollen en rechten" },
-    { id: "logs", label: "Provisioning logs" }
-  ];
-
-  const pendingInvites = invites.filter((invite) => invite.status === "pending");
-
-  const getAdminRoleLabel = (roleId: string | undefined) => getRoleLabel(roleId, inviteRoles);
-  const provisioningSteps = [
-    "Nieuwe box voorbereiden",
-    "Installatievoorbereiding aanmaken",
-    "SD-kaart klaarleggen",
-    "Imager instellingen",
-    "Opstartbestanden",
-    "Eerste opstart",
-    "Live controle"
-  ];
-
-  const provisioningStepContent = [
-    {
-      title: "Nieuwe box voorbereiden",
-      text:
-        "Hier hoort straks de eerste stap van de wizard te komen. Box ID, klant en site moeten hier bewust gekozen worden. Niet terug naar losse locatievelden op boxniveau."
-    },
-    {
-      title: "Installatievoorbereiding aanmaken",
-      text:
-        "Deze stap moet later een backend-call worden die een provisioningrecord en beperkte bootstrapinfo aanmaakt. Niet in de frontend zelf verzinnen."
-    },
-    {
-      title: "SD-kaart klaarleggen",
-      text:
-        "Wout moet hier maar één fysieke taak tegelijk zien. Geen technische chaos, gewoon duidelijke checkstappen."
-    },
-    {
-      title: "Imager instellingen",
-      text:
-        "Hostname, gebruiker, wachtwoord, SSH en OS-keuze moeten zichtbaar op het scherm staan. Niets uit het hoofd laten onthouden."
-    },
-    {
-      title: "Opstartbestanden",
-      text:
-        "De richting blijft beperkt bootstrapmateriaal. Geen brede secrets als standaard op de SD-kaart."
-    },
-    {
-      title: "Eerste opstart",
-      text:
-        "Deze stap moet later live tonen wanneer de Pi zichzelf claimt en voor het eerst online komt."
-    },
-    {
-      title: "Live controle",
-      text:
-        "Pas wanneer backend en device dit echt bevestigen, mag een installatie als klaar getoond worden."
-    }
-  ];
+  const getAdminRoleLabel = (roleId: string | undefined) =>
+    getDerivedAdminRoleLabel(roleId, inviteRoles);
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-800">
@@ -691,6 +613,7 @@ export default function AdminPage() {
     </main>
   );
 }
+
 
 
 
