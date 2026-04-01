@@ -575,6 +575,97 @@ export default function AdminProvisioningSection({
                 </>
               )}
             </div>
+          ) : selectedProvisioningStep === 4 ? (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Opstartbestanden</h3>
+                <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
+                  Deze stap toont welke beperkte opstartbestanden later op de kaart verwacht worden.
+                  Nog geen echte download, wel duidelijk maken wat Wout straks fysiek moet doen.
+                </p>
+              </div>
+
+              {!stepOneReady ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
+                  Stap 1 is nog niet klaar. Eerst klant, site en geldige box-ID vastleggen.
+                  Anders heeft het geen zin om opstartbestanden voor te bereiden.
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <div className="text-sm font-semibold text-slate-900">
+                        Bestanden die later verwacht worden
+                      </div>
+
+                      <div className="mt-4 space-y-3 text-sm">
+                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <span className="text-slate-500">Verplicht</span>
+                          <span className="font-semibold text-slate-900">box_bootstrap.json</span>
+                        </div>
+
+                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <span className="text-slate-500">Optioneel</span>
+                          <span className="font-semibold text-slate-900">ssh</span>
+                        </div>
+
+                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <span className="text-slate-500">Optioneel</span>
+                          <span className="font-semibold text-slate-900">userconf.txt</span>
+                        </div>
+
+                        <div className="flex items-start justify-between gap-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+                          <span className="text-blue-800">Voor deze box</span>
+                          <span className="font-semibold text-blue-900">{normalizedBoxId}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <div className="text-sm font-semibold text-slate-900">
+                        Wat Wout fysiek moet doen
+                      </div>
+
+                      <div className="mt-4 space-y-3 text-sm text-slate-700">
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>Steek de vers gebrande kaart opnieuw in je pc.</span>
+                        </label>
+
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>Open de bootpartitie van de SD-kaart.</span>
+                        </label>
+
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>Zet de opstartbestanden in de hoofdmap van die partitie.</span>
+                        </label>
+
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>Controleer nog eens dat de kaart bij <strong>{normalizedBoxId}</strong> hoort voor <strong>{customerLabel}</strong>.</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
+                    Belangrijk: in de eindrichting horen hier alleen beperkte opstartbestanden te staan. Geen brede secrets en geen losse cloudsleutels als standaard.
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="text-sm font-semibold text-slate-900">
+                      Wat hier bewust nog niet gebeurt
+                    </div>
+                    <p className="mt-3 text-sm leading-7 text-slate-600">
+                      Er is nog geen echte downloadknop of bestandsgeneratie aangesloten.
+                      Dat mag pas zodra de backend later echt het provisioningrecord en de beperkte bootstrapinfo kan leveren.
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
           ) : (
             <div>
               <h3 className="text-xl font-bold text-slate-900">
