@@ -5,6 +5,7 @@ import meRoutes from "./routes/me";
 import boxRoutes from "./routes/boxes";
 import adminRoutes from "./routes/admin";
 import invitesRoutes from "./routes/invites";
+import deviceRoutes from "./routes/device";
 
 export function createApp() {
   const app = express();
@@ -19,6 +20,7 @@ export function createApp() {
   app.use(boxRoutes);
   app.use(adminRoutes);
   app.use(invitesRoutes);
+  app.use(deviceRoutes);
 
   app.use((_req, res) => {
     res.status(404).json({
