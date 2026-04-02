@@ -777,7 +777,7 @@ def load_box_state_from_firestore():
 # HEARTBEAT + SOFTWARE STATUS
 # =========================================================
 
-def try_backend_heartbeat(version_raspberry):
+def try_backend_heartbeat(version_raspberry, software_update):
     if not isinstance(runtime_config, dict) or not runtime_config:
         return False
 
@@ -791,7 +791,8 @@ def try_backend_heartbeat(version_raspberry):
     payload = {
         "boxId": DOCUMENT_ID,
         "deviceName": DOCUMENT_ID,
-        "softwareVersion": version_raspberry
+        "softwareVersion": version_raspberry,
+        "software": software_update
     }
 
     if provisioning_id:
@@ -861,7 +862,7 @@ def update_pi_status():
             "lastError": last_error
         }
 
-        backend_heartbeat_ok = try_backend_heartbeat(version_raspberry)
+        backend_heartbeat_ok = try_backend_heartbeat(version_raspberry, software_update)
 
         if not backend_heartbeat_ok:
             log("WARN: backend heartbeat failed, keeping direct Firestore sync only")
