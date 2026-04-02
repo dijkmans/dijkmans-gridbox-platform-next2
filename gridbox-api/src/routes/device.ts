@@ -110,6 +110,16 @@ router.post("/device/bootstrap/claim", async (req, res) => {
       });
     }
 
+        const host = req.get("host");
+
+    if (!host) {
+      return res.status(500).json({
+        error: "API_BASE_URL_UNAVAILABLE",
+        message: "Kon geen geldige apiBaseUrl bepalen"
+      });
+    }
+
+    const apiBaseUrl = `${req.protocol}://${host}`;
     const claimedAt = nowIso();
     const boxRef = db.collection("boxes").doc(boxId);
     const batch = db.batch();
@@ -139,7 +149,7 @@ router.post("/device/bootstrap/claim", async (req, res) => {
 
     await batch.commit();
 
-    return res.json({
+        return res.json({
       ok: true,
       item: {
         provisioningId,
@@ -147,7 +157,14 @@ router.post("/device/bootstrap/claim", async (req, res) => {
         customerId,
         siteId,
         status: "claimed",
-        claimedAt
+        claimedAt,
+        apiBaseUrl,
+        runtimeConfig: {
+          boxId,
+          customerId,
+          siteId,
+          apiBaseUrl
+        }
       }
     });
   } catch (error) {
