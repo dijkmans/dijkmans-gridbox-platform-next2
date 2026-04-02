@@ -752,6 +752,91 @@ export default function AdminProvisioningSection({
                 </>
               )}
             </div>
+          ) : selectedProvisioningStep === 6 ? (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Live controle</h3>
+                <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
+                  Hier controleert Wout of de eerste opstart waarschijnlijk goed verlopen is.
+                  Nog altijd zonder fake bevestiging vanuit frontend alleen.
+                </p>
+              </div>
+
+              {!stepOneReady ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
+                  Stap 1 is nog niet klaar. Eerst klant, site en geldige box-ID vastleggen.
+                  Anders heeft live controle inhoudelijk nog geen zin.
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <div className="text-sm font-semibold text-slate-900">
+                        Wat Wout nu moet controleren
+                      </div>
+
+                      <div className="mt-4 space-y-3 text-sm text-slate-700">
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>De box heeft stroom en blijft stabiel opgestart.</span>
+                        </label>
+
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>Netwerk of bekabeling lijkt fysiek correct aangesloten.</span>
+                        </label>
+
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>Er zijn geen directe signalen dat de verkeerde kaart of verkeerde box gebruikt is.</span>
+                        </label>
+
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>Je controleert deze opstart voor <strong>{normalizedBoxId}</strong> bij <strong>{customerLabel}</strong> op <strong>{trimmedSiteId}</strong>.</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <div className="text-sm font-semibold text-slate-900">
+                        Wat hier later backendmatig bevestigd moet worden
+                      </div>
+
+                      <div className="mt-4 space-y-3 text-sm leading-7 text-slate-600">
+                        <div className="rounded-xl bg-slate-50 px-4 py-3">
+                          De Pi heeft zichzelf geclaimd met de juiste boxcontext.
+                        </div>
+                        <div className="rounded-xl bg-slate-50 px-4 py-3">
+                          De eerste heartbeat of online-melding is binnen.
+                        </div>
+                        <div className="rounded-xl bg-slate-50 px-4 py-3">
+                          De backend herkent deze installatie als dezelfde box die in stap 1 voorbereid werd.
+                        </div>
+                      </div>
+
+                      <div className="mt-4 rounded-xl bg-amber-50 px-4 py-4 text-sm text-amber-900">
+                        Deze bevestigingen worden hier nu nog niet live uit backend of device gelezen.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm leading-7 text-blue-900">
+                    Pas wanneer backend en device dit later echt bevestigen, mag deze installatie als klaar of online getoond worden.
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="text-sm font-semibold text-slate-900">
+                      Bewuste grens van deze stap
+                    </div>
+                    <p className="mt-3 text-sm leading-7 text-slate-600">
+                      Deze cockpit toont hier nog geen echte claim-status, heartbeat of definitieve online-status.
+                      Anders zouden we opnieuw schijnzekerheid inbouwen.
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
           ) : (
             <div>
               <h3 className="text-xl font-bold text-slate-900">
@@ -777,4 +862,5 @@ export default function AdminProvisioningSection({
     </section>
   );
 }
+
 
