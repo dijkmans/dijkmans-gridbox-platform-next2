@@ -1,4 +1,5 @@
-﻿import { Router } from "express";
+import { createHash, randomBytes } from "crypto";
+import { Router } from "express";
 import { requirePortalUser } from "../auth/verifyBearerToken";
 import { getMembershipByEmail } from "../repositories/membershipRepository";
 import { getFirestore } from "firebase-admin/firestore";
@@ -52,6 +53,63 @@ function getRoleLabel(roleId: SupportedMembershipRole, rawLabel: unknown): strin
   return roleId;
 }
 
+
+type ProvisioningStatus =
+  | "draft"
+  | "awaiting_sd_preparation"
+  | "awaiting_first_boot"
+  | "claimed"
+  | "online"
+  | "ready"
+  | "failed";
+
+type ProvisioningRecord = {
+  id: string;
+  boxId: string;
+  customerId: string;
+  siteId: string;
+  status: ProvisioningStatus;
+  bootstrapTokenHash: string;
+  createdAt: string;
+  createdBy: string;
+  claimedAt?: string;
+  claimedByDevice?: string;
+  lastHeartbeatAt?: string;
+  lastError?: string;
+  profileId?: string;
+  notes?: string;
+};
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function asTrimmedString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function normalizeBoxId(value: unknown): string | undefined {
+  const normalized = asTrimmedString(value)?.toLowerCase();
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(normalized)) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
 function getStatusCode(error: unknown): number {
   if (typeof error === "object" && error !== null && "statusCode" in error) {
     const value = (error as any).statusCode;
@@ -914,8 +972,215 @@ router.get("/admin/invites", async (req, res) => {
   }
 });
 
+
+router.post("/admin/provisioning/boxes", async (req, res) => {
+  try {
+    const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const boxId = normalizeBoxId(body.boxId);
+    const customerId = asTrimmedString(body.customerId);
+    const siteId = asTrimmedString(body.siteId);
+    const profileId = asTrimmedString(body.profileId);
+    const notes = asTrimmedString(body.notes);
+
+    if (!boxId) {
+      return res.status(400).json({
+        error: "INVALID_BOX_ID",
+        message: "Geldige boxId is verplicht"
+      });
+    }
+
+    if (!customerId) {
+      return res.status(400).json({
+        error: "INVALID_CUSTOMER_ID",
+        message: "customerId is verplicht"
+      });
+    }
+
+    if (!siteId) {
+      return res.status(400).json({
+        error: "INVALID_SITE_ID",
+        message: "siteId is verplicht"
+      });
+    }
+
+    const db = getFirestore();
+
+    const customerRef = db.collection("customers").doc(customerId);
+    const siteRef = db.collection("sites").doc(siteId);
+    const boxRef = db.collection("boxes").doc(boxId);
+
+    const [customerDoc, siteDoc, boxDoc] = await Promise.all([
+      customerRef.get(),
+      siteRef.get(),
+      boxRef.get()
+    ]);
+
+    if (!customerDoc.exists) {
+      return res.status(404).json({
+        error: "CUSTOMER_NOT_FOUND",
+        message: "Customer bestaat niet"
+      });
+    }
+
+    if (!siteDoc.exists) {
+      return res.status(404).json({
+        error: "SITE_NOT_FOUND",
+        message: "Site bestaat niet"
+      });
+    }
+
+    const siteData = siteDoc.data() ?? {};
+    if (siteData.customerId !== customerId) {
+      return res.status(400).json({
+        error: "SITE_CUSTOMER_MISMATCH",
+        message: "Site hoort niet bij de opgegeven customer"
+      });
+    }
+
+    if (boxDoc.exists) {
+      return res.status(409).json({
+        error: "BOX_ALREADY_EXISTS",
+        message: "Box bestaat al"
+      });
+    }
+
+    const existingProvisioningsSnapshot = await db
+      .collection("provisionings")
+      .where("boxId", "==", boxId)
+      .limit(10)
+      .get();
+
+    const blockingStatuses = new Set<ProvisioningStatus>([
+      "draft",
+      "awaiting_sd_preparation",
+      "awaiting_first_boot",
+      "claimed",
+      "online"
+    ]);
+
+    const existingBlocking = existingProvisioningsSnapshot.docs.find((doc) => {
+      const status = doc.data()?.status;
+      return typeof status === "string" && blockingStatuses.has(status as ProvisioningStatus);
+    });
+
+    if (existingBlocking) {
+      return res.status(409).json({
+        error: "PROVISIONING_ALREADY_EXISTS",
+        message: "Er bestaat al een actieve provisioning voor deze box",
+        provisioningId: existingBlocking.id
+      });
+    }
+
+    const provisioningRef = db.collection("provisionings").doc();
+    const bootstrapToken = randomBytes(24).toString("hex");
+    const createdAt = nowIso();
+
+    const provisioningRecord: ProvisioningRecord = {
+      id: provisioningRef.id,
+      boxId,
+      customerId,
+      siteId,
+      status: "draft",
+      bootstrapTokenHash: sha256(bootstrapToken),
+      createdAt,
+      createdBy: context.portalUser.email || "unknown",
+      ...(profileId ? { profileId } : {}),
+      ...(notes ? { notes } : {})
+    };
+
+    await provisioningRef.set(provisioningRecord);
+
+        const { bootstrapTokenHash: _bootstrapTokenHash, ...publicProvisioningRecord } = provisioningRecord;
+
+    return res.status(201).json({
+      ok: true,
+      item: publicProvisioningRecord
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Geen admin-toegang"
+      });
+    }
+
+    console.error("FOUT in POST /admin/provisioning/boxes", error);
+
+    return res.status(500).json({
+      error: "ADMIN_PROVISIONING_CREATE_FAILED",
+      message: "Kon provisioning niet aanmaken"
+    });
+  }
+});
+
+router.get("/admin/provisioning/:id", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const provisioningId = req.params.id?.trim();
+
+    if (!provisioningId) {
+      return res.status(400).json({
+        error: "INVALID_PROVISIONING_ID",
+        message: "Provisioning id is verplicht"
+      });
+    }
+
+    const db = getFirestore();
+    const provisioningDoc = await db.collection("provisionings").doc(provisioningId).get();
+
+    if (!provisioningDoc.exists) {
+      return res.status(404).json({
+        error: "PROVISIONING_NOT_FOUND",
+        message: "Provisioning bestaat niet"
+      });
+    }
+
+        const item = {
+      id: provisioningDoc.id,
+      ...provisioningDoc.data()
+    };
+
+    const { bootstrapTokenHash: _bootstrapTokenHash, ...publicItem } = item as Record<string, unknown>;
+
+    return res.json({
+      item: publicItem
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Geen admin-toegang"
+      });
+    }
+
+    console.error("FOUT in GET /admin/provisioning/:id", error);
+
+    return res.status(500).json({
+      error: "ADMIN_PROVISIONING_GET_FAILED",
+      message: "Kon provisioning niet ophalen"
+    });
+  }
+});
+
 export default router;
-
-
-
-
