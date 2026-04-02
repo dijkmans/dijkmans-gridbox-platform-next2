@@ -777,6 +777,44 @@ def load_box_state_from_firestore():
 # HEARTBEAT + SOFTWARE STATUS
 # =========================================================
 
+def try_backend_heartbeat(version_raspberry):
+    if not isinstance(runtime_config, dict) or not runtime_config:
+        return False
+
+    api_base_url = str(runtime_config.get("apiBaseUrl") or "").strip().rstrip("/")
+    provisioning_id = str(runtime_config.get("provisioningId") or "").strip()
+
+    if not api_base_url:
+        return False
+
+    heartbeat_url = f"{api_base_url}/device/heartbeat"
+    payload = {
+        "boxId": DOCUMENT_ID,
+        "deviceName": DOCUMENT_ID,
+        "softwareVersion": version_raspberry
+    }
+
+    if provisioning_id:
+        payload["provisioningId"] = provisioning_id
+
+    try:
+        response = requests.post(heartbeat_url, json=payload, timeout=20)
+        if response.status_code != 200:
+            log(f"WARN: backend heartbeat rejected: {response.status_code} | {response.text}")
+            return False
+
+        body = response.json() if response.content else {}
+        item = body.get("item", {}) if isinstance(body, dict) else {}
+        if isinstance(item, dict):
+            if item.get("provisioningStatus"):
+                runtime_config["status"] = item.get("provisioningStatus")
+            if item.get("heartbeatAt"):
+                runtime_config["lastHeartbeatAt"] = item.get("heartbeatAt")
+        return True
+    except Exception as e:
+        log(f"WARN: backend heartbeat error: {e}")
+        return False
+
 def update_pi_status():
     global cached_config
 
@@ -822,6 +860,11 @@ def update_pi_status():
             "pythonVersion": platform.python_version(),
             "lastError": last_error
         }
+
+        backend_heartbeat_ok = try_backend_heartbeat(version_raspberry)
+
+        if not backend_heartbeat_ok:
+            log("WARN: backend heartbeat failed, keeping direct Firestore sync only")
 
         box_doc_ref.set({
             "software": software_update,
