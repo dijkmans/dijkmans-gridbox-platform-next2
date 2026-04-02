@@ -1371,4 +1371,82 @@ router.post("/admin/provisioning/:id/mark-sd-prepared", async (req, res) => {
   }
 });
 
+router.post("/admin/provisioning/:id/finalize", async (req, res) => {
+  try {
+    const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const provisioningId = req.params.id?.trim();
+
+    if (!provisioningId) {
+      return res.status(400).json({
+        error: "INVALID_PROVISIONING_ID",
+        message: "Provisioning id is verplicht"
+      });
+    }
+
+    const db = getFirestore();
+    const provisioningRef = db.collection("provisionings").doc(provisioningId);
+    const provisioningDoc = await provisioningRef.get();
+
+    if (!provisioningDoc.exists) {
+      return res.status(404).json({
+        error: "PROVISIONING_NOT_FOUND",
+        message: "Provisioning bestaat niet"
+      });
+    }
+
+    const provisioningData = provisioningDoc.data() ?? {};
+    const status = typeof provisioningData.status === "string" ? provisioningData.status : "";
+
+    if (status !== "online") {
+      return res.status(409).json({
+        error: "FINALIZE_NOT_ALLOWED",
+        message: "Provisioning kan alleen afgerond worden vanuit status online"
+      });
+    }
+
+    const updatedAt = nowIso();
+
+    await provisioningRef.set(
+      {
+        status: "ready",
+        updatedAt,
+        updatedBy: context.portalUser.email || "unknown",
+        finalizedAt: updatedAt,
+        finalizedBy: context.portalUser.email || "unknown"
+      },
+      { merge: true }
+    );
+
+    return res.json({
+      ok: true,
+      id: provisioningId,
+      status: "ready"
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Geen admin-toegang"
+      });
+    }
+
+    console.error("FOUT in POST /admin/provisioning/:id/finalize", error);
+
+    return res.status(500).json({
+      error: "ADMIN_PROVISIONING_FINALIZE_FAILED",
+      message: "Kon provisioning niet afronden"
+    });
+  }
+});
+
 export default router;
