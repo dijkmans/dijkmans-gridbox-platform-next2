@@ -669,6 +669,11 @@ def ensure_legacy_mirror_if_enabled(customer_id, site_id):
         log(f"ÃƒÂ°Ã…Â¸Ã‚ÂªÃ…Â¾ Legacy site mirror gezet onder box: {site_id}")
 
 def bootstrap_if_needed():
+    if isinstance(runtime_config, dict) and runtime_config:
+        log("INFO: new bootstrap flow active, skipping legacy Firestore bootstrap")
+        refresh_cached_config()
+        load_box_state_from_firestore()
+        return
     customer_id = ensure_customer_exists()
     site_id = ensure_site_exists(customer_id) if has_site_config() else None
 
