@@ -195,6 +195,10 @@ router.post("/device/heartbeat", async (req, res) => {
       typeof body.softwareVersion === "string" && body.softwareVersion.trim()
         ? body.softwareVersion.trim()
         : "";
+    const softwarePayload =
+      typeof body.software === "object" && body.software !== null && !Array.isArray(body.software)
+        ? body.software as Record<string, unknown>
+        : undefined;
 
     if (!rawBoxId) {
       return res.status(400).json({
@@ -257,15 +261,18 @@ router.post("/device/heartbeat", async (req, res) => {
       batch.set(
         boxRef,
         {
+          status: "online",
           state: {
             ...(boxDoc.data()?.state ?? {}),
             lastHeartbeatAt: heartbeatAt
           },
           software: {
             ...(boxDoc.data()?.software ?? {}),
+            ...(softwarePayload ?? {}),
             ...(softwareVersion
-              ? { lastHeartbeatIso: heartbeatAt, currentVersion: softwareVersion }
-              : { lastHeartbeatIso: heartbeatAt })
+              ? { currentVersion: softwareVersion, versionRaspberry: softwareVersion }
+              : {}),
+            lastHeartbeatIso: heartbeatAt
           },
           updatedAt: heartbeatAt
         },
@@ -287,15 +294,18 @@ router.post("/device/heartbeat", async (req, res) => {
     } else {
       await boxRef.set(
         {
+          status: "online",
           state: {
             ...(boxDoc.data()?.state ?? {}),
             lastHeartbeatAt: heartbeatAt
           },
           software: {
             ...(boxDoc.data()?.software ?? {}),
+            ...(softwarePayload ?? {}),
             ...(softwareVersion
-              ? { lastHeartbeatIso: heartbeatAt, currentVersion: softwareVersion }
-              : { lastHeartbeatIso: heartbeatAt })
+              ? { currentVersion: softwareVersion, versionRaspberry: softwareVersion }
+              : {}),
+            lastHeartbeatIso: heartbeatAt
           },
           updatedAt: heartbeatAt
         },
