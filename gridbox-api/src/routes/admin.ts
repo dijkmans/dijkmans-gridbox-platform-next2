@@ -1283,4 +1283,92 @@ router.post("/admin/provisioning/:id/bootstrap-download", async (req, res) => {
   }
 });
 
+
+router.post("/admin/provisioning/:id/mark-sd-prepared", async (req, res) => {
+  try {
+    const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const provisioningId = req.params.id?.trim();
+
+    if (!provisioningId) {
+      return res.status(400).json({
+        error: "INVALID_PROVISIONING_ID",
+        message: "Provisioning id is verplicht"
+      });
+    }
+
+    const db = getFirestore();
+    const provisioningRef = db.collection("provisionings").doc(provisioningId);
+    const provisioningDoc = await provisioningRef.get();
+
+    if (!provisioningDoc.exists) {
+      return res.status(404).json({
+        error: "PROVISIONING_NOT_FOUND",
+        message: "Provisioning bestaat niet"
+      });
+    }
+
+    const provisioningData = provisioningDoc.data() ?? {};
+    const status = typeof provisioningData.status === "string" ? provisioningData.status : "";
+    const bootstrapTokenHash =
+      typeof provisioningData.bootstrapTokenHash === "string"
+        ? provisioningData.bootstrapTokenHash.trim()
+        : "";
+
+    if (!bootstrapTokenHash) {
+      return res.status(409).json({
+        error: "BOOTSTRAP_NOT_PREPARED",
+        message: "Bootstrap-download moet eerst uitgevoerd worden"
+      });
+    }
+
+    if (status !== "draft" && status !== "awaiting_sd_preparation") {
+      return res.status(409).json({
+        error: "MARK_SD_PREPARED_NOT_ALLOWED",
+        message: "SD-kaart kan in deze provisioningstatus niet als klaar gemarkeerd worden"
+      });
+    }
+
+    const updatedAt = nowIso();
+
+    await provisioningRef.set(
+      {
+        status: "awaiting_first_boot",
+        updatedAt,
+        updatedBy: context.portalUser.email || "unknown"
+      },
+      { merge: true }
+    );
+
+    return res.json({
+      ok: true,
+      id: provisioningId,
+      status: "awaiting_first_boot"
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Geen admin-toegang"
+      });
+    }
+
+    console.error("FOUT in POST /admin/provisioning/:id/mark-sd-prepared", error);
+
+    return res.status(500).json({
+      error: "ADMIN_PROVISIONING_MARK_SD_PREPARED_FAILED",
+      message: "Kon SD-kaartstatus niet opslaan"
+    });
+  }
+});
+
 export default router;
