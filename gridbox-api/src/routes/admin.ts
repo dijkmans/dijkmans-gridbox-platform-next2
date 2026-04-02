@@ -1074,8 +1074,7 @@ router.post("/admin/provisioning/boxes", async (req, res) => {
     }
 
     const provisioningRef = db.collection("provisionings").doc();
-    const bootstrapToken = randomBytes(24).toString("hex");
-    const createdAt = nowIso();
+        const createdAt = nowIso();
 
     const provisioningRecord: ProvisioningRecord = {
       id: provisioningRef.id,
@@ -1083,7 +1082,7 @@ router.post("/admin/provisioning/boxes", async (req, res) => {
       customerId,
       siteId,
       status: "draft",
-      bootstrapTokenHash: sha256(bootstrapToken),
+      bootstrapTokenHash: "",
       createdAt,
       createdBy: context.portalUser.email || "unknown",
       ...(profileId ? { profileId } : {}),
@@ -1179,6 +1178,96 @@ router.get("/admin/provisioning/:id", async (req, res) => {
     return res.status(500).json({
       error: "ADMIN_PROVISIONING_GET_FAILED",
       message: "Kon provisioning niet ophalen"
+    });
+  }
+});
+
+
+router.post("/admin/provisioning/:id/bootstrap-download", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const provisioningId = req.params.id?.trim();
+
+    if (!provisioningId) {
+      return res.status(400).json({
+        error: "INVALID_PROVISIONING_ID",
+        message: "Provisioning id is verplicht"
+      });
+    }
+
+    const db = getFirestore();
+    const provisioningRef = db.collection("provisionings").doc(provisioningId);
+    const provisioningDoc = await provisioningRef.get();
+
+    if (!provisioningDoc.exists) {
+      return res.status(404).json({
+        error: "PROVISIONING_NOT_FOUND",
+        message: "Provisioning bestaat niet"
+      });
+    }
+
+    const provisioningData = provisioningDoc.data() ?? {};
+    const boxId = typeof provisioningData.boxId === "string" ? provisioningData.boxId.trim() : "";
+    const status = typeof provisioningData.status === "string" ? provisioningData.status : "";
+
+    if (!boxId) {
+      return res.status(400).json({
+        error: "PROVISIONING_BOX_ID_MISSING",
+        message: "Provisioning bevat geen geldige boxId"
+      });
+    }
+
+    if (status === "claimed" || status === "online" || status === "ready") {
+      return res.status(409).json({
+        error: "BOOTSTRAP_DOWNLOAD_NOT_ALLOWED",
+        message: "Bootstrap-download is niet meer toegelaten voor deze provisioning"
+      });
+    }
+
+    const bootstrapToken = randomBytes(24).toString("hex");
+    const bootstrapTokenHash = sha256(bootstrapToken);
+    const updatedAt = nowIso();
+
+    await provisioningRef.set(
+      {
+        bootstrapTokenHash,
+        updatedAt
+      },
+      { merge: true }
+    );
+
+    return res.json({
+      item: {
+        provisioningId,
+        boxId,
+        bootstrapToken,
+        apiBaseUrl: process.env.API_BASE_URL || "",
+        bootstrapVersion: "v1"
+      }
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Geen admin-toegang"
+      });
+    }
+
+    console.error("FOUT in POST /admin/provisioning/:id/bootstrap-download", error);
+
+    return res.status(500).json({
+      error: "ADMIN_PROVISIONING_BOOTSTRAP_DOWNLOAD_FAILED",
+      message: "Kon bootstrap-download niet voorbereiden"
     });
   }
 });
