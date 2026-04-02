@@ -1,4 +1,4 @@
-﻿import express from "express";
+import express from "express";
 import cors from "cors";
 import healthRoutes from "./routes/health";
 import meRoutes from "./routes/me";
@@ -8,6 +8,8 @@ import invitesRoutes from "./routes/invites";
 
 export function createApp() {
   const app = express();
+
+  app.set("trust proxy", true);
 
   app.use(cors());
   app.use(express.json());

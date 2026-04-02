@@ -1237,12 +1237,23 @@ router.post("/admin/provisioning/:id/bootstrap-download", async (req, res) => {
       { merge: true }
     );
 
+        const host = req.get("host");
+
+    if (!host) {
+      return res.status(500).json({
+        error: "API_BASE_URL_UNAVAILABLE",
+        message: "Kon geen geldige apiBaseUrl bepalen"
+      });
+    }
+
+    const apiBaseUrl = `${req.protocol}://${host}`;
+
     return res.json({
       item: {
         provisioningId,
         boxId,
         bootstrapToken,
-        apiBaseUrl: process.env.API_BASE_URL || "",
+        apiBaseUrl,
         bootstrapVersion: "v1"
       }
     });
