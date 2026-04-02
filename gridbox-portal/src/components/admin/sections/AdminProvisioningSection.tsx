@@ -666,6 +666,92 @@ export default function AdminProvisioningSection({
                 </>
               )}
             </div>
+          ) : selectedProvisioningStep === 5 ? (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Eerste opstart</h3>
+                <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
+                  Hier begint de fysieke eerste opstart van de box. Nog geen live succes tonen,
+                  maar wel duidelijk maken wat Wout nu effectief moet doen.
+                </p>
+              </div>
+
+              {!stepOneReady ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
+                  Stap 1 is nog niet klaar. Eerst klant, site en geldige box-ID vastleggen.
+                  Anders weet je nog altijd niet zeker voor welke box je de eerste opstart doet.
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <div className="text-sm font-semibold text-slate-900">
+                        Wat Wout nu fysiek moet doen
+                      </div>
+
+                      <div className="mt-4 space-y-3 text-sm text-slate-700">
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>Steek de voorbereide SD-kaart in de Raspberry Pi van <strong>{normalizedBoxId}</strong>.</span>
+                        </label>
+
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>Sluit netwerk liefst bekabeld aan als dat mogelijk is op de installatielocatie.</span>
+                        </label>
+
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>Geef de Pi stroom en laat de eerste opstart rustig gebeuren.</span>
+                        </label>
+
+                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <input type="checkbox" className="mt-1" />
+                          <span>Trek de voeding niet te snel uit als de box niet meteen zichtbaar reageert.</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <div className="text-sm font-semibold text-slate-900">
+                        Wat je nu nog niet mag aannemen
+                      </div>
+
+                      <div className="mt-4 space-y-3 text-sm leading-7 text-slate-600">
+                        <div className="rounded-xl bg-slate-50 px-4 py-3">
+                          Nog niet aannemen dat de installatie gelukt is alleen omdat de Pi stroom heeft.
+                        </div>
+                        <div className="rounded-xl bg-slate-50 px-4 py-3">
+                          Nog niet aannemen dat live connectie of claim al bevestigd is.
+                        </div>
+                        <div className="rounded-xl bg-slate-50 px-4 py-3">
+                          Nog niet automatisch naar handmatige uitzonderingen springen zolang de eerste opstart nog bezig kan zijn.
+                        </div>
+                      </div>
+
+                      <div className="mt-4 rounded-xl bg-blue-50 px-4 py-4 text-sm text-blue-900">
+                        Context: <strong>{normalizedBoxId}</strong> voor <strong>{customerLabel}</strong> op <strong>{trimmedSiteId}</strong>.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm leading-7 text-blue-900">
+                    Het doel van deze stap is alleen de eerste opstart correct laten gebeuren.
+                    De echte bevestiging hoort pas later in live controle of backendstatus te komen.
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="text-sm font-semibold text-slate-900">
+                      Bewuste grens van deze stap
+                    </div>
+                    <p className="mt-3 text-sm leading-7 text-slate-600">
+                      Deze cockpit toont hier nog geen echte online-status, claim-status of heartbeat.
+                      Dat zou anders opnieuw fake zekerheid geven in de UI.
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
           ) : (
             <div>
               <h3 className="text-xl font-bold text-slate-900">
@@ -691,3 +777,4 @@ export default function AdminProvisioningSection({
     </section>
   );
 }
+
