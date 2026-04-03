@@ -62,6 +62,11 @@ export default function AdminProvisioningSection({
   const sortedSites = [...siteSummaries].sort((a, b) => a.siteId.localeCompare(b.siteId));
 
   const selectedCustomer = customers.find((customer) => customer.id === provisioningCustomerId);
+  const customerChosen = provisioningCustomerId.trim().length > 0;
+  const customerScopedSites = selectedCustomer
+    ? sortedSites.filter((site) => site.customerIds.has(selectedCustomer.id))
+    : [];
+
   const trimmedSiteId = provisioningSiteId.trim();
   const trimmedBoxId = provisioningBoxId.trim();
   const normalizedBoxId = trimmedBoxId.toLowerCase();
@@ -70,13 +75,17 @@ export default function AdminProvisioningSection({
     boxes.map((box) => (box.boxId || box.id).trim().toLowerCase()).filter(Boolean)
   );
 
-  const existingSite = sortedSites.find((site) => site.siteId === trimmedSiteId);
+  const existingSite =
+    customerScopedSites.find((site) => site.siteId === trimmedSiteId) || null;
+  const siteExistsOutsideSelectedCustomer =
+    trimmedSiteId.length > 0 && !existingSite
+      ? sortedSites.find((site) => site.siteId === trimmedSiteId) || null
+      : null;
 
   const boxIdLooksValid = trimmedBoxId.length > 0 && /^[a-z0-9-]+$/.test(trimmedBoxId);
   const boxIdAlreadyExists = trimmedBoxId.length > 0 && existingBoxIds.has(normalizedBoxId);
 
-  const customerChosen = provisioningCustomerId.trim().length > 0;
-  const siteChosen = trimmedSiteId.length > 0;
+  const siteChosen = Boolean(existingSite);
   const boxChosen = trimmedBoxId.length > 0;
 
   const stepOneReady =
@@ -95,17 +104,6 @@ export default function AdminProvisioningSection({
   const provisioningFinalizedAt = provisioningItem?.finalizedAt || "-";
   const canCreateProvisioning = stepOneReady && !provisioningBusy && !provisioningExists;
 
-  const conceptProvisioningDraft = {
-    customerId: provisioningCustomerId || null,
-    siteId: trimmedSiteId || null,
-    boxId: normalizedBoxId || null,
-    siteMode: existingSite ? "existing" : trimmedSiteId ? "new" : null,
-    status: "draft",
-    source: "admin-cockpit",
-    nextStep: "sd-card-prep"
-  };
-
-  const conceptProvisioningDraftJson = JSON.stringify(conceptProvisioningDraft, null, 2);
 
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -269,21 +267,54 @@ export default function AdminProvisioningSection({
                   <label className="mb-2 block text-sm font-semibold text-slate-700">
                     Site
                   </label>
-                  <input
-                    list="provisioning-site-suggestions"
+                  <select
                     value={provisioningSiteId}
                     onChange={(e) => onProvisioningSiteChange(e.target.value)}
-                    placeholder="bv. geel-hoofdsite"
-                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900"
-                  />
-                  <datalist id="provisioning-site-suggestions">
-                    {sortedSites.map((site) => (
-                      <option key={site.siteId} value={site.siteId} />
+                    disabled={!customerChosen || customerScopedSites.length === 0}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                  >
+                    <option value="">
+                      {!customerChosen
+                        ? "-- Kies eerst een klant --"
+                        : customerScopedSites.length === 0
+                          ? "-- Geen bestaande sites voor deze klant --"
+                          : "-- Kies een bestaande site --"}
+                    </option>
+                    {customerScopedSites.map((site) => (
+                      <option key={site.siteId} value={site.siteId}>
+                        {site.siteId}
+                      </option>
                     ))}
-                  </datalist>
-                  <p className="mt-2 text-xs text-slate-500">
-                    Je mag een bestaande site kiezen of al een nieuwe site-ID voorbereiden.
-                  </p>
+                  </select>
+                  <div className="mt-2 space-y-1 text-xs">
+                    {!customerChosen && (
+                      <p className="text-slate-500">
+                        Kies eerst een klant. Pas dan kan je een geldige site kiezen.
+                      </p>
+                    )}
+                    {customerChosen && customerScopedSites.length === 0 && (
+                      <p className="text-amber-700">
+                        Voor deze klant kennen we in deze adminweergave nog geen bestaande sites.
+                        De backend aanvaardt vandaag geen nieuwe vrije site-ID.
+                      </p>
+                    )}
+                    {customerChosen && customerScopedSites.length > 0 && !siteChosen && (
+                      <p className="text-slate-500">
+                        Kies hier een bestaande site van de gekozen klant. De backend valideert
+                        die koppeling strikt.
+                      </p>
+                    )}
+                    {siteExistsOutsideSelectedCustomer && (
+                      <p className="text-red-600">
+                        Deze site bestaat wel, maar hoort niet bij de gekozen klant.
+                      </p>
+                    )}
+                    {siteChosen && existingSite && (
+                      <p className="text-green-700">
+                        Bestaande site gekozen. Deze kan door de backend bevestigd worden.
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="xl:col-span-2">
@@ -377,7 +408,11 @@ export default function AdminProvisioningSection({
                         siteChosen ? "bg-green-50 text-green-800" : "bg-slate-100 text-slate-600"
                       }`}
                     >
-                      {siteChosen ? "Site ingevuld" : "Nog geen site ingevuld"}
+                      {siteChosen
+                        ? "Bestaande site gekozen"
+                        : customerChosen
+                          ? "Kies een bestaande site"
+                          : "Kies eerst een klant"}
                     </div>
 
                     <div
@@ -413,7 +448,8 @@ export default function AdminProvisioningSection({
                     Bestaande boxen ter referentie
                   </div>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Handig om dubbele box-ID's te vermijden. Dit is puur referentie, nog geen provisioninglogica.
+                    Handig om dubbele box-ID's te vermijden. Dit blijft referentie, maar stap 1 mag alleen verder
+                    met een bestaande site die bij de gekozen klant past.
                   </p>
                   <div className="mt-4 grid gap-2 md:grid-cols-2">
                     {boxes.slice(0, 8).map((box) => (
