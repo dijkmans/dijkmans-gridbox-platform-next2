@@ -27,6 +27,9 @@ type AdminProvisioningSectionProps = {
   onCreateProvisioning: () => void | Promise<void>;
   onRefreshProvisioning: () => void | Promise<void>;
   onFinalizeProvisioning: () => void | Promise<void>;
+  bootstrapDownloadItem?: Record<string, string> | null;
+  onPrepareBootstrapDownload?: () => void | Promise<void>;
+  onMarkSdPrepared?: () => void | Promise<void>;
   onStepChange: (step: number) => void;
 };
 
@@ -53,6 +56,9 @@ export default function AdminProvisioningSection({
   onCreateProvisioning,
   onRefreshProvisioning,
   onFinalizeProvisioning,
+  bootstrapDownloadItem,
+  onPrepareBootstrapDownload,
+  onMarkSdPrepared,
   onStepChange
 }: AdminProvisioningSectionProps) {
   const sortedCustomers = [...customers].sort((a, b) =>
@@ -103,7 +109,13 @@ export default function AdminProvisioningSection({
   const provisioningLastHeartbeatAt = provisioningItem?.lastHeartbeatAt || "-";
   const provisioningFinalizedAt = provisioningItem?.finalizedAt || "-";
   const canCreateProvisioning = stepOneReady && !provisioningBusy && !provisioningExists;
-
+  const canPrepareBootstrapDownload = provisioningExists && !provisioningBusy && Boolean(onPrepareBootstrapDownload);
+  const canMarkSdPrepared =
+    provisioningExists &&
+    !provisioningBusy &&
+    Boolean(onMarkSdPrepared) &&
+    provisioningItem?.status === "draft";
+  const hasBootstrapDownloadItem = Boolean(bootstrapDownloadItem?.bootstrapToken);
 
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -585,14 +597,6 @@ export default function AdminProvisioningSection({
                         >
                           Ververs status
                         </button>
-                        <button
-                          type="button"
-                          onClick={onFinalizeProvisioning}
-                          disabled={!canFinalizeProvisioning}
-                          className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          Installatie afronden
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -847,12 +851,56 @@ export default function AdminProvisioningSection({
 
                   <div className="rounded-2xl border border-slate-200 bg-white p-5">
                     <div className="text-sm font-semibold text-slate-900">
-                      Wat hier bewust nog niet gebeurt
+                      Bootstrap-download voorbereiden
                     </div>
                     <p className="mt-3 text-sm leading-7 text-slate-600">
-                      Er is nog geen echte downloadknop of bestandsgeneratie aangesloten.
-                      Dat mag pas zodra de backend later echt het provisioningrecord en de beperkte bootstrapinfo kan leveren.
+                      Deze actie vraagt echte beperkte bootstrapinfo op bij de backend.
+                      Dit markeert de SD-kaart nog niet als klaar.
                     </p>
+
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() => onPrepareBootstrapDownload?.()}
+                        disabled={!canPrepareBootstrapDownload}
+                        className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {provisioningBusy ? "Bezig..." : "Bootstrap-download voorbereiden"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onMarkSdPrepared?.()}
+                        disabled={!canMarkSdPrepared}
+                        className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        SD-kaart als klaar markeren
+                      </button>
+                    </div>
+
+                    {hasBootstrapDownloadItem && (
+                      <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Provisioning ID</div>
+                          <div className="mt-2 break-all font-semibold text-slate-900">{bootstrapDownloadItem?.provisioningId || "-"}</div>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Box ID</div>
+                          <div className="mt-2 font-semibold text-slate-900">{bootstrapDownloadItem?.boxId || "-"}</div>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 md:col-span-2">
+                          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Bootstrap token</div>
+                          <div className="mt-2 break-all font-semibold text-slate-900">{bootstrapDownloadItem?.bootstrapToken || "-"}</div>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 md:col-span-2">
+                          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">API base URL</div>
+                          <div className="mt-2 break-all font-semibold text-slate-900">{bootstrapDownloadItem?.apiBaseUrl || "-"}</div>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Bootstrap versie</div>
+                          <div className="mt-2 font-semibold text-slate-900">{bootstrapDownloadItem?.bootstrapVersion || "-"}</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -874,6 +922,27 @@ export default function AdminProvisioningSection({
                 </div>
               ) : (
                 <>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">Backendstatus voor deze stap</div>
+                        <p className="mt-2 text-sm leading-6 text-slate-600">Na SD-kaart als klaar markeren verwacht je hier idealiter eerst Wacht op eerste opstart. Deze stap forceert zelf geen claim of online-status.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={onRefreshProvisioning}
+                        disabled={!canRefreshProvisioning}
+                        className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Ververs status
+                      </button>
+                    </div>
+                    <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+                      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Huidige backendstatus</div>
+                      <div className="mt-2 font-semibold text-slate-900">{provisioningStatusLabel}</div>
+                    </div>
+                  </div>
+
                   <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
                     <div className="rounded-2xl border border-slate-200 bg-white p-5">
                       <div className="text-sm font-semibold text-slate-900">
@@ -959,6 +1028,27 @@ export default function AdminProvisioningSection({
                 </div>
               ) : (
                 <>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">Backendstatus voor deze stap</div>
+                        <p className="mt-2 text-sm leading-6 text-slate-600">Hier mag je alleen werken met backend- of devicebevestigde status. Claimed, online of ready worden niet lokaal verzonnen.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={onRefreshProvisioning}
+                        disabled={!canRefreshProvisioning}
+                        className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Ververs status
+                      </button>
+                    </div>
+                    <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+                      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Huidige backendstatus</div>
+                      <div className="mt-2 font-semibold text-slate-900">{provisioningStatusLabel}</div>
+                    </div>
+                  </div>
+
                   <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
                     <div className="rounded-2xl border border-slate-200 bg-white p-5">
                       <div className="text-sm font-semibold text-slate-900">

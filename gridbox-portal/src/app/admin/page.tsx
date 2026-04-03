@@ -16,6 +16,7 @@ import {
   fetchAdminMemberships,
   fetchAdminCustomerBoxAccess,
   fetchAdminBoxes,
+  fetchAdminSites,
   fetchAdminInvites,
   fetchAdminRoles,
   fetchAdminPath,
@@ -29,6 +30,7 @@ import type {
   InviteItem,
   CustomerBoxAccessItem,
   AdminBoxItem,
+  AdminSiteItem,
   AdminRoleItem,
   AdminProvisioningItem,
   AdminProvisioningStatus
@@ -61,6 +63,7 @@ export default function AdminPage() {
   const [invites, setInvites] = useState<InviteItem[]>([]);
   const [customerBoxAccess, setCustomerBoxAccess] = useState<CustomerBoxAccessItem[]>([]);
   const [boxes, setBoxes] = useState<AdminBoxItem[]>([]);
+  const [sites, setSites] = useState<AdminSiteItem[]>([]);
   const [inviteRoles, setInviteRoles] = useState<AdminRoleItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
@@ -88,6 +91,7 @@ export default function AdminPage() {
   const [provisioningItem, setProvisioningItem] = useState<AdminProvisioningItem | null>(null);
   const [provisioningLookupId, setProvisioningLookupId] = useState("");
   const [provisioningBusy, setProvisioningBusy] = useState(false);
+  const [bootstrapDownloadItem, setBootstrapDownloadItem] = useState<Record<string, string> | null>(null);
 
   const sortedBoxes = [...boxes].sort((a, b) => getBoxLabel(a).localeCompare(getBoxLabel(b)));
 
@@ -112,6 +116,7 @@ export default function AdminPage() {
         membershipsRes,
         customerBoxAccessRes,
         boxesRes,
+        sitesRes,
         invitesRes,
         rolesRes
       ] = await Promise.all([
@@ -119,6 +124,7 @@ export default function AdminPage() {
         fetchAdminMemberships({ token }),
         fetchAdminCustomerBoxAccess({ token }),
         fetchAdminBoxes({ token }),
+        fetchAdminSites({ token }),
         fetchAdminInvites({ token }).catch(
           () => ({ ok: false, json: async () => ({ items: [] }) } as any)
         ),
@@ -132,6 +138,7 @@ export default function AdminPage() {
         membershipsData,
         accessData,
         boxesData,
+        sitesData,
         invitesData,
         rolesData
       ] = await Promise.all([
@@ -139,6 +146,7 @@ export default function AdminPage() {
         membershipsRes.json(),
         customerBoxAccessRes.json(),
         boxesRes.json(),
+        sitesRes.json(),
         invitesRes.ok ? invitesRes.json() : { items: [] },
         rolesRes.ok ? rolesRes.json() : { items: [] }
       ]);
@@ -154,6 +162,7 @@ export default function AdminPage() {
       setMemberships(membershipsData.items || []);
       setCustomerBoxAccess(accessData.items || []);
       setBoxes(boxesData.items || []);
+      setSites(sitesData.items || []);
       setInvites(invitesData.items || []);
       setInviteRoles(nextRoles);
       setInviteRole((current) =>
@@ -425,11 +434,13 @@ export default function AdminPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setErrorMessage(data.message || "Kon provisioning niet ophalen");
+        setErrorMessage(data.message || data.error || "Kon provisioning niet ophalen");
         return null;
       }
 
-      const nextProvisioningItem = normalizeProvisioningItem(data.item);
+      const nextProvisioningItem = normalizeProvisioningItem(
+        data.item || data.provisioning
+      );
       if (!nextProvisioningItem?.id) {
         setErrorMessage("Backend gaf geen geldige provisioning terug");
         return null;
@@ -489,10 +500,10 @@ export default function AdminPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setErrorMessage(data.message || "Kon provisioning niet aanmaken");
+        setErrorMessage(data.message || data.error || "Kon provisioning niet aanmaken");
 
         const existingProvisioningId =
-          typeof data.provisioningId === "string" ? data.provisioningId : "";
+          typeof data.provisioningId === "string" ? data.provisioningId : typeof data.provisioning?.id === "string" ? data.provisioning.id : "";
 
         if (existingProvisioningId) {
           setProvisioningLookupId(existingProvisioningId);
@@ -500,7 +511,9 @@ export default function AdminPage() {
         return;
       }
 
-      const nextProvisioningItem = normalizeProvisioningItem(data.item);
+      const nextProvisioningItem = normalizeProvisioningItem(
+        data.item || data.provisioning
+      );
       if (!nextProvisioningItem?.id) {
         setErrorMessage("Backend gaf geen geldige provisioning terug");
         return;
@@ -514,6 +527,105 @@ export default function AdminPage() {
       await loadAdminData(false);
     } catch (error) {
       setErrorMessage("Netwerkfout bij aanmaken provisioning");
+    } finally {
+      setProvisioningBusy(false);
+    }
+  }
+
+  async function handlePrepareBootstrapDownload() {
+    const provisioningId = provisioningItem?.id?.trim() || provisioningLookupId.trim();
+
+    if (!provisioningId) {
+      setErrorMessage("Geen provisioning geselecteerd voor bootstrap-download");
+      return;
+    }
+
+    const user = auth.currentUser;
+    if (!user) {
+      setErrorMessage("Niet aangemeld");
+      return;
+    }
+
+    setProvisioningBusy(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const token = await user.getIdToken();
+      const res = await postAdminJson(
+        `/admin/provisioning/${encodeURIComponent(provisioningId)}/bootstrap-download`,
+        {
+          token,
+          body: {}
+        }
+      );
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMessage(data.message || data.error || "Kon bootstrap-download niet voorbereiden");
+        return;
+      }
+
+      const nextBootstrapItem =
+        data.item && typeof data.item === "object"
+          ? (data.item as Record<string, string>)
+          : null;
+
+      if (!nextBootstrapItem?.provisioningId || !nextBootstrapItem?.bootstrapToken) {
+        setErrorMessage("Backend gaf geen geldige bootstrap-download terug");
+        return;
+      }
+
+      setBootstrapDownloadItem(nextBootstrapItem);
+      setSuccessMessage("Bootstrap-download voorbereid");
+      await fetchProvisioningById(provisioningId);
+    } catch (error) {
+      setErrorMessage("Netwerkfout bij voorbereiden bootstrap-download");
+    } finally {
+      setProvisioningBusy(false);
+    }
+  }
+
+  async function handleMarkSdPrepared() {
+    const provisioningId = provisioningItem?.id?.trim() || provisioningLookupId.trim();
+
+    if (!provisioningId) {
+      setErrorMessage("Geen provisioning geselecteerd om SD-kaart als klaar te markeren");
+      return;
+    }
+
+    const user = auth.currentUser;
+    if (!user) {
+      setErrorMessage("Niet aangemeld");
+      return;
+    }
+
+    setProvisioningBusy(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const token = await user.getIdToken();
+      const res = await postAdminJson(
+        `/admin/provisioning/${encodeURIComponent(provisioningId)}/mark-sd-prepared`,
+        {
+          token,
+          body: {}
+        }
+      );
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMessage(data.message || data.error || "Kon SD-kaartstatus niet opslaan");
+        return;
+      }
+
+      await fetchProvisioningById(provisioningId);
+      setSelectedProvisioningStep(5);
+      setSuccessMessage("SD-kaart als klaar gemarkeerd");
+      await loadAdminData(false);
+    } catch (error) {
+      setErrorMessage("Netwerkfout bij opslaan SD-kaartstatus");
     } finally {
       setProvisioningBusy(false);
     }
@@ -559,7 +671,7 @@ export default function AdminPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setErrorMessage(data.message || "Kon provisioning niet afronden");
+        setErrorMessage(data.message || data.error || "Kon provisioning niet afronden");
         return;
       }
 
@@ -584,7 +696,17 @@ export default function AdminPage() {
   const pendingInviteCount = pendingInvites.length;
   const activeAccessCount = getActiveAccessCount(customerBoxAccess);
 
-  const siteSummaries = getSiteSummaries(boxes);
+  const boxBasedSiteSummaries = getSiteSummaries(boxes);
+  const siteSummaries =
+    sites.length > 0
+      ? sites
+          .map((site) => ({
+            siteId: site.id,
+            boxCount: boxes.filter((box) => box.siteId === site.id).length,
+            customerIds: new Set(site.customerId ? [site.customerId] : [])
+          }))
+          .sort((a, b) => a.siteId.localeCompare(b.siteId))
+      : boxBasedSiteSummaries;
   const customerSummaries = getCustomerSummaries(customers, memberships, customerBoxAccess);
 
   const getAdminRoleLabel = (roleId: string | undefined) =>
@@ -592,7 +714,6 @@ export default function AdminPage() {
 
   const provisioningStatusLabels: Record<AdminProvisioningStatus, string> = {
     draft: "Draft",
-    awaiting_sd_preparation: "Wacht op SD-kaart",
     awaiting_first_boot: "Wacht op eerste opstart",
     claimed: "Geclaimd",
     online: "Online",
@@ -760,6 +881,16 @@ export default function AdminPage() {
                             {formatDate(provisioningItem?.claimedAt) || "-"}
                           </div>
                         </div>
+                        {provisioningItem?.lastError && (
+                          <div className="md:col-span-2">
+                            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                              Laatste fout
+                            </div>
+                            <div className="mt-2 text-sm font-semibold text-red-700">
+                              {provisioningItem.lastError}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -791,14 +922,16 @@ export default function AdminPage() {
                         >
                           Ververs provisioning
                         </button>
-                        <button
-                          type="button"
-                          onClick={handleFinalizeProvisioning}
-                          disabled={!canFinalizeProvisioning}
-                          className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          Installatie afronden
-                        </button>
+                        {selectedProvisioningStep >= 6 && (
+                          <button
+                            type="button"
+                            onClick={handleFinalizeProvisioning}
+                            disabled={!canFinalizeProvisioning}
+                            className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Installatie afronden
+                          </button>
+                        )}
                       </div>
 
                       <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-900">
@@ -832,6 +965,9 @@ export default function AdminPage() {
                   onCreateProvisioning={handleCreateProvisioning}
                   onRefreshProvisioning={handleRefreshProvisioning}
                   onFinalizeProvisioning={handleFinalizeProvisioning}
+                  bootstrapDownloadItem={bootstrapDownloadItem}
+                  onPrepareBootstrapDownload={handlePrepareBootstrapDownload}
+                  onMarkSdPrepared={handleMarkSdPrepared}
                   onStepChange={setSelectedProvisioningStep}
                 />
               </section>

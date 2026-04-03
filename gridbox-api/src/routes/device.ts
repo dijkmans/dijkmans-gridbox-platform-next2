@@ -90,6 +90,11 @@ router.post("/device/bootstrap/claim", async (req, res) => {
     }
 
     if (expectedBoxId !== boxId) {
+      try {
+        await provisioningRef.set({ lastError: "PROVISIONING_BOX_ID_MISMATCH", updatedAt: nowIso() }, { merge: true });
+      } catch (writeError) {
+        console.error("FOUT bij schrijven lastError voor PROVISIONING_BOX_ID_MISMATCH", writeError);
+      }
       return res.status(409).json({
         error: "PROVISIONING_BOX_ID_MISMATCH",
         message: "boxId komt niet overeen met de provisioning"
@@ -104,6 +109,11 @@ router.post("/device/bootstrap/claim", async (req, res) => {
     }
 
     if (!bootstrapTokenHash || bootstrapTokenHash !== hashBootstrapToken(bootstrapToken)) {
+      try {
+        await provisioningRef.set({ lastError: "INVALID_BOOTSTRAP_TOKEN", updatedAt: nowIso() }, { merge: true });
+      } catch (writeError) {
+        console.error("FOUT bij schrijven lastError voor INVALID_BOOTSTRAP_TOKEN", writeError);
+      }
       return res.status(403).json({
         error: "INVALID_BOOTSTRAP_TOKEN",
         message: "Bootstrap-token is ongeldig"
@@ -131,6 +141,7 @@ router.post("/device/bootstrap/claim", async (req, res) => {
         claimedAt,
         claimedByDevice: deviceName || rawBoxId,
         bootstrapTokenHash: "",
+        lastError: "",
         updatedAt: claimedAt
       },
       { merge: true }

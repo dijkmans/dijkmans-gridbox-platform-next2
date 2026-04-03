@@ -1,4 +1,4 @@
-﻿export type ActiveSection =
+export type ActiveSection =
   | "dashboard"
   | "provisioning"
   | "customers"
@@ -60,6 +60,13 @@ export type AdminBoxItem = {
   updatedAt?: string | null;
 };
 
+export type AdminSiteItem = {
+  id: string;
+  customerId?: string | null;
+  name?: string | null;
+  active?: boolean;
+};
+
 export type AdminRoleItem = {
   id: string;
   label: string;
@@ -69,7 +76,6 @@ export type AdminRoleItem = {
 
 export type AdminProvisioningStatus =
   | "draft"
-  | "awaiting_sd_preparation"
   | "awaiting_first_boot"
   | "claimed"
   | "online"
@@ -89,4 +95,5 @@ export type AdminProvisioningItem = {
   lastHeartbeatAt?: string | null;
   finalizedAt?: string | null;
   finalizedBy?: string | null;
+  lastError?: string | null;
 };

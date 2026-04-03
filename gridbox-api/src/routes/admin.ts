@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "crypto";
 import { Router } from "express";
 import { requirePortalUser } from "../auth/verifyBearerToken";
 import { getMembershipByEmail } from "../repositories/membershipRepository";
+import { listSites } from "../repositories/siteRepository";
 import { getFirestore } from "firebase-admin/firestore";
 
 const router = Router();
@@ -56,7 +57,6 @@ function getRoleLabel(roleId: SupportedMembershipRole, rawLabel: unknown): strin
 
 type ProvisioningStatus =
   | "draft"
-  | "awaiting_sd_preparation"
   | "awaiting_first_boot"
   | "claimed"
   | "online"
@@ -186,6 +186,59 @@ router.get("/admin/customers", async (req, res) => {
     return res.status(500).json({
       error: "ADMIN_CUSTOMERS_FAILED",
       message: "Kon customers niet ophalen"
+    });
+  }
+});
+
+router.get("/admin/sites", async (req, res) => {
+  try {
+    const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    console.log("ADMIN SITES REQUEST", {
+      user: context.portalUser.email
+    });
+
+    const siteDocs = await listSites();
+
+    const items = siteDocs
+      .map((siteDoc) => {
+        const data = siteDoc.data ?? {};
+
+        return {
+          id: siteDoc.id,
+          customerId: typeof data.customerId === "string" ? data.customerId : null,
+          name: typeof data.name === "string" ? data.name : null,
+          active: data.active !== false
+        };
+      })
+      .sort((a, b) => a.id.localeCompare(b.id));
+
+    return res.json({
+      items,
+      count: items.length
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Geen admin-toegang"
+      });
+    }
+
+    console.error("FOUT in GET /admin/sites", error);
+
+    return res.status(500).json({
+      error: "ADMIN_SITES_GET_FAILED",
+      message: "Kon sites niet ophalen"
     });
   }
 });
@@ -1054,7 +1107,6 @@ router.post("/admin/provisioning/boxes", async (req, res) => {
 
     const blockingStatuses = new Set<ProvisioningStatus>([
       "draft",
-      "awaiting_sd_preparation",
       "awaiting_first_boot",
       "claimed",
       "online"
@@ -1322,7 +1374,7 @@ router.post("/admin/provisioning/:id/mark-sd-prepared", async (req, res) => {
       });
     }
 
-    if (status !== "draft" && status !== "awaiting_sd_preparation") {
+    if (status !== "draft") {
       return res.status(409).json({
         error: "MARK_SD_PREPARED_NOT_ALLOWED",
         message: "SD-kaart kan in deze provisioningstatus niet als klaar gemarkeerd worden"
