@@ -1,8 +1,8 @@
-﻿"use client";
+"use client";
 
 import { getBoxLabel } from "../helpers";
 import type { SiteSummary } from "../derived";
-import type { AdminBoxItem, CustomerItem, ProvisioningStepContent } from "../types";
+import type { AdminBoxItem, AdminProvisioningItem, CustomerItem, ProvisioningStepContent } from "../types";
 
 type AdminProvisioningSectionProps = {
   selectedProvisioningStep: number;
@@ -14,9 +14,19 @@ type AdminProvisioningSectionProps = {
   provisioningCustomerId: string;
   provisioningSiteId: string;
   provisioningBoxId: string;
+  provisioningItem?: AdminProvisioningItem | null;
+  provisioningLookupId: string;
+  provisioningBusy: boolean;
+  provisioningStatusLabel: string;
+  canRefreshProvisioning: boolean;
+  canFinalizeProvisioning: boolean;
   onProvisioningCustomerChange: (value: string) => void;
   onProvisioningSiteChange: (value: string) => void;
   onProvisioningBoxIdChange: (value: string) => void;
+  onProvisioningLookupIdChange: (value: string) => void;
+  onCreateProvisioning: () => void | Promise<void>;
+  onRefreshProvisioning: () => void | Promise<void>;
+  onFinalizeProvisioning: () => void | Promise<void>;
   onStepChange: (step: number) => void;
 };
 
@@ -30,9 +40,19 @@ export default function AdminProvisioningSection({
   provisioningCustomerId,
   provisioningSiteId,
   provisioningBoxId,
+  provisioningItem,
+  provisioningLookupId,
+  provisioningBusy,
+  provisioningStatusLabel,
+  canRefreshProvisioning,
+  canFinalizeProvisioning,
   onProvisioningCustomerChange,
   onProvisioningSiteChange,
   onProvisioningBoxIdChange,
+  onProvisioningLookupIdChange,
+  onCreateProvisioning,
+  onRefreshProvisioning,
+  onFinalizeProvisioning,
   onStepChange
 }: AdminProvisioningSectionProps) {
   const sortedCustomers = [...customers].sort((a, b) =>
@@ -67,6 +87,13 @@ export default function AdminProvisioningSection({
     !boxIdAlreadyExists;
 
   const customerLabel = selectedCustomer?.name || provisioningCustomerId || "-";
+  const provisioningExists = Boolean(provisioningItem?.id);
+  const provisioningIdLabel = provisioningItem?.id || "-";
+  const provisioningCreatedAt = provisioningItem?.createdAt || "-";
+  const provisioningClaimedAt = provisioningItem?.claimedAt || "-";
+  const provisioningLastHeartbeatAt = provisioningItem?.lastHeartbeatAt || "-";
+  const provisioningFinalizedAt = provisioningItem?.finalizedAt || "-";
+  const canCreateProvisioning = stepOneReady && !provisioningBusy && !provisioningExists;
 
   const conceptProvisioningDraft = {
     customerId: provisioningCustomerId || null,
@@ -95,9 +122,89 @@ export default function AdminProvisioningSection({
         </div>
       </div>
 
-      <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
-        Let op: deze cockpit maakt in deze fase nog geen backend-record aan. Dit is
-        voorbereiding, validatie en duidelijke invoer voor de latere provisioningflow.
+      <div className="mt-6 grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <div className="text-sm font-semibold text-slate-900">Echte provisioningstatus</div>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Hier tonen we alleen provisioningdata die page.tsx via de backend heeft opgehaald.
+            Geen fake claim, geen fake online en geen fake ready.
+          </p>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Status</div>
+              <div className="mt-2 font-semibold text-slate-900">{provisioningStatusLabel}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Provisioning ID</div>
+              <div className="mt-2 font-semibold text-slate-900">{provisioningIdLabel}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Aangemaakt op</div>
+              <div className="mt-2 font-semibold text-slate-900">{provisioningCreatedAt}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Laatste heartbeat</div>
+              <div className="mt-2 font-semibold text-slate-900">{provisioningLastHeartbeatAt}</div>
+            </div>
+          </div>
+
+          <div className={`mt-3 rounded-xl px-4 py-3 text-sm leading-6 ${provisioningExists ? "bg-green-50 text-green-900" : "bg-amber-50 text-amber-900"}`}>
+            {provisioningExists
+              ? "Er is een echt provisioningrecord gekoppeld aan deze cockpitweergave."
+              : "Nog geen provisioningrecord opgehaald of aangemaakt."}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+          <div className="text-sm font-semibold text-slate-900">Acties op backendniveau</div>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Eerst voorbereiden, dan echt aanmaken, daarna alleen verversen of afronden wanneer backend of device dat toelaat.
+          </p>
+
+          <label className="mt-4 block text-sm font-semibold text-slate-700">
+            Provisioning ID opzoeken
+          </label>
+          <input
+            value={provisioningLookupId}
+            onChange={(e) => onProvisioningLookupIdChange(e.target.value)}
+            placeholder="bv. prov-2026-04-03-001"
+            className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900"
+          />
+
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={onCreateProvisioning}
+              disabled={!canCreateProvisioning}
+              className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {provisioningBusy ? "Bezig..." : "Installatievoorbereiding aanmaken"}
+            </button>
+
+            <button
+              type="button"
+              onClick={onRefreshProvisioning}
+              disabled={!canRefreshProvisioning}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Ververs status
+            </button>
+
+            <button
+              type="button"
+              onClick={onFinalizeProvisioning}
+              disabled={!canFinalizeProvisioning}
+              className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Installatie afronden
+            </button>
+          </div>
+
+          <p className="mt-4 text-xs leading-6 text-slate-500">
+            Create is pas zinvol als stap 1 geldig is. Refresh en finalize volgen alleen echte backendstatus.
+          </p>
+        </div>
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[320px_1fr]">
@@ -326,88 +433,136 @@ export default function AdminProvisioningSection({
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Installatievoorbereiding aanmaken</h3>
                 <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-                  In deze stap tonen we wat straks inhoudelijk aangemaakt zou moeten worden.
-                  Nog niet echt wegschrijven, wel scherp maken wat de backend later moet bevestigen.
+                  Dit is de stap waar voorbereiding overgaat in een echt backendrecord.
+                  De frontend mag hier niets simuleren. Ofwel bestaat het record echt, ofwel nog niet.
                 </p>
               </div>
 
               {!stepOneReady ? (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
                   Stap 1 is nog niet klaar. Kies eerst een geldige klant, site en unieke box-ID.
-                  Pas daarna heeft het zin om een installatiedossier voor te bereiden.
+                  Pas daarna heeft het zin om een echte installatievoorbereiding aan te maken.
                 </div>
-              ) : (
+              ) : !provisioningExists ? (
                 <>
                   <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
                     <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="text-sm font-semibold text-slate-900">
-                        Wat inhoudelijk vastligt
-                      </div>
-
+                      <div className="text-sm font-semibold text-slate-900">Klaar om aan te maken</div>
                       <div className="mt-4 space-y-3 text-sm">
                         <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                           <span className="text-slate-500">Klant</span>
                           <span className="font-semibold text-slate-900">{customerLabel}</span>
                         </div>
-
                         <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                           <span className="text-slate-500">Site</span>
                           <span className="font-semibold text-slate-900">{trimmedSiteId}</span>
                         </div>
-
                         <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                           <span className="text-slate-500">Box-ID</span>
                           <span className="font-semibold text-slate-900">{normalizedBoxId}</span>
-                        </div>
-
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">Sitetype</span>
-                          <span className="font-semibold text-slate-900">
-                            {existingSite ? "Bestaande site" : "Nieuwe site-ID"}
-                          </span>
                         </div>
                       </div>
                     </div>
 
                     <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="text-sm font-semibold text-slate-900">
-                        Controle voor backendfase
-                      </div>
-
-                      <div className="mt-4 space-y-3 text-sm">
-                        <div className="rounded-xl bg-green-50 px-4 py-3 text-green-800">
-                          Klant en context zijn gekozen
-                        </div>
-                        <div className="rounded-xl bg-green-50 px-4 py-3 text-green-800">
-                          Box-ID is uniek binnen de huidige data
-                        </div>
-                        <div className="rounded-xl bg-green-50 px-4 py-3 text-green-800">
-                          Sitekeuze is inhoudelijk voorbereid
-                        </div>
+                      <div className="text-sm font-semibold text-slate-900">Huidige backendtoestand</div>
+                      <div className="mt-4 space-y-3 text-sm leading-7 text-slate-600">
                         <div className="rounded-xl bg-amber-50 px-4 py-3 text-amber-900">
-                          Nog niets is echt aangemaakt in backend of Firestore
+                          Er is nog geen echt provisioningrecord gekoppeld aan deze invoer.
+                        </div>
+                        <div className="rounded-xl bg-slate-50 px-4 py-3">
+                          Zodra je aanmaakt, moet de backend de status en het provisioning-ID teruggeven.
                         </div>
                       </div>
-                    </div>
-                  </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                    <div className="text-sm font-semibold text-slate-900">
-                      Concept installatiedossier
+                      <button
+                        type="button"
+                        onClick={onCreateProvisioning}
+                        disabled={!canCreateProvisioning}
+                        className="mt-4 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {provisioningBusy ? "Bezig..." : "Nu echt aanmaken in backend"}
+                      </button>
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Dit is een werkvoorstel voor wat later door de backend gevalideerd en opgeslagen
-                      moet worden. Dit is dus geen bindend contract.
-                    </p>
-
-                    <pre className="mt-4 overflow-x-auto rounded-2xl bg-slate-950 px-4 py-4 text-xs leading-6 text-slate-100">
-{conceptProvisioningDraftJson}
-                    </pre>
                   </div>
 
                   <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm leading-7 text-blue-900">
-                    De juiste volgende backendstap is later een echte create-call die dit voorstel
-                    omzet in een provisioningrecord. Niet de frontend laten doen alsof dat al gebeurd is.
+                    Deze stap is pas geslaagd wanneer de backend effectief een provisioningrecord terugstuurt.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <div className="text-sm font-semibold text-slate-900">Echt provisioningrecord</div>
+                      <div className="mt-4 space-y-3 text-sm">
+                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <span className="text-slate-500">Provisioning ID</span>
+                          <span className="font-semibold text-slate-900">{provisioningIdLabel}</span>
+                        </div>
+                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <span className="text-slate-500">Status</span>
+                          <span className="font-semibold text-slate-900">{provisioningStatusLabel}</span>
+                        </div>
+                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <span className="text-slate-500">Klant</span>
+                          <span className="font-semibold text-slate-900">{provisioningItem?.customerId || "-"}</span>
+                        </div>
+                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <span className="text-slate-500">Site</span>
+                          <span className="font-semibold text-slate-900">{provisioningItem?.siteId || "-"}</span>
+                        </div>
+                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <span className="text-slate-500">Box-ID</span>
+                          <span className="font-semibold text-slate-900">{provisioningItem?.boxId || "-"}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <div className="text-sm font-semibold text-slate-900">Live opvolging uit backend</div>
+                      <div className="mt-4 space-y-3 text-sm">
+                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <span className="text-slate-500">Aangemaakt op</span>
+                          <span className="font-semibold text-slate-900">{provisioningCreatedAt}</span>
+                        </div>
+                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <span className="text-slate-500">Claimed op</span>
+                          <span className="font-semibold text-slate-900">{provisioningClaimedAt}</span>
+                        </div>
+                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <span className="text-slate-500">Laatste heartbeat</span>
+                          <span className="font-semibold text-slate-900">{provisioningLastHeartbeatAt}</span>
+                        </div>
+                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <span className="text-slate-500">Finalized op</span>
+                          <span className="font-semibold text-slate-900">{provisioningFinalizedAt}</span>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          onClick={onRefreshProvisioning}
+                          disabled={!canRefreshProvisioning}
+                          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Ververs status
+                        </button>
+                        <button
+                          type="button"
+                          onClick={onFinalizeProvisioning}
+                          disabled={!canFinalizeProvisioning}
+                          className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Installatie afronden
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-4 text-sm leading-7 text-green-900">
+                    Deze stap toont nu een echt backendrecord. De cockpit mag dus alleen verder bouwen op deze bevestigde status.
                   </div>
                 </>
               )}
@@ -745,8 +900,7 @@ export default function AdminProvisioningSection({
                       Bewuste grens van deze stap
                     </div>
                     <p className="mt-3 text-sm leading-7 text-slate-600">
-                      Deze cockpit toont hier nog geen echte online-status, claim-status of heartbeat.
-                      Dat zou anders opnieuw fake zekerheid geven in de UI.
+                      Deze stap zelf forceert geen online-status. Echte claim, heartbeat of online zie je alleen als de backend die status al heeft bevestigd.
                     </p>
                   </div>
                 </>
@@ -800,7 +954,7 @@ export default function AdminProvisioningSection({
 
                     <div className="rounded-2xl border border-slate-200 bg-white p-5">
                       <div className="text-sm font-semibold text-slate-900">
-                        Wat hier later backendmatig bevestigd moet worden
+                        Wat backend of device al bevestigd hebben of nog moeten bevestigen
                       </div>
 
                       <div className="mt-4 space-y-3 text-sm leading-7 text-slate-600">
@@ -816,7 +970,7 @@ export default function AdminProvisioningSection({
                       </div>
 
                       <div className="mt-4 rounded-xl bg-amber-50 px-4 py-4 text-sm text-amber-900">
-                        Deze bevestigingen worden hier nu nog niet live uit backend of device gelezen.
+                        Bovenaan zie je alleen echte provisioningstatus die via backend is opgehaald. Zonder backendbevestiging blijft dit voorlopig.
                       </div>
                     </div>
                   </div>
@@ -830,8 +984,7 @@ export default function AdminProvisioningSection({
                       Bewuste grens van deze stap
                     </div>
                     <p className="mt-3 text-sm leading-7 text-slate-600">
-                      Deze cockpit toont hier nog geen echte claim-status, heartbeat of definitieve online-status.
-                      Anders zouden we opnieuw schijnzekerheid inbouwen.
+                      Deze cockpit toont alleen echte claim-status, heartbeat of online-status als die via backend werd opgehaald. Zonder backendbevestiging forceren we niets.
                     </p>
                   </div>
                 </>
