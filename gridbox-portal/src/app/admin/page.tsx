@@ -819,9 +819,19 @@ export default function AdminPage() {
                   provisioningCustomerId={provisioningCustomerId}
                   provisioningSiteId={provisioningSiteId}
                   provisioningBoxId={provisioningBoxId}
+                  provisioningItem={provisioningItem}
+                  provisioningLookupId={provisioningLookupId}
+                  provisioningBusy={provisioningBusy}
+                  provisioningStatusLabel={provisioningStatusLabel}
+                  canRefreshProvisioning={canRefreshProvisioning}
+                  canFinalizeProvisioning={canFinalizeProvisioning}
                   onProvisioningCustomerChange={setProvisioningCustomerId}
                   onProvisioningSiteChange={setProvisioningSiteId}
                   onProvisioningBoxIdChange={setProvisioningBoxId}
+                  onProvisioningLookupIdChange={setProvisioningLookupId}
+                  onCreateProvisioning={handleCreateProvisioning}
+                  onRefreshProvisioning={handleRefreshProvisioning}
+                  onFinalizeProvisioning={handleFinalizeProvisioning}
                   onStepChange={setSelectedProvisioningStep}
                 />
               </section>
