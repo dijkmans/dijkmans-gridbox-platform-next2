@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, useEffect, useState } from "react";
 import { auth } from "@/lib/firebase";
@@ -18,6 +18,7 @@ import {
   fetchAdminBoxes,
   fetchAdminInvites,
   fetchAdminRoles,
+  fetchAdminPath,
   postAdminJson,
   deleteAdminPath
 } from "@/components/admin/adminApi";
@@ -28,7 +29,9 @@ import type {
   InviteItem,
   CustomerBoxAccessItem,
   AdminBoxItem,
-  AdminRoleItem
+  AdminRoleItem,
+  AdminProvisioningItem,
+  AdminProvisioningStatus
 } from "@/components/admin/types";
 import {
   getBoxLabel,
@@ -82,6 +85,9 @@ export default function AdminPage() {
   const [provisioningCustomerId, setProvisioningCustomerId] = useState("");
   const [provisioningSiteId, setProvisioningSiteId] = useState("");
   const [provisioningBoxId, setProvisioningBoxId] = useState("");
+  const [provisioningItem, setProvisioningItem] = useState<AdminProvisioningItem | null>(null);
+  const [provisioningLookupId, setProvisioningLookupId] = useState("");
+  const [provisioningBusy, setProvisioningBusy] = useState(false);
 
   const sortedBoxes = [...boxes].sort((a, b) => getBoxLabel(a).localeCompare(getBoxLabel(b)));
 
@@ -100,7 +106,6 @@ export default function AdminPage() {
       }
 
       const token = await user.getIdToken();
-      const headers = { Authorization: `Bearer ${token}` };
 
       const [
         customersRes,
@@ -368,6 +373,206 @@ export default function AdminPage() {
     await loadAdminData(false);
   }
 
+  function normalizeProvisioningItem(input: unknown): AdminProvisioningItem | null {
+    if (!input || typeof input !== "object") {
+      return null;
+    }
+
+    const source = input as Record<string, unknown>;
+
+    return {
+      id: typeof source.id === "string" ? source.id : "",
+      customerId: typeof source.customerId === "string" ? source.customerId : null,
+      siteId: typeof source.siteId === "string" ? source.siteId : null,
+      boxId: typeof source.boxId === "string" ? source.boxId : null,
+      status: typeof source.status === "string" ? source.status : undefined,
+      createdAt: typeof source.createdAt === "string" ? source.createdAt : null,
+      updatedAt: typeof source.updatedAt === "string" ? source.updatedAt : null,
+      claimedAt: typeof source.claimedAt === "string" ? source.claimedAt : null,
+      claimedByDevice:
+        typeof source.claimedByDevice === "string" ? source.claimedByDevice : null,
+      lastHeartbeatAt:
+        typeof source.lastHeartbeatAt === "string" ? source.lastHeartbeatAt : null,
+      finalizedAt: typeof source.finalizedAt === "string" ? source.finalizedAt : null,
+      finalizedBy: typeof source.finalizedBy === "string" ? source.finalizedBy : null
+    };
+  }
+
+  async function fetchProvisioningById(provisioningId: string) {
+    const trimmedProvisioningId = provisioningId.trim();
+
+    if (!trimmedProvisioningId) {
+      setErrorMessage("Provisioning ID is verplicht");
+      return null;
+    }
+
+    const user = auth.currentUser;
+    if (!user) {
+      setErrorMessage("Niet aangemeld");
+      return null;
+    }
+
+    setProvisioningBusy(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const token = await user.getIdToken();
+      const res = await fetchAdminPath(
+        `/admin/provisioning/${encodeURIComponent(trimmedProvisioningId)}`,
+        { token }
+      );
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMessage(data.message || "Kon provisioning niet ophalen");
+        return null;
+      }
+
+      const nextProvisioningItem = normalizeProvisioningItem(data.item);
+      if (!nextProvisioningItem?.id) {
+        setErrorMessage("Backend gaf geen geldige provisioning terug");
+        return null;
+      }
+
+      setProvisioningItem(nextProvisioningItem);
+      setProvisioningLookupId(nextProvisioningItem.id);
+      return nextProvisioningItem;
+    } catch (error) {
+      setErrorMessage("Netwerkfout bij ophalen provisioning");
+      return null;
+    } finally {
+      setProvisioningBusy(false);
+    }
+  }
+
+  async function handleCreateProvisioning() {
+    const customerId = provisioningCustomerId.trim();
+    const siteId = provisioningSiteId.trim();
+    const boxId = provisioningBoxId.trim().toLowerCase();
+
+    if (!customerId) {
+      setErrorMessage("Kies eerst een klant voor de provisioning");
+      return;
+    }
+
+    if (!siteId) {
+      setErrorMessage("Kies eerst een site voor de provisioning");
+      return;
+    }
+
+    if (!boxId) {
+      setErrorMessage("Vul eerst een geldige box-ID in");
+      return;
+    }
+
+    const user = auth.currentUser;
+    if (!user) {
+      setErrorMessage("Niet aangemeld");
+      return;
+    }
+
+    setProvisioningBusy(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const token = await user.getIdToken();
+      const res = await postAdminJson("/admin/provisioning/boxes", {
+        token,
+        body: {
+          boxId,
+          customerId,
+          siteId
+        }
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMessage(data.message || "Kon provisioning niet aanmaken");
+
+        const existingProvisioningId =
+          typeof data.provisioningId === "string" ? data.provisioningId : "";
+
+        if (existingProvisioningId) {
+          setProvisioningLookupId(existingProvisioningId);
+        }
+        return;
+      }
+
+      const nextProvisioningItem = normalizeProvisioningItem(data.item);
+      if (!nextProvisioningItem?.id) {
+        setErrorMessage("Backend gaf geen geldige provisioning terug");
+        return;
+      }
+
+      setProvisioningItem(nextProvisioningItem);
+      setProvisioningLookupId(nextProvisioningItem.id);
+      setProvisioningBoxId(boxId);
+      setSelectedProvisioningStep(1);
+      setSuccessMessage("Provisioningrecord aangemaakt");
+      await loadAdminData(false);
+    } catch (error) {
+      setErrorMessage("Netwerkfout bij aanmaken provisioning");
+    } finally {
+      setProvisioningBusy(false);
+    }
+  }
+
+  async function handleRefreshProvisioning() {
+    const provisioningId =
+      provisioningLookupId.trim() || provisioningItem?.id?.trim() || "";
+
+    const refreshedItem = await fetchProvisioningById(provisioningId);
+    if (refreshedItem) {
+      setSuccessMessage("Provisioning opnieuw opgehaald");
+    }
+  }
+
+  async function handleFinalizeProvisioning() {
+    const provisioningId = provisioningItem?.id?.trim() || provisioningLookupId.trim();
+
+    if (!provisioningId) {
+      setErrorMessage("Geen provisioning geselecteerd om af te ronden");
+      return;
+    }
+
+    const user = auth.currentUser;
+    if (!user) {
+      setErrorMessage("Niet aangemeld");
+      return;
+    }
+
+    setProvisioningBusy(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const token = await user.getIdToken();
+      const res = await postAdminJson(
+        `/admin/provisioning/${encodeURIComponent(provisioningId)}/finalize`,
+        {
+          token,
+          body: {}
+        }
+      );
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMessage(data.message || "Kon provisioning niet afronden");
+        return;
+      }
+
+      await fetchProvisioningById(provisioningId);
+      setSuccessMessage("Provisioning afgerond");
+      await loadAdminData(false);
+    } catch (error) {
+      setErrorMessage("Netwerkfout bij afronden provisioning");
+    } finally {
+      setProvisioningBusy(false);
+    }
+  }
+
   const selectedCustomer = getSelectedCustomer(customers, selectedCustomerId);
   const customerMembers = getCustomerMembers(memberships, selectedCustomerId);
   const customerInvites = getCustomerInvites(invites, selectedCustomerId);
@@ -384,6 +589,35 @@ export default function AdminPage() {
 
   const getAdminRoleLabel = (roleId: string | undefined) =>
     getDerivedAdminRoleLabel(roleId, inviteRoles);
+
+  const provisioningStatusLabels: Record<AdminProvisioningStatus, string> = {
+    draft: "Draft",
+    awaiting_sd_preparation: "Wacht op SD-kaart",
+    awaiting_first_boot: "Wacht op eerste opstart",
+    claimed: "Geclaimd",
+    online: "Online",
+    ready: "Klaar",
+    failed: "Mislukt"
+  };
+
+  const provisioningStatus =
+    provisioningItem?.status &&
+    Object.prototype.hasOwnProperty.call(provisioningStatusLabels, provisioningItem.status)
+      ? (provisioningItem.status as AdminProvisioningStatus)
+      : null;
+
+  const provisioningStatusLabel = provisioningStatus
+    ? provisioningStatusLabels[provisioningStatus]
+    : provisioningItem?.status || "Nog geen provisioning geladen";
+
+  const canFinalizeProvisioning = provisioningStatus === "online" && !provisioningBusy;
+  const canRefreshProvisioning =
+    !provisioningBusy &&
+    (provisioningLookupId.trim().length > 0 || Boolean(provisioningItem?.id));
+  const provisioningCustomerLabel =
+    customers.find((customer) => customer.id === provisioningItem?.customerId)?.name ||
+    provisioningItem?.customerId ||
+    "-";
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-800">
@@ -458,21 +692,139 @@ export default function AdminPage() {
               />
             )}
 {activeSection === "provisioning" && (
-              <AdminProvisioningSection
-                selectedProvisioningStep={selectedProvisioningStep}
-                provisioningSteps={provisioningSteps}
-                provisioningStepContent={provisioningStepContent}
-                customers={customers}
-                siteSummaries={siteSummaries}
-                boxes={boxes}
-                provisioningCustomerId={provisioningCustomerId}
-                provisioningSiteId={provisioningSiteId}
-                provisioningBoxId={provisioningBoxId}
-                onProvisioningCustomerChange={setProvisioningCustomerId}
-                onProvisioningSiteChange={setProvisioningSiteId}
-                onProvisioningBoxIdChange={setProvisioningBoxId}
-                onStepChange={setSelectedProvisioningStep}
-              />
+              <section className="space-y-6">
+                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <h2 className="text-2xl font-bold text-slate-900">
+                        Echte provisioningstatus
+                      </h2>
+                      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+                        Deze kaart leest alleen backend-bevestigde status. Geen lokale eindstatus,
+                        geen fake claim en geen fake online.
+                      </p>
+                    </div>
+                    <div className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700">
+                      {provisioningStatusLabel}
+                    </div>
+                  </div>
+
+                  <div className="mt-6 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Provisioning ID
+                          </div>
+                          <div className="mt-2 break-all text-sm font-semibold text-slate-900">
+                            {provisioningItem?.id || "-"}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Box
+                          </div>
+                          <div className="mt-2 text-sm font-semibold text-slate-900">
+                            {provisioningItem?.boxId || "-"}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Klant
+                          </div>
+                          <div className="mt-2 text-sm font-semibold text-slate-900">
+                            {provisioningCustomerLabel}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Site
+                          </div>
+                          <div className="mt-2 text-sm font-semibold text-slate-900">
+                            {provisioningItem?.siteId || "-"}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Laatste heartbeat
+                          </div>
+                          <div className="mt-2 text-sm font-semibold text-slate-900">
+                            {formatDate(provisioningItem?.lastHeartbeatAt) || "-"}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Geclaimd op
+                          </div>
+                          <div className="mt-2 text-sm font-semibold text-slate-900">
+                            {formatDate(provisioningItem?.claimedAt) || "-"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                      <label className="block text-sm font-semibold text-slate-700">
+                        Provisioning ID opnieuw ophalen
+                      </label>
+                      <input
+                        value={provisioningLookupId}
+                        onChange={(e) => setProvisioningLookupId(e.target.value)}
+                        placeholder="Voer provisioning ID in"
+                        className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900"
+                      />
+
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          onClick={handleCreateProvisioning}
+                          disabled={provisioningBusy}
+                          className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {provisioningBusy ? "Bezig..." : "Provisioning aanmaken"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleRefreshProvisioning}
+                          disabled={!canRefreshProvisioning}
+                          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Ververs provisioning
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleFinalizeProvisioning}
+                          disabled={!canFinalizeProvisioning}
+                          className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Installatie afronden
+                        </button>
+                      </div>
+
+                      <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-900">
+                        Afronden mag alleen wanneer de backendstatus echt <strong>online</strong>
+                        is. De frontend beslist dat niet zelf.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <AdminProvisioningSection
+                  selectedProvisioningStep={selectedProvisioningStep}
+                  provisioningSteps={provisioningSteps}
+                  provisioningStepContent={provisioningStepContent}
+                  customers={customers}
+                  siteSummaries={siteSummaries}
+                  boxes={boxes}
+                  provisioningCustomerId={provisioningCustomerId}
+                  provisioningSiteId={provisioningSiteId}
+                  provisioningBoxId={provisioningBoxId}
+                  onProvisioningCustomerChange={setProvisioningCustomerId}
+                  onProvisioningSiteChange={setProvisioningSiteId}
+                  onProvisioningBoxIdChange={setProvisioningBoxId}
+                  onStepChange={setSelectedProvisioningStep}
+                />
+              </section>
             )}
 {activeSection === "customers" && (
               <AdminCustomersSection
