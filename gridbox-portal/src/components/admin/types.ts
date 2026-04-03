@@ -66,3 +66,27 @@ export type AdminRoleItem = {
   active?: boolean;
   assignableInAdmin?: boolean;
 };
+
+export type AdminProvisioningStatus =
+  | "draft"
+  | "awaiting_sd_preparation"
+  | "awaiting_first_boot"
+  | "claimed"
+  | "online"
+  | "ready"
+  | "failed";
+
+export type AdminProvisioningItem = {
+  id: string;
+  customerId?: string | null;
+  siteId?: string | null;
+  boxId?: string | null;
+  status?: AdminProvisioningStatus | string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  claimedAt?: string | null;
+  claimedByDevice?: string | null;
+  lastHeartbeatAt?: string | null;
+  finalizedAt?: string | null;
+  finalizedBy?: string | null;
+};
