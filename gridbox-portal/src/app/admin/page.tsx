@@ -19,6 +19,7 @@ import {
   fetchAdminSites,
   fetchAdminInvites,
   fetchAdminRoles,
+  fetchAdminProvisionings,
   fetchAdminPath,
   postAdminJson,
   deleteAdminPath
@@ -89,6 +90,7 @@ export default function AdminPage() {
   const [provisioningSiteId, setProvisioningSiteId] = useState("");
   const [provisioningBoxId, setProvisioningBoxId] = useState("");
   const [provisioningItem, setProvisioningItem] = useState<AdminProvisioningItem | null>(null);
+  const [provisioningItems, setProvisioningItems] = useState<AdminProvisioningItem[]>([]);
   const [provisioningLookupId, setProvisioningLookupId] = useState("");
   const [provisioningBusy, setProvisioningBusy] = useState(false);
   const [bootstrapDownloadItem, setBootstrapDownloadItem] = useState<Record<string, string> | null>(null);
@@ -118,7 +120,8 @@ export default function AdminPage() {
         boxesRes,
         sitesRes,
         invitesRes,
-        rolesRes
+        rolesRes,
+        provisioningsRes
       ] = await Promise.all([
         fetchAdminCustomers({ token }),
         fetchAdminMemberships({ token }),
@@ -130,6 +133,9 @@ export default function AdminPage() {
         ),
         fetchAdminRoles({ token }).catch(
           () => ({ ok: false, json: async () => ({ items: [] }) } as any)
+        ),
+        fetchAdminProvisionings({ token }).catch(
+          () => ({ ok: false, json: async () => ({ items: [] }) } as any)
         )
       ]);
 
@@ -140,7 +146,8 @@ export default function AdminPage() {
         boxesData,
         sitesData,
         invitesData,
-        rolesData
+        rolesData,
+        provisioningsData
       ] = await Promise.all([
         customersRes.json(),
         membershipsRes.json(),
@@ -148,7 +155,8 @@ export default function AdminPage() {
         boxesRes.json(),
         sitesRes.json(),
         invitesRes.ok ? invitesRes.json() : { items: [] },
-        rolesRes.ok ? rolesRes.json() : { items: [] }
+        rolesRes.ok ? rolesRes.json() : { items: [] },
+        provisioningsRes.ok ? provisioningsRes.json() : { items: [] }
       ]);
 
       const nextCustomers: CustomerItem[] = customersData.items || [];
@@ -164,6 +172,7 @@ export default function AdminPage() {
       setBoxes(boxesData.items || []);
       setSites(sitesData.items || []);
       setInvites(invitesData.items || []);
+      setProvisioningItems(provisioningsData.items || []);
       setInviteRoles(nextRoles);
       setInviteRole((current) =>
         nextRoles.some((role) => role.id === current) ? current : defaultInviteRole
@@ -707,6 +716,14 @@ export default function AdminPage() {
           }))
           .sort((a, b) => a.siteId.localeCompare(b.siteId))
       : boxBasedSiteSummaries;
+
+  const provisioningSiteSummaries = sites
+    .map((site) => ({
+      siteId: site.id,
+      boxCount: boxes.filter((box) => box.siteId === site.id).length,
+      customerIds: new Set(site.customerId ? [site.customerId.toLowerCase()] : [])
+    }))
+    .sort((a, b) => a.siteId.localeCompare(b.siteId));
   const customerSummaries = getCustomerSummaries(customers, memberships, customerBoxAccess);
 
   const getAdminRoleLabel = (roleId: string | undefined) =>
@@ -813,141 +830,13 @@ export default function AdminPage() {
               />
             )}
 {activeSection === "provisioning" && (
-              <section className="space-y-6">
-                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <h2 className="text-2xl font-bold text-slate-900">
-                        Echte provisioningstatus
-                      </h2>
-                      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-                        Deze kaart leest alleen backend-bevestigde status. Geen lokale eindstatus,
-                        geen fake claim en geen fake online.
-                      </p>
-                    </div>
-                    <div className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700">
-                      {provisioningStatusLabel}
-                    </div>
-                  </div>
-
-                  <div className="mt-6 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div>
-                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                            Provisioning ID
-                          </div>
-                          <div className="mt-2 break-all text-sm font-semibold text-slate-900">
-                            {provisioningItem?.id || "-"}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                            Box
-                          </div>
-                          <div className="mt-2 text-sm font-semibold text-slate-900">
-                            {provisioningItem?.boxId || "-"}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                            Klant
-                          </div>
-                          <div className="mt-2 text-sm font-semibold text-slate-900">
-                            {provisioningCustomerLabel}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                            Site
-                          </div>
-                          <div className="mt-2 text-sm font-semibold text-slate-900">
-                            {provisioningItem?.siteId || "-"}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                            Laatste heartbeat
-                          </div>
-                          <div className="mt-2 text-sm font-semibold text-slate-900">
-                            {formatDate(provisioningItem?.lastHeartbeatAt) || "-"}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                            Geclaimd op
-                          </div>
-                          <div className="mt-2 text-sm font-semibold text-slate-900">
-                            {formatDate(provisioningItem?.claimedAt) || "-"}
-                          </div>
-                        </div>
-                        {provisioningItem?.lastError && (
-                          <div className="md:col-span-2">
-                            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                              Laatste fout
-                            </div>
-                            <div className="mt-2 text-sm font-semibold text-red-700">
-                              {provisioningItem.lastError}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                      <label className="block text-sm font-semibold text-slate-700">
-                        Provisioning ID opnieuw ophalen
-                      </label>
-                      <input
-                        value={provisioningLookupId}
-                        onChange={(e) => setProvisioningLookupId(e.target.value)}
-                        placeholder="Voer provisioning ID in"
-                        className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900"
-                      />
-
-                      <div className="mt-4 flex flex-wrap gap-3">
-                        <button
-                          type="button"
-                          onClick={handleCreateProvisioning}
-                          disabled={provisioningBusy}
-                          className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {provisioningBusy ? "Bezig..." : "Provisioning aanmaken"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleRefreshProvisioning}
-                          disabled={!canRefreshProvisioning}
-                          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          Ververs provisioning
-                        </button>
-                        {selectedProvisioningStep >= 6 && (
-                          <button
-                            type="button"
-                            onClick={handleFinalizeProvisioning}
-                            disabled={!canFinalizeProvisioning}
-                            className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            Installatie afronden
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-900">
-                        Afronden mag alleen wanneer de backendstatus echt <strong>online</strong>
-                        is. De frontend beslist dat niet zelf.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
+              <section>
                 <AdminProvisioningSection
                   selectedProvisioningStep={selectedProvisioningStep}
                   provisioningSteps={provisioningSteps}
                   provisioningStepContent={provisioningStepContent}
                   customers={customers}
-                  siteSummaries={siteSummaries}
+                  siteSummaries={provisioningSiteSummaries}
                   boxes={boxes}
                   provisioningCustomerId={provisioningCustomerId}
                   provisioningSiteId={provisioningSiteId}
@@ -1080,7 +969,9 @@ export default function AdminPage() {
 
             {activeSection === "invites" && (
               <AdminInvitesSection
+                selectedCustomerId={selectedCustomerId}
                 selectedCustomerName={selectedCustomer?.name || selectedCustomer?.id || "geen"}
+                onSelectCustomer={setSelectedCustomerId}
                 inviteEmail={inviteEmail}
                 inviteDisplayName={inviteDisplayName}
                 inviteRole={inviteRole}
@@ -1106,7 +997,7 @@ export default function AdminPage() {
                 customerAccessCount={customerAccess.length}
                 accessBoxId={accessBoxId}
                 sortedBoxes={sortedBoxes}
-                memberships={memberships}
+                memberships={customerMembers}
                 customers={customers}
                 customerAccess={customerAccess}
                 getRoleLabel={getAdminRoleLabel}
@@ -1123,7 +1014,12 @@ export default function AdminPage() {
               />
             )}
 {activeSection === "logs" && (
-              <AdminLogsSection />
+              <AdminLogsSection
+                provisioningItems={provisioningItems}
+                customers={customers}
+                provisioningStatusLabels={provisioningStatusLabels}
+                formatDate={formatDate}
+              />
             )}
           </div>
         </div>

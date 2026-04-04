@@ -243,7 +243,9 @@ def try_backend_bootstrap_claim():
         response = requests.post(claim_url, json=payload, timeout=20)
         if response.status_code != 200:
             log(f"âš ï¸ Backend bootstrap-claim geweigerd: {response.status_code} | {response.text}")
-            return False
+            if 400 <= response.status_code < 500:
+                return None  # permanente afwijzing - niet opnieuw proberen
+            return False  # tijdelijk (5xx, netwerk) - mag opnieuw proberen
 
         body = response.json() if response.content else {}
         item = body.get("item", {}) if isinstance(body, dict) else {}
@@ -1466,6 +1468,7 @@ if platform.system() != "Windows" and GPIO_AVAILABLE:
 
 next_heartbeat_at = 0
 next_software_poll_at = 0
+_claim_permanently_rejected = False
 
 try:
     while True:
@@ -1478,6 +1481,14 @@ try:
             )
 
         if now_ts >= next_heartbeat_at:
+            if bootstrap_config and not runtime_config and not _claim_permanently_rejected:
+                _claim_result = try_backend_bootstrap_claim()
+                if _claim_result is True:
+                    runtime_config = load_runtime_config() or runtime_config
+                    if isinstance(runtime_config, dict) and runtime_config:
+                        box_config = deep_merge_missing(box_config, runtime_config)
+                elif _claim_result is None:
+                    _claim_permanently_rejected = True
             update_pi_status()
             next_heartbeat_at = now_ts + HEARTBEAT_INTERVAL_SECONDS
 

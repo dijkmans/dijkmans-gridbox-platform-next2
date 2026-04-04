@@ -122,16 +122,17 @@ export default function AdminDashboardSection({
               <li>Invites ophalen, aanmaken en verwijderen</li>
               <li>Box-toegang koppelen en activeren of deactiveren</li>
               <li>Rollen ophalen via /admin/roles</li>
+              <li>Installatiecockpit met echte provisioningflow</li>
+              <li>Provisioning logs als live scherm</li>
+              <li>Sites via eigen endpoint gekoppeld aan klant</li>
             </ul>
           </div>
 
           <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
             <h2 className="text-lg font-bold text-amber-900">Nog bewust niet afgewerkt</h2>
             <ul className="mt-4 space-y-2 text-sm leading-6 text-amber-900">
-              <li>Installatiecockpit is nog geen echte provisioningflow</li>
-              <li>Provisioning logs zijn nog geen live scherm</li>
-              <li>Sites zitten in deze slice nog niet op een eigen endpoint</li>
-              <li>Er wordt nog geen e-mail automatisch verstuurd bij invite</li>
+              <li>E-mail wordt nog niet automatisch verstuurd bij invite</li>
+              <li>Provisioning logs tonen nog geen data zolang er geen installaties zijn uitgevoerd</li>
             </ul>
           </div>
         </div>

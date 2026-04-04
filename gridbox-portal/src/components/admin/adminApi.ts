@@ -1,4 +1,4 @@
-﻿import { apiUrl } from "@/lib/api";
+import { apiUrl } from "@/lib/api";
 
 type FetchOptions = {
   token: string;
@@ -35,12 +35,20 @@ export async function fetchAdminBoxes({ token }: FetchOptions) {
   return fetchAdminPath("/admin/boxes", { token });
 }
 
+export async function fetchAdminSites({ token }: FetchOptions) {
+  return fetchAdminPath("/admin/sites", { token });
+}
+
 export async function fetchAdminInvites({ token }: FetchOptions) {
   return fetchAdminPath("/admin/invites", { token });
 }
 
 export async function fetchAdminRoles({ token }: FetchOptions) {
   return fetchAdminPath("/admin/roles", { token });
+}
+
+export async function fetchAdminProvisionings({ token }: FetchOptions) {
+  return fetchAdminPath("/admin/provisionings", { token });
 }
 
 export async function postAdminJson(path: string, { token, body }: PostOptions) {

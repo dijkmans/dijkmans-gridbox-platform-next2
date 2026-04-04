@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { FormEvent } from "react";
+import { FormEvent, useState } from "react";
 
 type InviteRoleItem = {
   id: string;
@@ -22,7 +22,9 @@ type CustomerListItem = {
 };
 
 type AdminInvitesSectionProps = {
+  selectedCustomerId: string | null;
   selectedCustomerName: string;
+  onSelectCustomer: (id: string) => void;
   inviteEmail: string;
   inviteDisplayName: string;
   inviteRole: string;
@@ -42,7 +44,9 @@ type AdminInvitesSectionProps = {
 };
 
 export default function AdminInvitesSection({
+  selectedCustomerId,
   selectedCustomerName,
+  onSelectCustomer,
   inviteEmail,
   inviteDisplayName,
   inviteRole,
@@ -60,6 +64,15 @@ export default function AdminInvitesSection({
   onCreateInvite,
   onDeleteInvite
 }: AdminInvitesSectionProps) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(lastInviteUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
   return (
     <section className="grid gap-6 xl:grid-cols-[420px_1fr]">
       <div className="space-y-6">
@@ -77,7 +90,25 @@ export default function AdminInvitesSection({
             Maak een invite aan voor het geselecteerde bedrijf.
           </p>
 
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+          <div className="mt-4">
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
+              Bedrijf
+            </label>
+            <select
+              value={selectedCustomerId ?? ""}
+              onChange={(e) => onSelectCustomer(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900"
+            >
+              <option value="">Kies een bedrijf...</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name || c.id}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
             Geselecteerd bedrijf:{" "}
             <span className="font-semibold text-slate-900">{selectedCustomerName}</span>
           </div>
@@ -154,6 +185,13 @@ export default function AdminInvitesSection({
             <div className="mt-5 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-900">
               <div className="font-semibold">Activatielink aangemaakt</div>
               <div className="mt-2 break-all">{lastInviteUrl}</div>
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="mt-3 rounded-xl bg-green-700 px-4 py-2 text-xs font-semibold text-white transition hover:bg-green-800"
+              >
+                {copied ? "Gekopieerd!" : "Kopieer link"}
+              </button>
             </div>
           )}
         </div>

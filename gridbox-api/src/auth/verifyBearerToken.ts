@@ -23,13 +23,18 @@ export async function verifyBearerToken(
     return null;
   }
 
-  const decoded = await getAuth().verifyIdToken(idToken);
+  try {
+    const decoded = await getAuth().verifyIdToken(idToken);
 
-  return {
-    uid: decoded.uid,
-    email: decoded.email,
-    name: decoded.name
-  };
+    return {
+      uid: decoded.uid,
+      email: decoded.email,
+      name: decoded.name
+    };
+  } catch (error) {
+    console.error("verifyIdToken fout:", error);
+    return null;
+  }
 }
 
 export async function requirePortalUser(authHeader?: string): Promise<VerifiedPortalUser> {

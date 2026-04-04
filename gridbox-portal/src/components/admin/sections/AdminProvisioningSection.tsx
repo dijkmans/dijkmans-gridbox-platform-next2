@@ -65,12 +65,13 @@ export default function AdminProvisioningSection({
     (a.name || a.id).localeCompare(b.name || b.id)
   );
 
+
   const sortedSites = [...siteSummaries].sort((a, b) => a.siteId.localeCompare(b.siteId));
 
   const selectedCustomer = customers.find((customer) => customer.id === provisioningCustomerId);
   const customerChosen = provisioningCustomerId.trim().length > 0;
   const customerScopedSites = selectedCustomer
-    ? sortedSites.filter((site) => site.customerIds.has(selectedCustomer.id))
+    ? sortedSites.filter((site) => site.customerIds.has(selectedCustomer.id.toLowerCase()))
     : [];
 
   const trimmedSiteId = provisioningSiteId.trim();
@@ -93,6 +94,7 @@ export default function AdminProvisioningSection({
 
   const siteChosen = Boolean(existingSite);
   const boxChosen = trimmedBoxId.length > 0;
+
 
   const stepOneReady =
     customerChosen &&
@@ -298,16 +300,27 @@ export default function AdminProvisioningSection({
                       </option>
                     ))}
                   </select>
+                  {customerChosen && customerScopedSites.length === 0 && (
+                    <div className="mt-3">
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">
+                        Nieuwe site-ID
+                      </label>
+                      <input
+                        value={provisioningSiteId}
+                        onChange={(e) => onProvisioningSiteChange(e.target.value)}
+                        placeholder="bijv. site-klant-001"
+                        className="w-full rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-amber-500"
+                      />
+                      <p className="mt-2 text-xs text-amber-700">
+                        Deze klant heeft nog geen bestaande sites. De site-ID die je hier invult
+                        wordt als nieuwe site aangemaakt door de backend bij het starten van de provisioning.
+                      </p>
+                    </div>
+                  )}
                   <div className="mt-2 space-y-1 text-xs">
                     {!customerChosen && (
                       <p className="text-slate-500">
                         Kies eerst een klant. Pas dan kan je een geldige site kiezen.
-                      </p>
-                    )}
-                    {customerChosen && customerScopedSites.length === 0 && (
-                      <p className="text-amber-700">
-                        Voor deze klant kennen we in deze adminweergave nog geen bestaande sites.
-                        De backend aanvaardt vandaag geen nieuwe vrije site-ID.
                       </p>
                     )}
                     {customerChosen && customerScopedSites.length > 0 && !siteChosen && (

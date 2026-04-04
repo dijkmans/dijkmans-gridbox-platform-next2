@@ -10,10 +10,13 @@ export function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
-export function formatDate(value?: string | null) {
+export function formatDate(value?: string | null | { _seconds: number; _nanoseconds: number }) {
   if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
+  if (typeof value === "object" && "_seconds" in value) {
+    return new Date(value._seconds * 1000).toLocaleString("nl-BE");
+  }
+  const parsed = new Date(value as string);
+  if (Number.isNaN(parsed.getTime())) return String(value);
   return parsed.toLocaleString("nl-BE");
 }
 

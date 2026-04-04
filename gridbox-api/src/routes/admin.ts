@@ -1175,6 +1175,40 @@ router.post("/admin/provisioning/boxes", async (req, res) => {
   }
 });
 
+router.get("/admin/provisionings", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const db = getFirestore();
+    const snapshot = await db.collection("provisionings").orderBy("createdAt", "desc").get();
+
+    const items = snapshot.docs.map((doc) => {
+      const data = doc.data() as Record<string, unknown>;
+      const { bootstrapTokenHash: _bootstrapTokenHash, ...publicData } = data;
+      return { id: doc.id, ...publicData };
+    });
+
+    return res.json({ items });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
+    }
+
+    console.error("FOUT in GET /admin/provisionings", error);
+
+    return res.status(500).json({
+      error: "ADMIN_PROVISIONINGS_GET_FAILED",
+      message: "Kon provisionings niet ophalen"
+    });
+  }
+});
+
 router.get("/admin/provisioning/:id", async (req, res) => {
   try {
     await requirePlatformAdmin(req.header("Authorization") || undefined);

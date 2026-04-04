@@ -137,7 +137,6 @@ export default function AdminMembershipsSection({
               <thead className="border-b border-slate-200 text-slate-500">
                 <tr>
                   <th className="pb-3 pr-4 font-semibold">E-mail</th>
-                  <th className="pb-3 pr-4 font-semibold">Bedrijf</th>
                   <th className="pb-3 pr-4 font-semibold">Rol</th>
                   <th className="pb-3 text-right font-semibold">Acties</th>
                 </tr>
@@ -146,11 +145,6 @@ export default function AdminMembershipsSection({
                 {memberships.map((member) => (
                   <tr key={member.id} className="border-b border-slate-100">
                     <td className="py-4 pr-4 text-slate-900">{member.email || "-"}</td>
-                    <td className="py-4 pr-4 text-slate-600">
-                      {customers.find((customer) => customer.id === member.customerId)?.name ||
-                        member.customerId ||
-                        "-"}
-                    </td>
                     <td className="py-4 pr-4 text-slate-600">
                       {getRoleLabel(member.role)}
                     </td>
@@ -168,7 +162,7 @@ export default function AdminMembershipsSection({
 
                 {memberships.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="py-6 text-slate-500">
+                    <td colSpan={3} className="py-6 text-slate-500">
                       Geen memberships gevonden.
                     </td>
                   </tr>
