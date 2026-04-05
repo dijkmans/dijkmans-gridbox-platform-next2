@@ -1,35 +1,28 @@
-﻿# CURRENT WORKSTATE
+# CURRENT WORKSTATE
 
 ## Status
 
-- admin werkt
-- dropdowns werken
-- API is de centrale backend
-- basisarchitectuur is vastgelegd
+Admin fase is stabiel en werkend. Volgende fase is Operations Center en RMS-integratie.
 
 ## Architectuur (vastgelegd)
 
 - frontend = `/gridbox-portal`
-- backend = `/gridbox-api`
-- device laag = root `/src`
+- backend = `/gridbox-api` (draait op Cloud Run)
+- device laag = root `/src` (`listener.py` op Raspberry Pi)
 - `cloud-functions` = ondersteunend
 - root `index.html` = legacy
-- `/web` = onzeker of legacy en niet leidend
+- `/web` = legacy, niet leidend
 
-## Problemen
+## Wat werkt
 
-- memberships kunnen overschreven worden
-- duplicate preventie ontbreekt of is onvoldoende
-- delete en deactivate zijn nog niet voldoende uitgewerkt
-- UI validatie moet sterker
-
-## Regels
-
-- niet verder bouwen op de verkeerde frontend
-- geen nieuwe features in `/web`
-- geen nieuwe platformfunctionaliteit in root `index.html`
-- frontend blijft via API werken
-- architectuur eerst respecteren, dan uitbreiden
+- Admin volledig: klanten, memberships, invites, rollen, provisioning flow end-to-end
+- Sites endpoint gekoppeld aan klant (`/admin/sites`)
+- Provisioning logs als live scherm met statuskleurcodering
+- Bootstrap bestand (`box_bootstrap.json`) wordt automatisch verwijderd na succesvolle claim
+- Backend op Cloud Run (`gridbox-api`)
+- formatDate omzet Firestore Timestamps correct naar leesbare datum
+- Kopieer link knop in invite sectie
+- Nieuwe site aanmaken via tekstveld als klant nog geen sites heeft
 
 ## Locatiemodel (vastgelegd)
 
@@ -37,63 +30,27 @@
 - `boxes` verwijst via `siteId`
 - legacy locatievelden op boxniveau zijn niet leidend
 
-## Huidige richting camera
+## Camera (vastgelegd)
 
-Vastgelegd:
-- filtering gebeurt op de Raspberry Pi
-- snapshots worden genomen elke 5 seconden
-- vergelijking gebeurt altijd met het laatst opgeslagen beeld
-- `session start` = box open
-- `session end` = box close
-- startbeeld wordt altijd opgeslagen
-- eindbeeld wordt altijd opgeslagen
-- tussenbeelden worden alleen opgeslagen bij betekenisvolle wijziging
-- alleen geselecteerde beelden gaan naar Google Cloud Storage
+- filtering op de Raspberry Pi
+- snapshots elke 5 seconden
+- vergelijking altijd met het laatst opgeslagen beeld
+- session start = box open, session end = box close
+- start- en eindbeelden altijd opgeslagen
+- tussenbeelden alleen bij betekenisvolle wijziging
+- geselecteerde beelden naar Google Cloud Storage
 - Firestore bevat alleen metadata
-
-Nog uit te werken:
-1. exacte diff threshold
-2. exacte cooldownwaarde
-3. keuze hoe strikt ROI in v1 wordt toegepast
-4. foutafhandeling bij uploadproblemen
-5. definitieve Firestore-structuur voor sessies en captures
-6. portal-tijdlijn per sessie
 
 ## Volgende stappen
 
-1. platformAdmin beschermen
-2. duplicates blokkeren
-3. UI valideren
-4. data model verder opschonen via `sites` en `boxes`
-5. camera-architectuur implementeren in `listener.py`
-6. legacy en twijfelzones uit de actieve lijn halen
+1. Operations Center (`/operations`) — real-time status alle boxen, netwerk, hardware, remote acties, kosten
+2. Teltonika RMS integratie — camera IP detectie en remote access als Pi uitvalt
+3. Camera configuratie in installatiecockpit via RMS
+4. SIM saldo en dataverbruik inzichtelijk maken
 
-## Belangrijk inzicht
+## Regels
 
-Als deze structuur niet gerespecteerd wordt, verlies je richting in code, data en documentatie.
-
-Dus:
-eerst structuur, dan features
-
-## 2026-03-22 - Invite-procedure technisch uitgewerkt
-
-Toegevoegd:
-
-- apart technisch document `docs/05_INVITE_PROCEDURE.md`
-
-Doel:
-
-- invite-flow omzetten van richting naar uitvoerbare procedure
-- vaste regels voor create, validate en accept
-- memberships pas activeren na login en gsm-verificatie
-- autorisatie baseren op `authUid` en actieve membership
-
-Nieuwe praktische volgorde:
-
-1. Firestore model finaliseren
-2. `POST /admin/invites`
-3. `POST /invites/validate`
-4. Firebase login in activatiescherm
-5. Firebase phone verification
-6. `POST /invites/accept`
-7. middleware op actieve membership
+- niet verder bouwen op legacy frontend (`/web`, root `index.html`)
+- frontend blijft via API werken
+- architectuur eerst respecteren, dan uitbreiden
+- admin = klantbeheer, operations = technisch beheer

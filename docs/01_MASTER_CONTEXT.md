@@ -82,14 +82,28 @@ Frontend -> API -> Firestore
 Niet toegelaten:
 Frontend -> Firestore
 
+## Beheerlagen
+
+### Admin (`/admin`)
+- klantbeheer
+- memberships, invites, rollen
+- provisioning en installatiecockpit
+- stabiel en werkend
+
+### Operations Center (`/operations`)
+- technisch beheer
+- real-time status alle boxen
+- netwerk, hardware, remote acties
+- Teltonika RMS integratie
+- SIM saldo en dataverbruik
+- volgende fase
+
 ## Huidige focus
 
-- admin stabiliseren
-- duplicates voorkomen
-- platformAdmin beschermen
-- data model correct zetten via `sites` en `boxes`
-- camera-architectuur correct opnemen in device en portal
+- Admin fase is stabiel en werkend
+- Volgende fase: Operations Center en RMS integratie
+- Twee aparte beheerlagen: admin (klanten) en operations (technisch)
 
 ## Regel
 
-Niet verder bouwen voor admin stabiel is en de architectuur duidelijk blijft.
+Niet verder bouwen voor de architectuur duidelijk blijft. Admin en Operations Center zijn bewust gescheiden lagen.

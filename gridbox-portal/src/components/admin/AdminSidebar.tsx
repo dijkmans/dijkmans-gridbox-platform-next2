@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import Link from "next/link";
 import { ActiveSection, NavigationItem } from "./types";
 
 type AdminSidebarProps = {
@@ -24,6 +25,13 @@ export default function AdminSidebar({
       </div>
 
       <nav className="flex-1 space-y-1 px-4 py-6">
+        <Link
+          href="/operations"
+          className="mb-3 flex w-full items-center rounded-xl border border-slate-700 px-4 py-3 text-left text-sm font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-white"
+        >
+          Operations Center ↗
+        </Link>
+
         {navigationItems.map((item) => {
           const active = activeSection === item.id;
 

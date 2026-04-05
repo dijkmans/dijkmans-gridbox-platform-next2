@@ -27,3 +27,9 @@ gridbox-api/dist/
 
 box_config.json
 src/box_config.json
+
+.env
+.env.local
+.env.*.local
+gridbox-api/.env
+gridbox-portal/.env.local

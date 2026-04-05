@@ -76,3 +76,37 @@ Afspraken:
 Gevolg:
 
 nieuwe implementatie van admin en portal moet deze procedure volgen
+
+## 2026-04-05 - Hardware en remote management vastgelegd
+
+### RUT241 als standaard router
+
+Beslissing: de RUT241 van Teltonika is de standaard router voor alle Gridbox installaties.
+
+Gevolgen:
+- elke installatie heeft een bekende routerhardware met vaste mogelijkheden
+- SIM-beheer en netwerktoegang zijn gestandaardiseerd
+
+### Teltonika RMS als remote management platform
+
+Beslissing: Teltonika RMS wordt gebruikt voor remote management van routers en indirect van de Pi.
+
+Afspraken:
+- camera IP-detectie verloopt via RMS
+- remote access als de Pi uitvalt verloopt via RMS
+- Pi fungeert als brug naar het lokale netwerk voor RMS-commando's
+
+### HTTP snapshots blijven de aanpak
+
+Beslissing: camera snapshots blijven via HTTP ophalen, geen RTSP.
+
+Reden: eenvoudiger, werkt met bestaande camera's, filtering op Pi is voldoende.
+
+### Operations Center als aparte pagina
+
+Beslissing: technisch beheer krijgt een eigen pagina `/operations`, los van `/admin`.
+
+Afspraken:
+- admin = klantbeheer (klanten, memberships, invites, provisioning)
+- operations = technisch beheer (real-time boxstatus, netwerk, hardware, remote acties, kosten)
+- de twee lagen worden niet gemengd in één scherm
