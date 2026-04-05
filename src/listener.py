@@ -261,6 +261,13 @@ def try_backend_bootstrap_claim():
 
         save_runtime_config(runtime_config)
         log(f"âœ… Backend bootstrap-claim geslaagd voor {bootstrap_box_id}")
+
+        try:
+            os.remove(BOOTSTRAP_PATH)
+            log(f"🗑️ box_bootstrap.json verwijderd na geslaagde claim")
+        except Exception as remove_error:
+            log(f"⚠️ Kon box_bootstrap.json niet verwijderen: {remove_error}")
+
         return True
 
     except Exception as e:
