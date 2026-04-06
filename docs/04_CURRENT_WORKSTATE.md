@@ -55,6 +55,9 @@ Provisioning flow end-to-end werkend en gevalideerd. gbox-005 en gbox-006 draaie
 - "Installatie afronden" knop toegevoegd aan stap 6 (Eerste opstart)
 - `listener_pi.py`: `traceback.print_exc()` toegevoegd in startup except voor betere foutdiagnose
 - `operations.ts`: `lastHeartbeatAt` veld opgehaald uit `software.lastHeartbeatIso` als fallback
+- gbox-006: I2C ingeschakeld via raspi-config, relais werken nu correct
+- Git tag `vv1.0.51` (typfout) verwijderd, correcte tag `v1.0.54` aangemaakt en gepusht
+- `targetVersion` bijgewerkt naar `v1.0.54` voor gbox-005 en gbox-006 in Firestore
 
 ## Locatiemodel (vastgelegd)
 
