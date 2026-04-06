@@ -15,7 +15,7 @@ import { getStorage } from "firebase-admin/storage";
 
 const router = Router();
 
-const ACTIVE_PORTAL_BOX_IDS = ["gbox-004", "gbox-005"];
+const ACTIVE_PORTAL_BOX_IDS = ["gbox-004", "gbox-005", "gbox-006"];
 const STORAGE_BUCKET_NAME = "gridbox-platform.firebasestorage.app";
 
 function canOperateBox(role?: string | null) {
