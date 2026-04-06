@@ -40,6 +40,8 @@ Provisioning flow end-to-end werkend en gevalideerd. gbox-005 en gbox-006 draaie
 - gbox-005 structuur gefixed als master referentie voor nieuwe installaties
 - SD-script: 3-staps bootpartitie detectie (label → FAT32 fallback → handmatig met volumeoverzicht)
 - SD-script: `service-account.json` automatisch gekopieerd naar bootpartitie vanuit `$PSScriptRoot`
+- SD-script: I2C activering toegevoegd aan cloud-init (`raspi-config nonint do_i2c 0`, `dtparam=i2c_arm=on`, `modprobe i2c-dev`)
+- Nieuwe installatie flow volledig automatisch: flash → bootstrap → claim → I2C → relais werken
 - Bird SMS credentials (`BIRD_API_KEY`, `BIRD_WORKSPACE_ID`, `BIRD_CHANNEL_ID`, `BIRD_SMS_FROM`) toegevoegd aan Cloud Run
 - Portal gedeployed naar Firebase Hosting: https://gridbox-platform.web.app
 - gbox-006 toegevoegd aan `ACTIVE_PORTAL_BOX_IDS` in `boxes.ts`
@@ -82,7 +84,7 @@ Provisioning flow end-to-end werkend en gevalideerd. gbox-005 en gbox-006 draaie
 2. ~~**SD-script bootpartitie detectie verbeteren**~~ — afgewerkt: 3-staps detectie (label → FAT32 → handmatig met volumeoverzicht)
 3. ~~**`service-account.json` automatisch op SD-kaart zetten**~~ — afgewerkt: SD-script kopieert automatisch vanuit `$PSScriptRoot`
 4. ~~**`ACTIVE_PORTAL_BOX_IDS` dynamisch maken**~~ — afgewerkt: whitelist verwijderd, toegang loopt nu volledig via `customerBoxAccess` in Firestore
-5. **I2C activeren via cloud-init in SD-script** — momenteel moet I2C handmatig ingeschakeld worden via `raspi-config` na eerste opstart. Dit moet geautomatiseerd worden via het cloud-init `userdata.yaml` in het gegenereerde SD-script.
+5. ~~**I2C activeren via cloud-init in SD-script**~~ — afgewerkt: cloud-init bevat nu `raspi-config nonint do_i2c 0` en `dtparam=i2c_arm=on`
 6. `rmsDeviceId` koppelen aan alle bestaande boxes in Firestore
 7. Camera configuratie in installatiecockpit
 8. Camera IP detectie via Pi als tussenpersoon (lokale RUT241 API)
