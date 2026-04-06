@@ -1674,7 +1674,11 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "    passwd: \"$6$tg23.88YXBunN.r4$6El6fTCo4xsXSMh97vjq887wBTRLNhoESpYrhh8r0aaL1FLcmAGHK1tz9nwddranvunS2CBoILivN559d/Byr0\"",
       "ssh_pwauth: true",
       "chpasswd:",
-      "  expire: false"
+      "  expire: false",
+      "runcmd:",
+      "  - raspi-config nonint do_i2c 0",
+      "  - echo 'dtparam=i2c_arm=on' >> /boot/firmware/config.txt",
+      "  - modprobe i2c-dev"
     ].join("\n");
 
     const bootstrapJson = JSON.stringify(
