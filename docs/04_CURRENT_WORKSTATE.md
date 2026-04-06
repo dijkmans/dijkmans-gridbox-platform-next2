@@ -81,13 +81,14 @@ Provisioning flow end-to-end werkend en gevalideerd. gbox-005 en gbox-006 draaie
 1. ~~**Master image updaten naar v1.0.51**~~ — afgewerkt: gbox-005 en gbox-006 draaien op v1.0.54 met bootstrap flow
 2. ~~**SD-script bootpartitie detectie verbeteren**~~ — afgewerkt: 3-staps detectie (label → FAT32 → handmatig met volumeoverzicht)
 3. ~~**`service-account.json` automatisch op SD-kaart zetten**~~ — afgewerkt: SD-script kopieert automatisch vanuit `$PSScriptRoot`
-4. **`ACTIVE_PORTAL_BOX_IDS` dynamisch maken** — momenteel hardcoded in `boxes.ts`. Moet vervangen worden door een Firestore-query of config zodat nieuwe boxes automatisch beschikbaar zijn zonder redeploy.
-5. `rmsDeviceId` koppelen aan alle bestaande boxes in Firestore
-6. Camera configuratie in installatiecockpit
-7. Camera IP detectie via Pi als tussenpersoon (lokale RUT241 API)
-8. Remote acties: Pi herstarten, router herstarten via RMS
-9. SIM saldo en dataverbruik via RMS
-10. Operations Center uitbreiden met acties per box
+4. ~~**`ACTIVE_PORTAL_BOX_IDS` dynamisch maken**~~ — afgewerkt: whitelist verwijderd, toegang loopt nu volledig via `customerBoxAccess` in Firestore
+5. **I2C activeren via cloud-init in SD-script** — momenteel moet I2C handmatig ingeschakeld worden via `raspi-config` na eerste opstart. Dit moet geautomatiseerd worden via het cloud-init `userdata.yaml` in het gegenereerde SD-script.
+6. `rmsDeviceId` koppelen aan alle bestaande boxes in Firestore
+7. Camera configuratie in installatiecockpit
+8. Camera IP detectie via Pi als tussenpersoon (lokale RUT241 API)
+9. Remote acties: Pi herstarten, router herstarten via RMS
+10. SIM saldo en dataverbruik via RMS
+11. Operations Center uitbreiden met acties per box
 
 ## Regels
 
