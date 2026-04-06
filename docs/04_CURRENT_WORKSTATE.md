@@ -87,10 +87,16 @@ Provisioning flow end-to-end werkend en gevalideerd. gbox-005 en gbox-006 draaie
 5. ~~**I2C activeren via cloud-init in SD-script**~~ — afgewerkt: cloud-init bevat nu `raspi-config nonint do_i2c 0` en `dtparam=i2c_arm=on`
 6. `rmsDeviceId` koppelen aan alle bestaande boxes in Firestore
 7. Camera configuratie in installatiecockpit
-8. Camera IP detectie via Pi als tussenpersoon (lokale RUT241 API)
+8. **Camera IP beheer via RUT241 DHCP static leases:**
+   - MAC adres per camera opslaan in Firestore
+   - Volgende vrije IP automatisch voorstellen (range 192.168.10.100–249)
+   - Static lease aanmaken via RMS API
+   - `snapshotUrl` automatisch updaten in Firestore
+   - Beheer vanuit admin panel per box
 9. Remote acties: Pi herstarten, router herstarten via RMS
 10. SIM saldo en dataverbruik via RMS
 11. Operations Center uitbreiden met acties per box
+12. **Master image upload naar GCS nog bezig** (`Gridbox_master_v1.0.54.img`)
 
 ## Regels
 
