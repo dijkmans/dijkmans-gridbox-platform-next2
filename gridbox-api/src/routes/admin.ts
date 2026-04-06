@@ -57,6 +57,7 @@ function getRoleLabel(roleId: SupportedMembershipRole, rawLabel: unknown): strin
 
 type ProvisioningStatus =
   | "draft"
+  | "awaiting_sd_preparation"
   | "awaiting_first_boot"
   | "claimed"
   | "online"
@@ -1026,6 +1027,62 @@ router.get("/admin/invites", async (req, res) => {
 });
 
 
+router.delete("/admin/invites/:inviteId", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const inviteId = String(req.params?.inviteId || "").trim();
+
+    if (!inviteId) {
+      return res.status(400).json({
+        error: "INVALID_INVITE_ID",
+        message: "Invite id is verplicht"
+      });
+    }
+
+    const db = getFirestore();
+    const inviteRef = db.collection("invites").doc(inviteId);
+    const inviteSnap = await inviteRef.get();
+
+    if (!inviteSnap.exists) {
+      return res.status(404).json({
+        error: "INVITE_NOT_FOUND",
+        message: "Uitnodiging niet gevonden"
+      });
+    }
+
+    await inviteRef.delete();
+
+    return res.status(200).json({
+      success: true,
+      inviteId
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Geen admin-toegang"
+      });
+    }
+
+    console.error("FOUT in DELETE /admin/invites/:inviteId", error);
+
+    return res.status(500).json({
+      error: "ADMIN_INVITE_DELETE_FAILED",
+      message: "Kon uitnodiging niet verwijderen"
+    });
+  }
+});
+
 router.post("/admin/provisioning/boxes", async (req, res) => {
   try {
     const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
@@ -1085,6 +1142,7 @@ router.post("/admin/provisioning/boxes", async (req, res) => {
     }
 
     const siteData = siteDoc.data() ?? {};
+    console.log("PROVISIONING CREATE: siteData.customerId=", siteData.customerId, "customerId=", customerId, "match=", siteData.customerId === customerId);
     if (siteData.customerId !== customerId) {
       return res.status(400).json({
         error: "SITE_CUSTOMER_MISMATCH",
@@ -1141,7 +1199,10 @@ router.post("/admin/provisioning/boxes", async (req, res) => {
       ...(notes ? { notes } : {})
     };
 
+    console.log("PROVISIONING CREATE: siteData.customerId=", siteData.customerId, "customerId=", customerId);
+    console.log("PROVISIONING CREATE: schrijven naar Firestore, id=", provisioningRef.id);
     await provisioningRef.set(provisioningRecord);
+    console.log("PROVISIONING CREATE: schrijven geslaagd, id=", provisioningRef.id);
 
         const { bootstrapTokenHash: _bootstrapTokenHash, ...publicProvisioningRecord } = provisioningRecord;
 
@@ -1408,7 +1469,7 @@ router.post("/admin/provisioning/:id/mark-sd-prepared", async (req, res) => {
       });
     }
 
-    if (status !== "draft") {
+    if (status !== "draft" && status !== "awaiting_sd_preparation") {
       return res.status(409).json({
         error: "MARK_SD_PREPARED_NOT_ALLOWED",
         message: "SD-kaart kan in deze provisioningstatus niet als klaar gemarkeerd worden"
@@ -1531,6 +1592,231 @@ router.post("/admin/provisioning/:id/finalize", async (req, res) => {
     return res.status(500).json({
       error: "ADMIN_PROVISIONING_FINALIZE_FAILED",
       message: "Kon provisioning niet afronden"
+    });
+  }
+});
+
+router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const provisioningId = String(req.params?.id || "").trim();
+    if (!provisioningId) {
+      return res.status(400).json({
+        error: "INVALID_PROVISIONING_ID",
+        message: "Provisioning id is verplicht"
+      });
+    }
+
+    const db = getFirestore();
+    const provisioningRef = db.collection("provisionings").doc(provisioningId);
+    const provisioningSnap = await provisioningRef.get();
+
+    if (!provisioningSnap.exists) {
+      return res.status(404).json({
+        error: "PROVISIONING_NOT_FOUND",
+        message: "Provisioning niet gevonden"
+      });
+    }
+
+    const data = provisioningSnap.data() as Record<string, unknown>;
+
+    const boxId = String(data.boxId || "").trim();
+    if (!boxId) {
+      return res.status(400).json({
+        error: "BOX_ID_MISSING",
+        message: "boxId ontbreekt op provisioning"
+      });
+    }
+
+    const blockedStatuses = ["claimed", "online", "ready"];
+    const currentStatus = String(data.status || "");
+    if (blockedStatuses.includes(currentStatus)) {
+      return res.status(409).json({
+        error: "PROVISIONING_ALREADY_ACTIVE",
+        message: `Script aanmaken niet mogelijk: status is '${currentStatus}'`
+      });
+    }
+
+    const bootstrapToken = randomBytes(24).toString("hex");
+    const bootstrapTokenHash = sha256(bootstrapToken);
+    const updatedAt = nowIso();
+
+    await provisioningRef.set(
+      {
+        bootstrapTokenHash,
+        updatedAt,
+        status: "awaiting_sd_preparation"
+      },
+      { merge: true }
+    );
+
+    const host = req.get("host");
+    if (!host) {
+      return res.status(500).json({
+        error: "API_BASE_URL_UNAVAILABLE",
+        message: "Kon geen geldige apiBaseUrl bepalen"
+      });
+    }
+    const apiBaseUrl = `${req.protocol}://${host}`;
+    const bootstrapVersion = "v1";
+
+    const cloudInitUserData = [
+      "#cloud-config",
+      "hostname: " + boxId,
+      "manage_etc_hosts: true",
+      "users:",
+      "  - name: pi",
+      "    groups: sudo",
+      "    shell: /bin/bash",
+      "    sudo: ALL=(ALL) NOPASSWD:ALL",
+      "    lock_passwd: false",
+      "    passwd: \"$6$tg23.88YXBunN.r4$6El6fTCo4xsXSMh97vjq887wBTRLNhoESpYrhh8r0aaL1FLcmAGHK1tz9nwddranvunS2CBoILivN559d/Byr0\"",
+      "ssh_pwauth: true",
+      "chpasswd:",
+      "  expire: false"
+    ].join("\n");
+
+    const bootstrapJson = JSON.stringify(
+      {
+        provisioningId,
+        boxId,
+        bootstrapToken,
+        apiBaseUrl,
+        bootstrapVersion
+      },
+      null,
+      2
+    );
+
+    const script = [
+      "# Gridbox SD-kaart flash script",
+      `# Gegenereerd voor box: ${boxId}`,
+      `# Provisioning ID: ${provisioningId}`,
+      "",
+      "$ImagerPath = \"C:\\Program Files\\Raspberry Pi Ltd\\Imager\\rpi-imager.exe\"",
+      "$ImagePath  = \"$env:USERPROFILE\\Downloads\\Gridbox_master_v1.img\"",
+      "",
+      "if (-not (Test-Path $ImagerPath)) {",
+      "    Write-Error \"rpi-imager niet gevonden op $ImagerPath\"",
+      "    exit 1",
+      "}",
+      "",
+      "if (-not (Test-Path $ImagePath)) {",
+      "    Write-Error \"Master image niet gevonden op $ImagePath\"",
+      "    exit 1",
+      "}",
+      "",
+      "# SD-kaart detectie",
+      "$disk = Get-Disk | Where-Object { $_.BusType -in @('SD','USB') } | Select-Object -First 1",
+      "if (-not $disk) {",
+      "    Write-Error \"Geen SD-kaart of USB-opslag gevonden\"",
+      "    exit 1",
+      "}",
+      "",
+      "$diskNumber = $disk.Number",
+      "$diskPath   = \"\\\\.\\PhysicalDrive$diskNumber\"",
+      "Write-Host \"Gevonden schijf: $($disk.FriendlyName) op $diskPath\"",
+      "",
+      "$confirm = Read-Host \"Flash naar $diskPath? Alle data gaat verloren. Typ JA om door te gaan\"",
+      "if ($confirm -ne 'JA') {",
+      "    Write-Host \"Afgebroken.\"",
+      "    exit 0",
+      "}",
+      "",
+      "# Cloud-init userdata tijdelijk opslaan",
+      `$TempDir = "C:\\Windows\\Temp\\gridbox-${boxId}"`,
+      "New-Item -ItemType Directory -Force -Path $TempDir | Out-Null",
+      `$CloudInitPath = "$TempDir\\userdata.yaml"`,
+      "$CloudInitContent = @'",
+      cloudInitUserData,
+      "'@",
+      "[System.IO.File]::WriteAllText($CloudInitPath, $CloudInitContent, (New-Object System.Text.UTF8Encoding $false))",
+      "",
+      "# Flash uitvoeren",
+      "Write-Host \"Flashen gestart...\"",
+      "& $ImagerPath --cli --disable-verify --cloudinit-userdata $CloudInitPath $ImagePath $diskPath",
+      "",
+      "# Wacht tot rpi-imager volledig afgesloten is (spawnt child process, -Wait is niet betrouwbaar)",
+      "Write-Host \"Wachten tot rpi-imager volledig klaar is...\"",
+      "$imagerName = [System.IO.Path]::GetFileNameWithoutExtension($ImagerPath)",
+      "$processWait = 0",
+      "while ($processWait -lt 120) {",
+      "    $running = Get-Process -Name $imagerName -ErrorAction SilentlyContinue",
+      "    if (-not $running) { break }",
+      "    Start-Sleep -Seconds 2",
+      "    $processWait += 2",
+      "}",
+      "Write-Host \"rpi-imager proces afgesloten. SD-kaart wordt opnieuw ingelezen...\"",
+      "Start-Sleep -Seconds 5",
+      "",
+      "# box_bootstrap.json op bootpartitie zetten",
+      "$BootstrapJson = @'",
+      bootstrapJson,
+      "'@",
+      "",
+      "# Wachten tot bootpartitie gemount is (max 30 seconden)",
+      "Write-Host \"Wachten op bootpartitie...\"",
+      "$bootDriveLetter = $null",
+      "$waited = 0",
+      "while ($waited -lt 60) {",
+      "    $vol = Get-Volume | Where-Object { $_.FileSystemLabel -in @('bootfs', 'boot') } | Select-Object -First 1",
+      "    if ($vol -and $vol.DriveLetter) {",
+      "        $bootDriveLetter = $vol.DriveLetter",
+      "        Write-Host \"Bootpartitie gevonden op ${bootDriveLetter}:\"",
+      "        break",
+      "    }",
+      "    Start-Sleep -Seconds 3",
+      "    $waited += 3",
+      "}",
+      "",
+      "if (-not $bootDriveLetter) {",
+      "    Write-Warning \"Bootpartitie niet automatisch gevonden na 30 seconden.\"",
+      "    $manualLetter = Read-Host \"Voer de stationsletter van de bootpartitie in (bijv. E)\"",
+      "    $manualLetter = $manualLetter.Trim().TrimEnd(':').ToUpper()",
+      "    if ($manualLetter -match '^[A-Z]$') {",
+      "        $bootDriveLetter = $manualLetter",
+      "    } else {",
+      "        Write-Warning \"Ongeldige stationsletter. box_bootstrap.json wordt NIET geschreven.\"",
+      "        Write-Host \"Schrijf het bestand zelf naar de bootpartitie. Inhoud:\"",
+      "        Write-Host $BootstrapJson",
+      "    }",
+      "}",
+      "",
+      "if ($bootDriveLetter) {",
+      "    $BootstrapPath = \"${bootDriveLetter}:\\box_bootstrap.json\"",
+      "    [System.IO.File]::WriteAllText($BootstrapPath, $BootstrapJson, (New-Object System.Text.UTF8Encoding $false))",
+      "    Write-Host \"box_bootstrap.json geschreven naar $BootstrapPath\"",
+      "}",
+      "",
+      `Write-Host \"Klaar. SD-kaart is klaar voor installatie van box: ${boxId}\"`
+    ].join("\r\n");
+
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="gridbox-sd-${boxId}.ps1"`);
+    return res.status(200).send(script);
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Geen admin-toegang"
+      });
+    }
+
+    console.error("FOUT in POST /admin/provisioning/:id/generate-script", error);
+
+    return res.status(500).json({
+      error: "GENERATE_SCRIPT_FAILED",
+      message: "Script genereren mislukt"
     });
   }
 });

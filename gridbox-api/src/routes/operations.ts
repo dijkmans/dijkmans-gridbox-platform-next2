@@ -125,8 +125,12 @@ router.get("/operations/boxes", async (req, res) => {
       const rmsDeviceId = toRmsId(box["rmsDeviceId"]);
       const rmsData = rmsDeviceId !== null ? rmsMap[rmsDeviceId] : null;
 
+      const software = box["software"] as Record<string, unknown> | undefined;
+      const lastHeartbeatAt = software?.["lastHeartbeatIso"] ?? box["lastHeartbeatAt"] ?? null;
+
       return {
         ...box,
+        lastHeartbeatAt,
         rms: rmsData ? extractRmsSummary(rmsData) : null
       };
     });

@@ -29,6 +29,7 @@ type AdminProvisioningSectionProps = {
   onFinalizeProvisioning: () => void | Promise<void>;
   bootstrapDownloadItem?: Record<string, string> | null;
   onPrepareBootstrapDownload?: () => void | Promise<void>;
+  onGenerateScript?: () => void | Promise<void>;
   onMarkSdPrepared?: () => void | Promise<void>;
   onStepChange: (step: number) => void;
 };
@@ -58,6 +59,7 @@ export default function AdminProvisioningSection({
   onFinalizeProvisioning,
   bootstrapDownloadItem,
   onPrepareBootstrapDownload,
+  onGenerateScript,
   onMarkSdPrepared,
   onStepChange
 }: AdminProvisioningSectionProps) {
@@ -112,11 +114,12 @@ export default function AdminProvisioningSection({
   const provisioningFinalizedAt = provisioningItem?.finalizedAt || "-";
   const canCreateProvisioning = stepOneReady && !provisioningBusy && !provisioningExists;
   const canPrepareBootstrapDownload = provisioningExists && !provisioningBusy && Boolean(onPrepareBootstrapDownload);
+  const canGenerateScript = provisioningExists && !provisioningBusy && Boolean(onGenerateScript);
   const canMarkSdPrepared =
     provisioningExists &&
     !provisioningBusy &&
     Boolean(onMarkSdPrepared) &&
-    provisioningItem?.status === "draft";
+    (provisioningItem?.status === "draft" || provisioningItem?.status === "awaiting_sd_preparation");
   const hasBootstrapDownloadItem = Boolean(bootstrapDownloadItem?.bootstrapToken);
 
   return (
@@ -793,10 +796,10 @@ export default function AdminProvisioningSection({
                 </p>
               </div>
 
-              {!stepOneReady ? (
+              {!stepOneReady && !provisioningExists ? (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
-                  Stap 1 is nog niet klaar. Eerst klant, site en geldige box-ID vastleggen.
-                  Anders heeft het geen zin om opstartbestanden voor te bereiden.
+                  Stap 1 is nog niet klaar en er is nog geen provisioningrecord geladen.
+                  Maak eerst een provisioning aan of laad een bestaand record.
                 </div>
               ) : (
                 <>
@@ -882,6 +885,14 @@ export default function AdminProvisioningSection({
                       </button>
                       <button
                         type="button"
+                        onClick={() => onGenerateScript?.()}
+                        disabled={!canGenerateScript}
+                        className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        SD-script downloaden
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => onMarkSdPrepared?.()}
                         disabled={!canMarkSdPrepared}
                         className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
@@ -928,10 +939,10 @@ export default function AdminProvisioningSection({
                 </p>
               </div>
 
-              {!stepOneReady ? (
+              {!stepOneReady && !provisioningExists ? (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
-                  Stap 1 is nog niet klaar. Eerst klant, site en geldige box-ID vastleggen.
-                  Anders weet je nog altijd niet zeker voor welke box je de eerste opstart doet.
+                  Stap 1 is nog niet klaar en er is nog geen provisioningrecord geladen.
+                  Maak eerst een provisioning aan of laad een bestaand record.
                 </div>
               ) : (
                 <>
@@ -1020,6 +1031,16 @@ export default function AdminProvisioningSection({
                     <p className="mt-3 text-sm leading-7 text-slate-600">
                       Deze stap zelf forceert geen online-status. Echte claim, heartbeat of online zie je alleen als de backend die status al heeft bevestigd.
                     </p>
+                    <div className="mt-4">
+                      <button
+                        type="button"
+                        onClick={onFinalizeProvisioning}
+                        disabled={!canFinalizeProvisioning}
+                        className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Installatie afronden
+                      </button>
+                    </div>
                   </div>
                 </>
               )}
@@ -1034,10 +1055,10 @@ export default function AdminProvisioningSection({
                 </p>
               </div>
 
-              {!stepOneReady ? (
+              {!stepOneReady && !provisioningExists ? (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
-                  Stap 1 is nog niet klaar. Eerst klant, site en geldige box-ID vastleggen.
-                  Anders heeft live controle inhoudelijk nog geen zin.
+                  Stap 1 is nog niet klaar en er is nog geen provisioningrecord geladen.
+                  Maak eerst een provisioning aan of laad een bestaand record.
                 </div>
               ) : (
                 <>

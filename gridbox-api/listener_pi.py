@@ -3,6 +3,7 @@ import os
 import platform
 import re
 import shlex
+import traceback
 import subprocess
 import threading
 import time
@@ -1266,6 +1267,7 @@ try:
     box_doc_ref = db.collection("boxes").document(DOCUMENT_ID)
 
 except Exception as e:
+    traceback.print_exc()
     log(f"❌ Startup fout: {e}")
     raise SystemExit(1)
 

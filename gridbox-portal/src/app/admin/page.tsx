@@ -595,6 +595,62 @@ export default function AdminPage() {
     }
   }
 
+  async function handleGenerateScript() {
+    const provisioningId = provisioningItem?.id?.trim() || provisioningLookupId.trim();
+
+    if (!provisioningId) {
+      setErrorMessage("Geen provisioning geselecteerd voor script-generatie");
+      return;
+    }
+
+    const user = auth.currentUser;
+    if (!user) {
+      setErrorMessage("Niet aangemeld");
+      return;
+    }
+
+    setProvisioningBusy(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(
+        (await import("@/lib/api")).apiUrl(
+          `/admin/provisioning/${encodeURIComponent(provisioningId)}/generate-script`
+        ),
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setErrorMessage((data as any).message || "Script genereren mislukt");
+        return;
+      }
+
+      const blob = await res.blob();
+      const boxId = provisioningItem?.boxId || provisioningId;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `gridbox-sd-${boxId}.ps1`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      setSuccessMessage("SD-script gedownload");
+      await fetchProvisioningById(provisioningId);
+    } catch (error) {
+      setErrorMessage("Netwerkfout bij genereren script");
+    } finally {
+      setProvisioningBusy(false);
+    }
+  }
+
   async function handleMarkSdPrepared() {
     const provisioningId = provisioningItem?.id?.trim() || provisioningLookupId.trim();
 
@@ -856,6 +912,7 @@ export default function AdminPage() {
                   onFinalizeProvisioning={handleFinalizeProvisioning}
                   bootstrapDownloadItem={bootstrapDownloadItem}
                   onPrepareBootstrapDownload={handlePrepareBootstrapDownload}
+                  onGenerateScript={handleGenerateScript}
                   onMarkSdPrepared={handleMarkSdPrepared}
                   onStepChange={setSelectedProvisioningStep}
                 />
