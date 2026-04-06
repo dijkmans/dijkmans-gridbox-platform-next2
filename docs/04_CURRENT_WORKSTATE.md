@@ -40,6 +40,10 @@ Provisioning flow end-to-end werkend en gevalideerd. gbox-005 en gbox-006 draaie
 - gbox-005 structuur gefixed als master referentie voor nieuwe installaties
 - SD-script: 3-staps bootpartitie detectie (label → FAT32 fallback → handmatig met volumeoverzicht)
 - SD-script: `service-account.json` automatisch gekopieerd naar bootpartitie vanuit `$PSScriptRoot`
+- Bird SMS credentials (`BIRD_API_KEY`, `BIRD_WORKSPACE_ID`, `BIRD_CHANNEL_ID`, `BIRD_SMS_FROM`) toegevoegd aan Cloud Run
+- Portal gedeployed naar Firebase Hosting: https://gridbox-platform.web.app
+- gbox-006 toegevoegd aan `ACTIVE_PORTAL_BOX_IDS` in `boxes.ts`
+- Invite flow werkt end-to-end met SMS verificatie via Bird
 
 ## Fixes 2026-04-06
 
@@ -74,13 +78,13 @@ Provisioning flow end-to-end werkend en gevalideerd. gbox-005 en gbox-006 draaie
 1. ~~**Master image updaten naar v1.0.51**~~ — afgewerkt: gbox-005 en gbox-006 draaien op v1.0.54 met bootstrap flow
 2. ~~**SD-script bootpartitie detectie verbeteren**~~ — afgewerkt: 3-staps detectie (label → FAT32 → handmatig met volumeoverzicht)
 3. ~~**`service-account.json` automatisch op SD-kaart zetten**~~ — afgewerkt: SD-script kopieert automatisch vanuit `$PSScriptRoot`
-4. `rmsDeviceId` koppelen aan alle bestaande boxes in Firestore
-5. Camera configuratie in installatiecockpit
-6. Camera IP detectie via Pi als tussenpersoon (lokale RUT241 API)
-7. Remote acties: Pi herstarten, router herstarten via RMS
-8. SIM saldo en dataverbruik via RMS
-9. Operations Center uitbreiden met acties per box
-10. Portal deployen naar Firebase Hosting
+4. **`ACTIVE_PORTAL_BOX_IDS` dynamisch maken** — momenteel hardcoded in `boxes.ts`. Moet vervangen worden door een Firestore-query of config zodat nieuwe boxes automatisch beschikbaar zijn zonder redeploy.
+5. `rmsDeviceId` koppelen aan alle bestaande boxes in Firestore
+6. Camera configuratie in installatiecockpit
+7. Camera IP detectie via Pi als tussenpersoon (lokale RUT241 API)
+8. Remote acties: Pi herstarten, router herstarten via RMS
+9. SIM saldo en dataverbruik via RMS
+10. Operations Center uitbreiden met acties per box
 
 ## Regels
 
