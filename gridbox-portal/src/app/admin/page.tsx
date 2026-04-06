@@ -21,6 +21,7 @@ import {
   fetchAdminRoles,
   fetchAdminProvisionings,
   fetchAdminPath,
+  fetchAdminSuggestBoxId,
   postAdminJson,
   deleteAdminPath
 } from "@/components/admin/adminApi";
@@ -696,6 +697,13 @@ export default function AdminPage() {
     }
   }
 
+  async function handleSuggestBoxId(): Promise<string | null> {
+    const user = auth.currentUser;
+    if (!user) return null;
+    const token = await user.getIdToken();
+    return fetchAdminSuggestBoxId({ token });
+  }
+
   async function handleRefreshProvisioning() {
     const provisioningId =
       provisioningLookupId.trim() || provisioningItem?.id?.trim() || "";
@@ -915,6 +923,7 @@ export default function AdminPage() {
                   onGenerateScript={handleGenerateScript}
                   onMarkSdPrepared={handleMarkSdPrepared}
                   onStepChange={setSelectedProvisioningStep}
+                  onSuggestBoxId={handleSuggestBoxId}
                 />
               </section>
             )}

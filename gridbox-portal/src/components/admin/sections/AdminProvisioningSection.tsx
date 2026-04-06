@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { getBoxLabel } from "../helpers";
 import type { SiteSummary } from "../derived";
 import type { AdminBoxItem, AdminProvisioningItem, CustomerItem, ProvisioningStepContent } from "../types";
@@ -32,6 +33,7 @@ type AdminProvisioningSectionProps = {
   onGenerateScript?: () => void | Promise<void>;
   onMarkSdPrepared?: () => void | Promise<void>;
   onStepChange: (step: number) => void;
+  onSuggestBoxId?: () => Promise<string | null>;
 };
 
 export default function AdminProvisioningSection({
@@ -61,8 +63,26 @@ export default function AdminProvisioningSection({
   onPrepareBootstrapDownload,
   onGenerateScript,
   onMarkSdPrepared,
-  onStepChange
+  onStepChange,
+  onSuggestBoxId
 }: AdminProvisioningSectionProps) {
+  const [suggestBusy, setSuggestBusy] = useState(false);
+  const autoSuggestedRef = useRef(false);
+
+  useEffect(() => {
+    if (
+      selectedProvisioningStep === 0 &&
+      !provisioningBoxId &&
+      !autoSuggestedRef.current &&
+      onSuggestBoxId
+    ) {
+      autoSuggestedRef.current = true;
+      setSuggestBusy(true);
+      onSuggestBoxId().then((suggested) => {
+        if (suggested) onProvisioningBoxIdChange(suggested);
+      }).finally(() => setSuggestBusy(false));
+    }
+  }, [selectedProvisioningStep]); // eslint-disable-line react-hooks/exhaustive-deps
   const sortedCustomers = [...customers].sort((a, b) =>
     (a.name || a.id).localeCompare(b.name || b.id)
   );
@@ -349,12 +369,30 @@ export default function AdminProvisioningSection({
                   <label className="mb-2 block text-sm font-semibold text-slate-700">
                     Nieuwe box-ID
                   </label>
-                  <input
-                    value={provisioningBoxId}
-                    onChange={(e) => onProvisioningBoxIdChange(e.target.value)}
-                    placeholder="bv. gbox-007"
-                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      value={provisioningBoxId}
+                      onChange={(e) => onProvisioningBoxIdChange(e.target.value)}
+                      placeholder={suggestBusy ? "Laden…" : "bv. gbox-007"}
+                      disabled={suggestBusy}
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900 disabled:bg-slate-50 disabled:text-slate-400"
+                    />
+                    {onSuggestBoxId && (
+                      <button
+                        type="button"
+                        disabled={suggestBusy}
+                        onClick={() => {
+                          setSuggestBusy(true);
+                          onSuggestBoxId().then((suggested) => {
+                            if (suggested) onProvisioningBoxIdChange(suggested);
+                          }).finally(() => setSuggestBusy(false));
+                        }}
+                        className="shrink-0 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {suggestBusy ? "…" : "Suggereer"}
+                      </button>
+                    )}
+                  </div>
                   <div className="mt-2 space-y-1 text-xs">
                     {!boxChosen && (
                       <p className="text-slate-500">

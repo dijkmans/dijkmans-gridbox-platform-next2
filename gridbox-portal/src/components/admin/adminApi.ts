@@ -39,6 +39,13 @@ export async function fetchAdminSites({ token }: FetchOptions) {
   return fetchAdminPath("/admin/sites", { token });
 }
 
+export async function fetchAdminSuggestBoxId({ token }: FetchOptions): Promise<string | null> {
+  const res = await fetchAdminPath("/admin/provisioning/suggest-box-id", { token });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return typeof data.suggested === "string" ? data.suggested : null;
+}
+
 export async function fetchAdminInvites({ token }: FetchOptions) {
   return fetchAdminPath("/admin/invites", { token });
 }

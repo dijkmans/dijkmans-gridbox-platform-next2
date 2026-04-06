@@ -1083,6 +1083,64 @@ router.delete("/admin/invites/:inviteId", async (req, res) => {
   }
 });
 
+router.get("/admin/provisioning/suggest-box-id", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const db = getFirestore();
+
+    const [boxesSnap, provisioningsSnap] = await Promise.all([
+      db.collection("boxes").get(),
+      db.collection("provisionings").get()
+    ]);
+
+    const gboxPattern = /^gbox-(\d+)$/;
+
+    const usedNumbers = new Set<number>();
+
+    for (const doc of boxesSnap.docs) {
+      const m = doc.id.match(gboxPattern);
+      if (m) usedNumbers.add(parseInt(m[1], 10));
+    }
+
+    for (const doc of provisioningsSnap.docs) {
+      const boxId = doc.data()?.boxId;
+      if (typeof boxId === "string") {
+        const m = boxId.match(gboxPattern);
+        if (m) usedNumbers.add(parseInt(m[1], 10));
+      }
+    }
+
+    // Find next free number starting at 1
+    let next = 1;
+    while (usedNumbers.has(next)) next++;
+    const suggested = `gbox-${String(next).padStart(3, "0")}`;
+
+    // Optional: validate a specific boxId
+    const queryBoxId = typeof req.query.boxId === "string" ? req.query.boxId.trim() : null;
+    if (queryBoxId) {
+      const m = queryBoxId.match(gboxPattern);
+      if (!m) {
+        return res.status(400).json({
+          error: "INVALID_BOX_ID_FORMAT",
+          message: "boxId moet voldoen aan het formaat gbox-XXX"
+        });
+      }
+      const num = parseInt(m[1], 10);
+      const available = !usedNumbers.has(num);
+      return res.json({ suggested, queried: queryBoxId, available });
+    }
+
+    return res.json({ suggested });
+  } catch (err) {
+    console.error("suggest-box-id error:", err);
+    return res.status(500).json({
+      error: "SUGGEST_BOX_ID_FAILED",
+      message: "Kon geen suggestie genereren"
+    });
+  }
+});
+
 router.post("/admin/provisioning/boxes", async (req, res) => {
   try {
     const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
