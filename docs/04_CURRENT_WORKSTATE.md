@@ -2,7 +2,7 @@
 
 ## Status — 2026-04-06
 
-Provisioning flow end-to-end werkend en gevalideerd. gbox-006 succesvol geprovisioned, status `ready`. Installatiecockpit stabiel. Volgende fase: master image updaten naar v1.0.51 met bootstrap flow, SD-script verbeteren, service-account.json automatiseren.
+Provisioning flow end-to-end werkend en gevalideerd. gbox-005 en gbox-006 draaien op listener v1.0.54 met bootstrap flow. gbox-005 gefixed als master referentie. SD-script volledig geautomatiseerd: bootpartitie 3-staps detectie en service-account.json automatisch gekopieerd.
 
 ## Architectuur (vastgelegd)
 
@@ -36,6 +36,10 @@ Provisioning flow end-to-end werkend en gevalideerd. gbox-006 succesvol geprovis
 - Kopieer link knop in invite sectie
 - Nieuwe site aanmaken via tekstveld als klant nog geen sites heeft
 - gbox-006 succesvol geprovisioned via nieuwe bootstrap flow, status `ready`
+- gbox-005 en gbox-006 draaien op listener v1.0.54 met bootstrap flow
+- gbox-005 structuur gefixed als master referentie voor nieuwe installaties
+- SD-script: 3-staps bootpartitie detectie (label → FAT32 fallback → handmatig met volumeoverzicht)
+- SD-script: `service-account.json` automatisch gekopieerd naar bootpartitie vanuit `$PSScriptRoot`
 
 ## Fixes 2026-04-06
 
@@ -67,9 +71,9 @@ Provisioning flow end-to-end werkend en gevalideerd. gbox-006 succesvol geprovis
 
 ## Openstaande punten (prioriteit)
 
-1. **Master image updaten naar v1.0.51** — huidig master image bevat nog niet de nieuwe bootstrap flow (`try_backend_bootstrap_claim`). `gridbox-api/listener_pi.py` is v1.0.53 maar mist de bootstrap claim logica. `src/listener.py` (v1.0.51) heeft de correcte flow. Master image moet gebrand worden met v1.0.51 of hoger mét bootstrap flow.
-2. **SD-script bootpartitie detectie verbeteren** — het gegenereerde PS1-script wacht op een volume met label `bootfs` of `boot`, maar dat lukt niet altijd automatisch. Fallback naar handmatige letterinvoer werkt maar is foutgevoelig. Betere detectie of instructie nodig.
-3. **`service-account.json` automatisch op SD-kaart zetten** — momenteel moet dit handmatig op de Pi gezet worden na eerste opstart. Het SD-script of de bootstrap flow moet dit automatiseren of de Pi moet het ophalen via de API na een geslaagde claim.
+1. ~~**Master image updaten naar v1.0.51**~~ — afgewerkt: gbox-005 en gbox-006 draaien op v1.0.54 met bootstrap flow
+2. ~~**SD-script bootpartitie detectie verbeteren**~~ — afgewerkt: 3-staps detectie (label → FAT32 → handmatig met volumeoverzicht)
+3. ~~**`service-account.json` automatisch op SD-kaart zetten**~~ — afgewerkt: SD-script kopieert automatisch vanuit `$PSScriptRoot`
 4. `rmsDeviceId` koppelen aan alle bestaande boxes in Firestore
 5. Camera configuratie in installatiecockpit
 6. Camera IP detectie via Pi als tussenpersoon (lokale RUT241 API)
