@@ -1894,9 +1894,38 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       `Write-Host \"Klaar. SD-kaart is klaar voor installatie van box: ${boxId}\"`
     ].join("\r\n");
 
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="gridbox-sd-${boxId}.ps1"`);
-    return res.status(200).send(script);
+    // Encode PS1 as UTF-16LE Base64 for PowerShell -EncodedCommand
+    const ps1Buf = Buffer.alloc(script.length * 2);
+    for (let i = 0; i < script.length; i++) {
+      ps1Buf.writeUInt16LE(script.charCodeAt(i), i * 2);
+    }
+    const encodedScript = ps1Buf.toString("base64");
+
+    const batScript = [
+      "@echo off",
+      `title Gridbox SD-kaart flash - ${boxId}`,
+      ":: Controleer administrator rechten",
+      "net session >nul 2>&1",
+      "if %errorLevel% neq 0 (",
+      "    echo Beheerdersrechten vereist. Opnieuw starten als administrator...",
+      "    powershell -Command \"Start-Process '%~f0' -Verb RunAs\"",
+      "    exit /b",
+      ")",
+      "echo.",
+      `echo  Gridbox SD-kaart flash script`,
+      `echo  Box: ${boxId}`,
+      `echo  Provisioning: ${provisioningId}`,
+      "echo.",
+      "echo  PowerShell script wordt uitgevoerd...",
+      "echo.",
+      `powershell -ExecutionPolicy Bypass -EncodedCommand ${encodedScript}`,
+      "echo.",
+      "pause"
+    ].join("\r\n");
+
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.setHeader("Content-Disposition", `attachment; filename="gridbox-sd-${boxId}.bat"`);
+    return res.status(200).send(batScript);
   } catch (error) {
     const statusCode = getStatusCode(error);
 

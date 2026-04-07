@@ -637,7 +637,7 @@ export default function AdminPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `gridbox-sd-${boxId}.ps1`;
+      a.download = `gridbox-sd-${boxId}.bat`;
       document.body.appendChild(a);
       a.click();
       a.remove();

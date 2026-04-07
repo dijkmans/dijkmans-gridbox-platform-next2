@@ -665,9 +665,9 @@ export default function AdminProvisioningSection({
                 <h3 className="text-xl font-bold text-slate-900">SD-kaart klaarleggen</h3>
                 <ol className="mt-3 max-w-3xl space-y-1 text-sm leading-7 text-slate-600 list-decimal list-inside">
                   <li>Klik op <strong>Bootstrap voorbereiden</strong> — dit genereert een unieke sleutel</li>
-                  <li>Klik op <strong>SD-script downloaden</strong> — sla het .ps1 bestand op</li>
+                  <li>Klik op <strong>SD-script downloaden</strong> — sla het .bat bestand op</li>
                   <li>Steek de SD-kaart in je PC</li>
-                  <li>Rechtsklik op het gedownloade .ps1 bestand en kies <strong>Uitvoeren met PowerShell</strong></li>
+                  <li>Dubbelklik op het gedownloade .bat bestand — Windows vraagt automatisch om beheerdersrechten</li>
                   <li>Klik <strong>Ja</strong> als Windows om toestemming vraagt</li>
                   <li>Wacht ongeveer 10 minuten tot je <strong>KLAAR</strong> ziet</li>
                   <li>Haal de SD-kaart uit je PC</li>
