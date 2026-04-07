@@ -58,6 +58,10 @@ export async function fetchAdminProvisionings({ token }: FetchOptions) {
   return fetchAdminPath("/admin/provisionings", { token });
 }
 
+export async function deleteAdminProvisioning(id: string, { token }: FetchOptions) {
+  return deleteAdminPath(`/admin/provisioning/${id}`, { token });
+}
+
 export async function postAdminJson(path: string, { token, body }: PostOptions) {
   return fetch(apiUrl(path), {
     method: "POST",

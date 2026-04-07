@@ -7,6 +7,7 @@ type AdminLogsSectionProps = {
   customers: CustomerItem[];
   provisioningStatusLabels: Record<string, string>;
   formatDate: (value?: string | null | { _seconds: number; _nanoseconds: number }) => string;
+  onDeleteProvisioning?: (id: string) => void;
 };
 
 const STATUS_STYLES: Record<string, string> = {
@@ -24,6 +25,7 @@ export default function AdminLogsSection({
   customers,
   provisioningStatusLabels,
   formatDate,
+  onDeleteProvisioning,
 }: AdminLogsSectionProps) {
   return (
     <section className="space-y-6">
@@ -43,7 +45,8 @@ export default function AdminLogsSection({
                 <th className="pb-3 pr-4 font-semibold">Klant</th>
                 <th className="pb-3 pr-4 font-semibold">Status</th>
                 <th className="pb-3 pr-4 font-semibold">Laatste heartbeat</th>
-                <th className="pb-3 font-semibold">Aangemaakt op</th>
+                <th className="pb-3 pr-4 font-semibold">Aangemaakt op</th>
+                <th className="pb-3 font-semibold"></th>
               </tr>
             </thead>
             <tbody>
@@ -73,7 +76,22 @@ export default function AdminLogsSection({
                     <td className="py-4 pr-4 text-slate-600">
                       {formatDate(item.lastHeartbeatAt)}
                     </td>
-                    <td className="py-4 text-slate-600">{formatDate(item.createdAt)}</td>
+                    <td className="py-4 pr-4 text-slate-600">{formatDate(item.createdAt)}</td>
+                    <td className="py-4">
+                      {onDeleteProvisioning && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`Provisioning ${item.boxId || item.id} verwijderen?`)) {
+                              onDeleteProvisioning(item.id);
+                            }
+                          }}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                        >
+                          Verwijder
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}

@@ -20,6 +20,7 @@ import {
   fetchAdminInvites,
   fetchAdminRoles,
   fetchAdminProvisionings,
+  deleteAdminProvisioning,
   fetchAdminPath,
   fetchAdminSuggestBoxId,
   postAdminJson,
@@ -697,6 +698,20 @@ export default function AdminPage() {
     }
   }
 
+  async function handleDeleteProvisioning(id: string) {
+    const user = auth.currentUser;
+    if (!user) return;
+    const token = await user.getIdToken();
+    const res = await deleteAdminProvisioning(id, { token });
+    if (res.ok) {
+      setProvisioningItems((prev) => prev.filter((item) => item.id !== id));
+      setSuccessMessage("Provisioning verwijderd");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setErrorMessage(data.message || "Verwijderen mislukt");
+    }
+  }
+
   async function handleSuggestBoxId(): Promise<string | null> {
     const user = auth.currentUser;
     if (!user) return null;
@@ -1085,6 +1100,7 @@ export default function AdminPage() {
                 customers={customers}
                 provisioningStatusLabels={provisioningStatusLabels}
                 formatDate={formatDate}
+                onDeleteProvisioning={handleDeleteProvisioning}
               />
             )}
           </div>

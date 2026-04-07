@@ -1655,6 +1655,30 @@ router.post("/admin/provisioning/:id/finalize", async (req, res) => {
   }
 });
 
+router.delete("/admin/provisioning/:id", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const provisioningId = req.params.id?.trim();
+    if (!provisioningId) {
+      return res.status(400).json({ error: "INVALID_PROVISIONING_ID", message: "Provisioning id is verplicht" });
+    }
+
+    const db = getFirestore();
+    const ref = db.collection("provisionings").doc(provisioningId);
+    const doc = await ref.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ error: "PROVISIONING_NOT_FOUND", message: "Provisioning bestaat niet" });
+    }
+
+    await ref.delete();
+    return res.json({ success: true, id: provisioningId });
+  } catch (err: any) {
+    return res.status(err.status ?? 500).json({ error: err.code ?? "SERVER_ERROR", message: err.message ?? "Onbekende fout" });
+  }
+});
+
 router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
   try {
     await requirePlatformAdmin(req.header("Authorization") || undefined);
