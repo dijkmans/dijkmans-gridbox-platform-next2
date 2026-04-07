@@ -1801,6 +1801,10 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "    exit 0",
       "}",
       "",
+      "# AutoPlay uitschakelen tijdens flashen",
+      "$autoPlayKey = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\AutoplayHandlers\\UserChosenExecuteHandlers'",
+      "reg add 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer' /v NoDriveTypeAutoRun /t REG_DWORD /d 255 /f | Out-Null",
+      "",
       "# Cloud-init userdata tijdelijk opslaan",
       `$TempDir = "C:\\Windows\\Temp\\gridbox-${boxId}"`,
       "New-Item -ItemType Directory -Force -Path $TempDir | Out-Null",
@@ -1897,6 +1901,9 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "        Write-Warning \"service-account.json niet gevonden naast dit script. Kopieer het zelf naar ${bootDriveLetter}:\\service-account.json\"",
       "    }",
       "}",
+      "",
+      "# AutoPlay terug inschakelen",
+      "reg delete 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer' /v NoDriveTypeAutoRun /f | Out-Null",
       "",
       `Write-Host \"Klaar. SD-kaart is klaar voor installatie van box: ${boxId}\"`
     ].join("\r\n");
