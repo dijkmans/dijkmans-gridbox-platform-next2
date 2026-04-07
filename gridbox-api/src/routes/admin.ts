@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "crypto";
+import { Storage } from "@google-cloud/storage";
 import { Router } from "express";
 import { requirePortalUser } from "../auth/verifyBearerToken";
 import { getMembershipByEmail } from "../repositories/membershipRepository";
@@ -1719,6 +1720,17 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
     const apiBaseUrl = `${req.protocol}://${host}`;
     const bootstrapVersion = "v1";
 
+    const gcsStorage = new Storage();
+    const masterImageObject = gcsStorage
+      .bucket("gridbox-platform.firebasestorage.app")
+      .file("master-images/Gridbox_master_v1.0.54.img");
+
+    const [signedUrl] = await masterImageObject.getSignedUrl({
+      version: "v4",
+      action: "read",
+      expires: Date.now() + 2 * 60 * 60 * 1000
+    });
+
     const cloudInitUserData = [
       "#cloud-config",
       "hostname: " + boxId,
@@ -1758,7 +1770,7 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "",
       "$ImagerPath = \"C:\\Program Files\\Raspberry Pi Ltd\\Imager\\rpi-imager.exe\"",
       "$ImagePath  = \"$env:USERPROFILE\\Downloads\\Gridbox_master_v1.0.54.img\"",
-      "$GcsUrl     = \"https://storage.googleapis.com/gridbox-platform.firebasestorage.app/master-images/Gridbox_master_v1.0.54.img\"",
+      `$GcsUrl     = "${signedUrl}"`,
       "",
       "if (-not (Test-Path $ImagerPath)) {",
       "    Write-Error \"rpi-imager niet gevonden. Download via https://www.raspberrypi.com/software/\"",
@@ -1766,7 +1778,7 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "}",
       "",
       "if (-not (Test-Path $ImagePath)) {",
-      "    Write-Host \"Master image niet gevonden lokaal. Downloaden van GCS...\" -ForegroundColor Yellow",
+      "    Write-Host \"Master image niet gevonden lokaal. Downloaden via signed URL...\" -ForegroundColor Yellow",
       "    $ProgressPreference = 'SilentlyContinue'",
       "    Invoke-WebRequest -Uri $GcsUrl -OutFile $ImagePath -UseBasicParsing",
       "    Write-Host \"Master image gedownload naar $ImagePath\" -ForegroundColor Green",
