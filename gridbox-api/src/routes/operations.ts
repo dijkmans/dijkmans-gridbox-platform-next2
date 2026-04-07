@@ -126,7 +126,10 @@ router.get("/operations/boxes", async (req, res) => {
       const rmsData = rmsDeviceId !== null ? rmsMap[rmsDeviceId] : null;
 
       const software = box["software"] as Record<string, unknown> | undefined;
-      const lastHeartbeatAt = software?.["lastHeartbeatIso"] ?? box["lastHeartbeatAt"] ?? null;
+      const lastHeartbeatAt =
+        software?.["lastHeartbeatIso"] ??
+        box["lastHeartbeatAt"] ??
+        (box["status"] === "online" ? (box["updatedAt"] ?? null) : null);
 
       return {
         ...box,
