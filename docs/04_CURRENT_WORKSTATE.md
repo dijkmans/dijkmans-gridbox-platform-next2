@@ -46,6 +46,8 @@ Provisioning flow end-to-end werkend en gevalideerd. gbox-005 en gbox-006 draaie
 - Portal gedeployed naar Firebase Hosting: https://gridbox-platform.web.app
 - gbox-006 toegevoegd aan `ACTIVE_PORTAL_BOX_IDS` in `boxes.ts`
 - Invite flow werkt end-to-end met SMS verificatie via Bird
+- Design system vastgelegd in `docs/DESIGN_SYSTEM.md` (kleuren, typography, radius, componenten, stijlregels)
+- Importeerbare TypeScript design tokens in `gridbox-portal/src/lib/design-tokens.ts`
 
 ## Fixes 2026-04-06
 

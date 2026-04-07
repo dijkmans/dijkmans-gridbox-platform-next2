@@ -104,6 +104,18 @@ Frontend -> Firestore
 - Volgende fase: Operations Center en RMS integratie
 - Twee aparte beheerlagen: admin (klanten) en operations (technisch)
 
+## Design System
+
+Alle UI-stijlen zijn vastgelegd in `docs/DESIGN_SYSTEM.md`.
+
+**Regel**: alle nieuwe UI-componenten en pagina's moeten de stijlregels uit `DESIGN_SYSTEM.md` volgen. Gebruik `gridbox-portal/src/lib/design-tokens.ts` voor importeerbare TypeScript constanten.
+
+Samenvatting van de kernregels:
+- Hoofdcards altijd `rounded-3xl`, sub-cards `rounded-2xl`, knoppen en inputs `rounded-xl`
+- Sidebar altijd `bg-slate-900`
+- Alerts: amber voor waarschuwingen, blauw voor informatie — nooit rood
+- Tekst: `text-slate-900` (titels), `text-slate-600` (body), `text-slate-500` (labels)
+
 ## Regel
 
 Niet verder bouwen voor de architectuur duidelijk blijft. Admin en Operations Center zijn bewust gescheiden lagen.
