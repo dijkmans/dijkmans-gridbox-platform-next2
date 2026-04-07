@@ -273,8 +273,7 @@ export default function AdminProvisioningSection({
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Nieuwe box voorbereiden</h3>
                 <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-                  Hier leg je de basis vast. Eerst klant, site en box-ID juist kiezen.
-                  Pas daarna heeft verdere provisioning zin.
+                  Kies de klant, de locatie (site) en geef de nieuwe box een ID. Het systeem stelt automatisch het volgende vrije nummer voor.
                 </p>
               </div>
 
@@ -535,8 +534,7 @@ export default function AdminProvisioningSection({
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Installatievoorbereiding aanmaken</h3>
                 <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-                  Dit is de stap waar voorbereiding overgaat in een echt backendrecord.
-                  De frontend mag hier niets simuleren. Ofwel bestaat het record echt, ofwel nog niet.
+                  Het systeem maakt nu een uniek installatierecord aan in de cloud. Dit record bevat een beveiligde sleutel die de Pi bij eerste opstart gebruikt om zichzelf te registreren.
                 </p>
               </div>
 
@@ -665,10 +663,16 @@ export default function AdminProvisioningSection({
             <div className="space-y-6">
               <div>
                 <h3 className="text-xl font-bold text-slate-900">SD-kaart klaarleggen</h3>
-                <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-                  Dit is bewust een simpele fysieke stap. Wout moet hier niet nadenken over software,
-                  alleen zeker zijn dat hij met de juiste lege kaart werkt.
-                </p>
+                <ol className="mt-3 max-w-3xl space-y-1 text-sm leading-7 text-slate-600 list-decimal list-inside">
+                  <li>Klik op <strong>Bootstrap voorbereiden</strong> — dit genereert een unieke sleutel</li>
+                  <li>Klik op <strong>SD-script downloaden</strong> — sla het .ps1 bestand op</li>
+                  <li>Steek de SD-kaart in je PC</li>
+                  <li>Rechtsklik op het gedownloade .ps1 bestand en kies <strong>Uitvoeren met PowerShell</strong></li>
+                  <li>Klik <strong>Ja</strong> als Windows om toestemming vraagt</li>
+                  <li>Wacht ongeveer 10 minuten tot je <strong>KLAAR</strong> ziet</li>
+                  <li>Haal de SD-kaart uit je PC</li>
+                  <li>Klik <strong>SD-kaart als klaar markeren</strong></li>
+                </ol>
               </div>
 
               {!stepOneReady ? (
@@ -739,7 +743,7 @@ export default function AdminProvisioningSection({
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Imager instellingen</h3>
                 <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-                  Hier moet alles zichtbaar op het scherm staan. Wout mag niets uit het hoofd moeten onthouden.
+                  Het flash script gebruikt automatisch het juiste master image. Je hoeft hier niets in te stellen.
                 </p>
               </div>
 
@@ -829,8 +833,7 @@ export default function AdminProvisioningSection({
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Opstartbestanden</h3>
                 <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-                  Deze stap toont welke beperkte opstartbestanden later op de kaart verwacht worden.
-                  Nog geen echte download, wel duidelijk maken wat Wout straks fysiek moet doen.
+                  Het script heeft automatisch de juiste bestanden op de SD-kaart gezet. Controleer alleen of de kaart bij de juiste box hoort.
                 </p>
               </div>
 
@@ -971,10 +974,13 @@ export default function AdminProvisioningSection({
             <div className="space-y-6">
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Eerste opstart</h3>
-                <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-                  Hier begint de fysieke eerste opstart van de box. Nog geen live succes tonen,
-                  maar wel duidelijk maken wat Wout nu effectief moet doen.
-                </p>
+                <ol className="mt-3 max-w-3xl space-y-1 text-sm leading-7 text-slate-600 list-decimal list-inside">
+                  <li>Steek de SD-kaart in de Raspberry Pi</li>
+                  <li>Sluit de voeding aan</li>
+                  <li>Wacht 2–3 minuten</li>
+                  <li>Controleer of de status <strong>claimed</strong> of <strong>online</strong> toont</li>
+                  <li>Klik <strong>Installatie afronden</strong> als de Pi online is</li>
+                </ol>
               </div>
 
               {!stepOneReady && !provisioningExists ? (
@@ -1088,8 +1094,7 @@ export default function AdminProvisioningSection({
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Live controle</h3>
                 <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-                  Hier controleert Wout of de eerste opstart waarschijnlijk goed verlopen is.
-                  Nog altijd zonder fake bevestiging vanuit frontend alleen.
+                  De installatie is geslaagd als de box hier als <strong>online</strong> of <strong>ready</strong> verschijnt. Je kan nu de box testen via het portal.
                 </p>
               </div>
 
