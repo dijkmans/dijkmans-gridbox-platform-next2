@@ -48,6 +48,16 @@ Provisioning flow end-to-end werkend en gevalideerd. gbox-005 en gbox-006 draaie
 - Invite flow werkt end-to-end met SMS verificatie via Bird
 - Design system vastgelegd in `docs/DESIGN_SYSTEM.md` (kleuren, typography, radius, componenten, stijlregels)
 - Importeerbare TypeScript design tokens in `gridbox-portal/src/lib/design-tokens.ts`
+- Bootstrap initialisatie volledig automatisch bij eerste opstart
+- Geen manuele SSH of bestandskopieën meer nodig na flashen
+
+## Fixes 2026-04-07
+
+- `gridbox-bootstrap-init.sh` en `gridbox-bootstrap-init.service` toegevoegd aan master image
+- Script detecteert automatisch werkdirectory via `src/listener.py`
+- Kopieert `box_bootstrap.json` en `service-account.json` van bootpartitie naar werkdirectory
+- Genereert `box_config.json` automatisch vanuit `box_bootstrap.json`
+- Marker `.bootstrap_initialized` voorkomt dubbele uitvoering
 
 ## Fixes 2026-04-06
 
@@ -98,7 +108,7 @@ Provisioning flow end-to-end werkend en gevalideerd. gbox-005 en gbox-006 draaie
 9. Remote acties: Pi herstarten, router herstarten via RMS
 10. SIM saldo en dataverbruik via RMS
 11. Operations Center uitbreiden met acties per box
-12. **Master image upload naar GCS nog bezig** (`Gridbox_master_v1.0.54.img`)
+12. **Nieuw master image v1.0.54b aanmaken en uploaden naar GCS** — inclusief bootstrap-init service
 
 ## Regels
 
