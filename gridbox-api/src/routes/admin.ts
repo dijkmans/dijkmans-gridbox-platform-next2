@@ -1887,7 +1887,7 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "    Write-Host \"box_bootstrap.json geschreven naar $BootstrapPath\" -ForegroundColor Green",
       "",
       "    # service-account.json kopiëren naar bootpartitie",
-      "    $ServiceAccountSource = Join-Path $PSScriptRoot 'service-account.json'",
+      "    $ServiceAccountSource = Join-Path $env:USERPROFILE 'Downloads\\service-account.json'",
       "    if (Test-Path $ServiceAccountSource) {",
       "        $ServiceAccountDest = \"${bootDriveLetter}:\\service-account.json\"",
       "        Copy-Item $ServiceAccountSource $ServiceAccountDest -Force",
