@@ -3,7 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { getBoxLabel } from "../helpers";
 import type { SiteSummary } from "../derived";
-import type { AdminBoxItem, AdminProvisioningItem, CustomerItem, ProvisioningStepContent } from "../types";
+import type {
+  AdminBoxItem,
+  AdminProvisioningItem,
+  CustomerItem,
+  ProvisioningStepContent,
+} from "../types";
 
 type AdminProvisioningSectionProps = {
   selectedProvisioningStep: number;
@@ -36,10 +41,92 @@ type AdminProvisioningSectionProps = {
   onSuggestBoxId?: () => Promise<string | null>;
 };
 
+const STEPS = [
+  "Nieuwe box voorbereiden",
+  "Installatievoorbereiding aanmaken",
+  "SD-kaart flashen",
+  "Opstartbestanden",
+  "Eerste opstart",
+  "Live controle",
+  "Installatie voltooid",
+] as const;
+
+// ─── Sub-components ────────────────────────────────────────────────────────
+
+function StatusBadge({ status }: { status?: string | null }) {
+  if (!status) return <span className="text-slate-400 text-sm">—</span>;
+  const cls =
+    status === "online" || status === "ready"
+      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+      : status === "claimed" || status === "awaiting_first_boot"
+        ? "bg-blue-50 text-blue-800 border border-blue-200"
+        : status === "awaiting_sd_preparation"
+          ? "bg-amber-50 text-amber-800 border border-amber-200"
+          : status === "failed"
+            ? "bg-amber-50 text-amber-800 border border-amber-200"
+            : "bg-slate-100 text-slate-600 border border-slate-200";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold ${cls}`}
+    >
+      {status}
+    </span>
+  );
+}
+
+function KVRow({
+  label,
+  value,
+  mono,
+  accent,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  accent?: "amber" | "blue";
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between gap-4 rounded-xl px-3.5 py-2.5 text-sm border ${
+        accent === "amber"
+          ? "bg-amber-50 border-amber-200"
+          : accent === "blue"
+            ? "bg-blue-50 border-blue-200"
+            : "bg-slate-50 border-slate-200"
+      }`}
+    >
+      <span
+        className={
+          accent === "amber"
+            ? "text-amber-700 shrink-0"
+            : accent === "blue"
+              ? "text-blue-700 shrink-0"
+              : "text-slate-500 shrink-0"
+        }
+      >
+        {label}
+      </span>
+      <span
+        className={`font-semibold text-right break-all ${mono ? "font-mono text-xs" : "text-sm"} ${
+          accent === "amber"
+            ? "text-amber-900"
+            : accent === "blue"
+              ? "text-blue-900"
+              : "text-slate-900"
+        }`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+// ─── Main component ────────────────────────────────────────────────────────
+
 export default function AdminProvisioningSection({
   selectedProvisioningStep,
-  provisioningSteps,
-  provisioningStepContent,
+  provisioningSteps: _provisioningSteps,
+  provisioningStepContent: _provisioningStepContent,
   customers,
   siteSummaries,
   boxes,
@@ -64,11 +151,12 @@ export default function AdminProvisioningSection({
   onGenerateScript,
   onMarkSdPrepared,
   onStepChange,
-  onSuggestBoxId
+  onSuggestBoxId,
 }: AdminProvisioningSectionProps) {
   const [suggestBusy, setSuggestBusy] = useState(false);
   const autoSuggestedRef = useRef(false);
 
+  // Auto-suggest box ID on load
   useEffect(() => {
     if (
       selectedProvisioningStep === 0 &&
@@ -78,22 +166,42 @@ export default function AdminProvisioningSection({
     ) {
       autoSuggestedRef.current = true;
       setSuggestBusy(true);
-      onSuggestBoxId().then((suggested) => {
-        if (suggested) onProvisioningBoxIdChange(suggested);
-      }).finally(() => setSuggestBusy(false));
+      onSuggestBoxId()
+        .then((suggested) => {
+          if (suggested) onProvisioningBoxIdChange(suggested);
+        })
+        .finally(() => setSuggestBusy(false));
     }
   }, [selectedProvisioningStep]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-advance on status change
+  useEffect(() => {
+    if (!provisioningItem?.status) return;
+    const s = provisioningItem.status;
+    if ((s === "online" || s === "ready") && selectedProvisioningStep < 6) {
+      onStepChange(6);
+    } else if (s === "claimed" && selectedProvisioningStep < 5) {
+      onStepChange(5);
+    }
+  }, [provisioningItem?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Derived values ──────────────────────────────────────────────────────
+
   const sortedCustomers = [...customers].sort((a, b) =>
     (a.name || a.id).localeCompare(b.name || b.id)
   );
+  const sortedSites = [...siteSummaries].sort((a, b) =>
+    a.siteId.localeCompare(b.siteId)
+  );
 
-
-  const sortedSites = [...siteSummaries].sort((a, b) => a.siteId.localeCompare(b.siteId));
-
-  const selectedCustomer = customers.find((customer) => customer.id === provisioningCustomerId);
+  const selectedCustomer = customers.find(
+    (c) => c.id === provisioningCustomerId
+  );
   const customerChosen = provisioningCustomerId.trim().length > 0;
   const customerScopedSites = selectedCustomer
-    ? sortedSites.filter((site) => site.customerIds.has(selectedCustomer.id.toLowerCase()))
+    ? sortedSites.filter((s) =>
+        s.customerIds.has(selectedCustomer.id.toLowerCase())
+      )
     : [];
 
   const trimmedSiteId = provisioningSiteId.trim();
@@ -101,22 +209,25 @@ export default function AdminProvisioningSection({
   const normalizedBoxId = trimmedBoxId.toLowerCase();
 
   const existingBoxIds = new Set(
-    boxes.map((box) => (box.boxId || box.id).trim().toLowerCase()).filter(Boolean)
+    boxes
+      .map((b) => (b.boxId || b.id).trim().toLowerCase())
+      .filter(Boolean)
   );
 
   const existingSite =
-    customerScopedSites.find((site) => site.siteId === trimmedSiteId) || null;
+    customerScopedSites.find((s) => s.siteId === trimmedSiteId) || null;
   const siteExistsOutsideSelectedCustomer =
     trimmedSiteId.length > 0 && !existingSite
-      ? sortedSites.find((site) => site.siteId === trimmedSiteId) || null
+      ? sortedSites.find((s) => s.siteId === trimmedSiteId) || null
       : null;
 
-  const boxIdLooksValid = trimmedBoxId.length > 0 && /^[a-z0-9-]+$/.test(trimmedBoxId);
-  const boxIdAlreadyExists = trimmedBoxId.length > 0 && existingBoxIds.has(normalizedBoxId);
+  const boxIdLooksValid =
+    trimmedBoxId.length > 0 && /^[a-z0-9-]+$/.test(trimmedBoxId);
+  const boxIdAlreadyExists =
+    trimmedBoxId.length > 0 && existingBoxIds.has(normalizedBoxId);
 
   const siteChosen = Boolean(existingSite);
   const boxChosen = trimmedBoxId.length > 0;
-
 
   const stepOneReady =
     customerChosen &&
@@ -125,810 +236,647 @@ export default function AdminProvisioningSection({
     boxIdLooksValid &&
     !boxIdAlreadyExists;
 
-  const customerLabel = selectedCustomer?.name || provisioningCustomerId || "-";
+  const customerLabel =
+    selectedCustomer?.name || provisioningCustomerId || "-";
   const provisioningExists = Boolean(provisioningItem?.id);
   const provisioningIdLabel = provisioningItem?.id || "-";
   const provisioningCreatedAt = provisioningItem?.createdAt || "-";
   const provisioningClaimedAt = provisioningItem?.claimedAt || "-";
   const provisioningLastHeartbeatAt = provisioningItem?.lastHeartbeatAt || "-";
   const provisioningFinalizedAt = provisioningItem?.finalizedAt || "-";
-  const canCreateProvisioning = stepOneReady && !provisioningBusy && !provisioningExists;
-  const canPrepareBootstrapDownload = provisioningExists && !provisioningBusy && Boolean(onPrepareBootstrapDownload);
-  const canGenerateScript = provisioningExists && !provisioningBusy && Boolean(onGenerateScript);
+
+  const canCreateProvisioning =
+    stepOneReady && !provisioningBusy && !provisioningExists;
+  const canPrepareBootstrapDownload =
+    provisioningExists &&
+    !provisioningBusy &&
+    Boolean(onPrepareBootstrapDownload);
+  const canGenerateScript =
+    provisioningExists && !provisioningBusy && Boolean(onGenerateScript);
   const canMarkSdPrepared =
     provisioningExists &&
     !provisioningBusy &&
     Boolean(onMarkSdPrepared) &&
-    (provisioningItem?.status === "draft" || provisioningItem?.status === "awaiting_sd_preparation");
-  const hasBootstrapDownloadItem = Boolean(bootstrapDownloadItem?.bootstrapToken);
+    (provisioningItem?.status === "draft" ||
+      provisioningItem?.status === "awaiting_sd_preparation");
+  const hasBootstrapDownloadItem = Boolean(
+    bootstrapDownloadItem?.bootstrapToken
+  );
 
-  return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex flex-col gap-4 border-b border-slate-200 pb-6 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900">Installatiecockpit</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-            We bouwen deze cockpit stap voor stap uit. Alleen echte voorbereiding,
-            geen fake provisioningstatus en geen verzonnen succes.
-          </p>
+  const scriptFilename = `gridbox-sd-${normalizedBoxId || "gbox-xxx"}.bat`;
+
+  // Step nav state helper
+  const getStepState = (idx: number) => {
+    if (idx < selectedProvisioningStep) return "done";
+    if (idx === selectedProvisioningStep) return "active";
+    return "waiting";
+  };
+
+  // ─── Info panel (right side of step 2) ───────────────────────────────────
+
+  const InfoPanel = () => (
+    <div className="flex flex-col gap-3">
+      {/* Installatie card */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <div className="border-b border-slate-200 bg-slate-50 px-3.5 py-2.5">
+          <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+            Installatie
+          </span>
         </div>
-        <div className="rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700">
-          Alleen voor platformbeheer
-        </div>
+        {(
+          [
+            ["Box-ID", normalizedBoxId || "—", true],
+            ["Klant", customerLabel, false],
+            ["Site", trimmedSiteId || "—", true],
+            ["Status", provisioningItem?.status || "—", true],
+            ["Script", scriptFilename, true],
+          ] as [string, string, boolean][]
+        ).map(([label, value, mono]) => (
+          <div
+            key={label}
+            className="flex items-center justify-between gap-3 border-b border-slate-50 px-3.5 py-2 text-xs last:border-0"
+          >
+            <span className="shrink-0 text-slate-500">{label}</span>
+            <span
+              className={`text-right font-semibold text-slate-900 ${mono ? "font-mono" : ""}`}
+            >
+              {value}
+            </span>
+          </div>
+        ))}
       </div>
 
-      <div className="mt-6 grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-          <div className="text-sm font-semibold text-slate-900">Echte provisioningstatus</div>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Hier tonen we alleen provisioningdata die page.tsx via de backend heeft opgehaald.
-            Geen fake claim, geen fake online en geen fake ready.
-          </p>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
-              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Status</div>
-              <div className="mt-2 font-semibold text-slate-900">{provisioningStatusLabel}</div>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
-              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Provisioning ID</div>
-              <div className="mt-2 font-semibold text-slate-900">{provisioningIdLabel}</div>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
-              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Aangemaakt op</div>
-              <div className="mt-2 font-semibold text-slate-900">{provisioningCreatedAt}</div>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
-              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Laatste heartbeat</div>
-              <div className="mt-2 font-semibold text-slate-900">{provisioningLastHeartbeatAt}</div>
-            </div>
+      {/* Tijdsinschatting card */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <div className="border-b border-slate-200 bg-slate-50 px-3.5 py-2.5">
+          <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+            Tijdsinschatting
+          </span>
+        </div>
+        {(
+          [
+            ["Bootstrap voorbereiden", "< 5 sec"],
+            ["Script downloaden", "~30 sec"],
+            ["Image downloaden (1e keer)", "~5 min"],
+            ["Flashen", "~8 min"],
+            ["Bootstrap schrijven", "~30 sec"],
+            ["Totaal", "~12–15 min"],
+          ] as [string, string][]
+        ).map(([label, time], i) => (
+          <div
+            key={label}
+            className={`flex items-center justify-between gap-3 border-b border-slate-50 px-3.5 py-2 text-xs last:border-0 ${
+              i === 5 ? "font-bold text-slate-900" : "text-slate-500"
+            }`}
+          >
+            <span>{label}</span>
+            <span className={i === 5 ? "text-slate-900" : "font-medium text-slate-700"}>
+              {time}
+            </span>
           </div>
+        ))}
+      </div>
 
-          <div className={`mt-3 rounded-xl px-4 py-3 text-sm leading-6 ${provisioningExists ? "bg-green-50 text-green-900" : "bg-amber-50 text-amber-900"}`}>
-            {provisioningExists
-              ? "Er is een echt provisioningrecord gekoppeld aan deze cockpitweergave."
-              : "Nog geen provisioningrecord opgehaald of aangemaakt."}
+      {/* Note */}
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-xs leading-relaxed text-amber-900">
+        <strong>SD-kaart minimaal 32 GB vereist.</strong> Gebruik klasse 10 of
+        beter. Een te kleine kaart veroorzaakt problemen bij de eerste opstart.
+      </div>
+    </div>
+  );
+
+  // ─── Render ───────────────────────────────────────────────────────────────
+
+  return (
+    <section>
+      <div className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+
+        {/* ── Card header ── */}
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-7 py-6">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">
+              Installatiecockpit
+            </h2>
+            <p className="mt-1 max-w-xl text-sm leading-6 text-slate-500">
+              We bouwen deze cockpit stap voor stap uit. Alleen echte
+              voorbereiding, geen fake provisioningstatus en geen verzonnen
+              succes.
+            </p>
           </div>
+          <span className="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700">
+            Alleen voor platformbeheer
+          </span>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-          <div className="text-sm font-semibold text-slate-900">Acties op backendniveau</div>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Eerst voorbereiden, dan echt aanmaken, daarna alleen verversen of afronden wanneer backend of device dat toelaat.
-          </p>
-
-          <label className="mt-4 block text-sm font-semibold text-slate-700">
-            Provisioning ID opzoeken
-          </label>
-          <input
-            value={provisioningLookupId}
-            onChange={(e) => onProvisioningLookupIdChange(e.target.value)}
-            placeholder="bv. prov-2026-04-03-001"
-            className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900"
-          />
-
-          <div className="mt-4 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={onCreateProvisioning}
-              disabled={!canCreateProvisioning}
-              className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {provisioningBusy ? "Bezig..." : "Installatievoorbereiding aanmaken"}
-            </button>
-
+        {/* ── Status bar ── */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-200 bg-slate-50/80 px-7 py-3.5">
+          <span className="text-xs text-slate-500">Status:</span>
+          <StatusBadge status={provisioningItem?.status} />
+          {provisioningItem?.id && (
+            <>
+              <span className="text-slate-200">·</span>
+              <span className="text-xs text-slate-500">Provisioning:</span>
+              <span className="font-mono text-xs font-semibold text-slate-700">
+                {provisioningItem.id.length > 16
+                  ? `${provisioningItem.id.slice(0, 16)}…`
+                  : provisioningItem.id}
+              </span>
+            </>
+          )}
+          <span className="text-slate-200">·</span>
+          <span className="text-xs text-slate-500">Box:</span>
+          <strong className="text-xs font-semibold text-slate-900">
+            {normalizedBoxId || "—"}
+          </strong>
+          <div className="ml-auto flex gap-2">
             <button
               type="button"
               onClick={onRefreshProvisioning}
               disabled={!canRefreshProvisioning}
-              className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Ververs status
+              Vernieuwen
             </button>
-
             <button
               type="button"
               onClick={onFinalizeProvisioning}
               disabled={!canFinalizeProvisioning}
-              className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Installatie afronden
             </button>
           </div>
-
-          <p className="mt-4 text-xs leading-6 text-slate-500">
-            Create is pas zinvol als stap 1 geldig is. Refresh en finalize volgen alleen echte backendstatus.
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-6 grid gap-6 lg:grid-cols-[320px_1fr]">
-        <div className="space-y-2">
-          {provisioningSteps.map((step, index) => {
-            const active = selectedProvisioningStep === index;
-
-            return (
-              <button
-                key={step}
-                type="button"
-                onClick={() => onStepChange(index)}
-                className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
-                  active
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-200 bg-slate-50 text-slate-800 hover:bg-slate-100"
-                }`}
-              >
-                <div className="text-xs font-semibold uppercase tracking-[0.18em]">
-                  Stap {index + 1}
-                </div>
-                <div className="mt-2 text-sm font-bold">{step}</div>
-              </button>
-            );
-          })}
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
-          {selectedProvisioningStep === 0 ? (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-xl font-bold text-slate-900">Nieuwe box voorbereiden</h3>
-                <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-                  Kies de klant, de locatie (site) en geef de nieuwe box een ID. Het systeem stelt automatisch het volgende vrije nummer voor.
-                </p>
-              </div>
+        {/* ── Lookup bar ── */}
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-7 py-4">
+          <span className="shrink-0 text-sm font-semibold text-slate-700">
+            Bestaand record laden:
+          </span>
+          <input
+            type="text"
+            value={provisioningLookupId}
+            onChange={(e) => onProvisioningLookupIdChange(e.target.value)}
+            placeholder="Provisioning ID"
+            className="w-64 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900"
+          />
+          <button
+            type="button"
+            onClick={onRefreshProvisioning}
+            disabled={!canRefreshProvisioning}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Laden
+          </button>
+        </div>
 
-              <div className="grid gap-5 xl:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Klant
-                  </label>
-                  <select
-                    value={provisioningCustomerId}
-                    onChange={(e) => onProvisioningCustomerChange(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900"
+        {/* ── Body: step nav + content ── */}
+        <div className="grid gap-6 p-7 [grid-template-columns:260px_1fr]">
+
+          {/* Step navigation */}
+          <nav className="flex flex-col gap-2">
+            {STEPS.map((stepLabel, idx) => {
+              const state = getStepState(idx);
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => onStepChange(idx)}
+                  className={`flex w-full items-start gap-3 rounded-2xl border px-4 py-3.5 text-left transition ${
+                    state === "active"
+                      ? "border-slate-900 bg-slate-900"
+                      : state === "done"
+                        ? "border-slate-200 bg-slate-50 opacity-80 hover:opacity-100 hover:bg-white"
+                        : "border-slate-200 bg-slate-50 hover:bg-slate-100"
+                  }`}
+                >
+                  {/* Indicator circle */}
+                  <div
+                    className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                      state === "active"
+                        ? "bg-white text-slate-900"
+                        : state === "done"
+                          ? "border border-slate-200 bg-slate-100 text-slate-400"
+                          : "border border-slate-200 bg-slate-100 text-slate-300"
+                    }`}
                   >
-                    <option value="">-- Kies een klant --</option>
-                    {sortedCustomers.map((customer) => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.name || customer.id}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="mt-2 text-xs text-slate-500">
-                    De box hoort meteen aan een klantcontext gekoppeld te zijn.
+                    {state === "done" ? "✓" : idx + 1}
+                  </div>
+                  {/* Meta */}
+                  <div className="min-w-0">
+                    <div
+                      className={`text-[10px] font-bold uppercase tracking-[0.18em] ${
+                        state === "active" ? "text-slate-400" : "text-slate-400"
+                      }`}
+                    >
+                      Stap {idx + 1}
+                    </div>
+                    <div
+                      className={`mt-1 text-[13px] font-bold leading-tight ${
+                        state === "active"
+                          ? "text-white"
+                          : state === "done"
+                            ? "text-slate-400"
+                            : "text-slate-700"
+                      }`}
+                    >
+                      {stepLabel}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* ── Step content ── */}
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+
+            {/* ════ STAP 0: Nieuwe box voorbereiden ════ */}
+            {selectedProvisioningStep === 0 && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">
+                    Nieuwe box voorbereiden
+                  </h3>
+                  <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
+                    Kies de klant, de locatie (site) en geef de nieuwe box een
+                    ID. Het systeem stelt automatisch het volgende vrije nummer
+                    voor.
                   </p>
                 </div>
 
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Site
-                  </label>
-                  <select
-                    value={provisioningSiteId}
-                    onChange={(e) => onProvisioningSiteChange(e.target.value)}
-                    disabled={!customerChosen || customerScopedSites.length === 0}
-                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                  >
-                    <option value="">
-                      {!customerChosen
-                        ? "-- Kies eerst een klant --"
-                        : customerScopedSites.length === 0
-                          ? "-- Geen bestaande sites voor deze klant --"
-                          : "-- Kies een bestaande site --"}
-                    </option>
-                    {customerScopedSites.map((site) => (
-                      <option key={site.siteId} value={site.siteId}>
-                        {site.siteId}
-                      </option>
-                    ))}
-                  </select>
-                  {customerChosen && customerScopedSites.length === 0 && (
-                    <div className="mt-3">
-                      <label className="mb-2 block text-sm font-semibold text-slate-700">
-                        Nieuwe site-ID
-                      </label>
-                      <input
-                        value={provisioningSiteId}
-                        onChange={(e) => onProvisioningSiteChange(e.target.value)}
-                        placeholder="bijv. site-klant-001"
-                        className="w-full rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-amber-500"
-                      />
-                      <p className="mt-2 text-xs text-amber-700">
-                        Deze klant heeft nog geen bestaande sites. De site-ID die je hier invult
-                        wordt als nieuwe site aangemaakt door de backend bij het starten van de provisioning.
-                      </p>
+                {/* Selectors */}
+                <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="text-sm font-semibold text-slate-900">
+                      Klant
                     </div>
-                  )}
-                  <div className="mt-2 space-y-1 text-xs">
-                    {!customerChosen && (
-                      <p className="text-slate-500">
-                        Kies eerst een klant. Pas dan kan je een geldige site kiezen.
-                      </p>
-                    )}
-                    {customerChosen && customerScopedSites.length > 0 && !siteChosen && (
-                      <p className="text-slate-500">
-                        Kies hier een bestaande site van de gekozen klant. De backend valideert
-                        die koppeling strikt.
-                      </p>
-                    )}
+                    <select
+                      value={provisioningCustomerId}
+                      onChange={(e) =>
+                        onProvisioningCustomerChange(e.target.value)
+                      }
+                      className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900"
+                    >
+                      <option value="">— Kies een klant —</option>
+                      {sortedCustomers.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name || c.id}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="text-sm font-semibold text-slate-900">
+                      Site
+                    </div>
+                    <select
+                      value={provisioningSiteId}
+                      onChange={(e) =>
+                        onProvisioningSiteChange(e.target.value)
+                      }
+                      disabled={!customerChosen}
+                      className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                    >
+                      <option value="">
+                        {customerChosen
+                          ? "— Kies een site —"
+                          : "— Eerst een klant kiezen —"}
+                      </option>
+                      {customerScopedSites.map((s) => (
+                        <option key={s.siteId} value={s.siteId}>
+                          {s.siteId}
+                        </option>
+                      ))}
+                    </select>
                     {siteExistsOutsideSelectedCustomer && (
-                      <p className="text-red-600">
-                        Deze site bestaat wel, maar hoort niet bij de gekozen klant.
-                      </p>
-                    )}
-                    {siteChosen && existingSite && (
-                      <p className="text-green-700">
-                        Bestaande site gekozen. Deze kan door de backend bevestigd worden.
+                      <p className="mt-2 text-xs text-amber-700">
+                        Deze site bestaat maar hoort bij een andere klant.
                       </p>
                     )}
                   </div>
                 </div>
 
-                <div className="xl:col-span-2">
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Nieuwe box-ID
-                  </label>
-                  <div className="flex gap-2">
+                {/* Box-ID */}
+                <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <div className="text-sm font-semibold text-slate-900">
+                    Box-ID
+                  </div>
+                  <div className="mt-3 flex gap-2">
                     <input
+                      type="text"
                       value={provisioningBoxId}
-                      onChange={(e) => onProvisioningBoxIdChange(e.target.value)}
-                      placeholder={suggestBusy ? "Laden…" : "bv. gbox-007"}
-                      disabled={suggestBusy}
-                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900 disabled:bg-slate-50 disabled:text-slate-400"
+                      onChange={(e) =>
+                        onProvisioningBoxIdChange(e.target.value)
+                      }
+                      placeholder="gbox-001"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900"
                     />
                     {onSuggestBoxId && (
                       <button
                         type="button"
-                        disabled={suggestBusy}
                         onClick={() => {
                           setSuggestBusy(true);
-                          onSuggestBoxId().then((suggested) => {
-                            if (suggested) onProvisioningBoxIdChange(suggested);
-                          }).finally(() => setSuggestBusy(false));
+                          onSuggestBoxId()
+                            .then((v) => {
+                              if (v) onProvisioningBoxIdChange(v);
+                            })
+                            .finally(() => setSuggestBusy(false));
                         }}
-                        className="shrink-0 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={suggestBusy}
+                        className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {suggestBusy ? "…" : "Suggereer"}
                       </button>
                     )}
                   </div>
-                  <div className="mt-2 space-y-1 text-xs">
-                    {!boxChosen && (
-                      <p className="text-slate-500">
-                        Gebruik kleine letters, cijfers en koppeltekens.
-                      </p>
-                    )}
+                  <div className="mt-2 text-xs">
                     {boxChosen && !boxIdLooksValid && (
-                      <p className="text-red-600">
-                        Ongeldig formaat. Gebruik alleen kleine letters, cijfers en koppeltekens.
-                      </p>
+                      <span className="text-red-600">
+                        Ongeldig formaat. Gebruik alleen kleine letters, cijfers
+                        en koppeltekens.
+                      </span>
                     )}
                     {boxChosen && boxIdLooksValid && boxIdAlreadyExists && (
-                      <p className="text-red-600">
+                      <span className="text-red-600">
                         Deze box-ID bestaat al. Kies een nieuwe unieke box-ID.
-                      </p>
+                      </span>
                     )}
                     {boxChosen &&
                       boxIdLooksValid &&
                       !boxIdAlreadyExists &&
                       trimmedBoxId !== normalizedBoxId && (
-                        <p className="text-amber-700">
-                          Let op: gebruik liever meteen kleine letters. Voorstel: {normalizedBoxId}
-                        </p>
+                        <span className="text-amber-700">
+                          Voorstel: gebruik kleine letters → {normalizedBoxId}
+                        </span>
                       )}
                     {boxChosen &&
                       boxIdLooksValid &&
                       !boxIdAlreadyExists &&
                       trimmedBoxId === normalizedBoxId && (
-                        <p className="text-green-700">
+                        <span className="text-emerald-700">
                           Box-ID-formaat ziet er goed uit.
-                        </p>
+                        </span>
                       )}
                   </div>
                 </div>
-              </div>
 
-              <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <div className="text-sm font-semibold text-slate-900">
-                    Samenvatting van stap 1
+                {/* Summary + validation */}
+                <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="mb-4 text-sm font-semibold text-slate-900">
+                      Samenvatting
+                    </div>
+                    <div className="space-y-2.5">
+                      <KVRow label="Klant" value={customerLabel} />
+                      <KVRow label="Site" value={trimmedSiteId || "—"} mono />
+                      <KVRow
+                        label="Box-ID"
+                        value={normalizedBoxId || "—"}
+                        mono
+                      />
+                    </div>
                   </div>
-
-                  <div className="mt-4 space-y-3 text-sm">
-                    <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <span className="text-slate-500">Klant</span>
-                      <span className="font-semibold text-slate-900">{customerLabel}</span>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="mb-4 text-sm font-semibold text-slate-900">
+                      Controle
                     </div>
-
-                    <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <span className="text-slate-500">Site</span>
-                      <span className="font-semibold text-slate-900">
-                        {trimmedSiteId || "-"}
-                      </span>
+                    <div className="space-y-2">
+                      {(
+                        [
+                          [customerChosen, "Klant gekozen", "Nog geen klant"],
+                          [
+                            siteChosen,
+                            "Site gekozen",
+                            customerChosen
+                              ? "Kies een site"
+                              : "Eerst klant kiezen",
+                          ],
+                          [
+                            boxChosen && boxIdLooksValid && !boxIdAlreadyExists,
+                            "Box-ID bruikbaar",
+                            "Box-ID nog niet klaar",
+                          ],
+                        ] as [boolean, string, string][]
+                      ).map(([ok, yesLabel, noLabel], i) => (
+                        <div
+                          key={i}
+                          className={`rounded-xl px-4 py-3 text-sm ${
+                            ok
+                              ? "bg-emerald-50 text-emerald-800"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {ok ? yesLabel : noLabel}
+                        </div>
+                      ))}
                     </div>
-
-                    <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <span className="text-slate-500">Nieuwe box-ID</span>
-                      <span className="font-semibold text-slate-900">
-                        {trimmedBoxId || "-"}
-                      </span>
+                    <div
+                      className={`mt-4 rounded-xl px-4 py-3 text-sm font-semibold ${
+                        stepOneReady
+                          ? "bg-emerald-100 text-emerald-900"
+                          : "bg-amber-50 text-amber-900"
+                      }`}
+                    >
+                      {stepOneReady
+                        ? "Klaar voor de volgende stap."
+                        : "Nog niet volledig of geldig."}
                     </div>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <div className="text-sm font-semibold text-slate-900">Controle</div>
-
-                  <div className="mt-4 space-y-3 text-sm">
-                    <div
-                      className={`rounded-xl px-4 py-3 ${
-                        customerChosen ? "bg-green-50 text-green-800" : "bg-slate-100 text-slate-600"
-                      }`}
-                    >
-                      {customerChosen ? "Klant gekozen" : "Nog geen klant gekozen"}
+                {/* Bestaande boxen referentie */}
+                {boxes.length > 0 && (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="text-sm font-semibold text-slate-900">
+                      Bestaande boxen ter referentie
                     </div>
-
-                    <div
-                      className={`rounded-xl px-4 py-3 ${
-                        siteChosen ? "bg-green-50 text-green-800" : "bg-slate-100 text-slate-600"
-                      }`}
-                    >
-                      {siteChosen
-                        ? "Bestaande site gekozen"
-                        : customerChosen
-                          ? "Kies een bestaande site"
-                          : "Kies eerst een klant"}
-                    </div>
-
-                    <div
-                      className={`rounded-xl px-4 py-3 ${
-                        boxChosen && boxIdLooksValid && !boxIdAlreadyExists
-                          ? "bg-green-50 text-green-800"
-                          : "bg-slate-100 text-slate-600"
-                      }`}
-                    >
-                      {boxChosen && boxIdLooksValid && !boxIdAlreadyExists
-                        ? "Box-ID is bruikbaar"
-                        : "Box-ID nog niet klaar"}
+                    <div className="mt-4 grid gap-2 md:grid-cols-2">
+                      {boxes.slice(0, 8).map((box) => (
+                        <div
+                          key={box.id}
+                          className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+                        >
+                          {getBoxLabel(box)}
+                        </div>
+                      ))}
                     </div>
                   </div>
-
-                  <div
-                    className={`mt-4 rounded-xl px-4 py-4 text-sm font-semibold ${
-                      stepOneReady
-                        ? "bg-green-100 text-green-900"
-                        : "bg-amber-100 text-amber-900"
-                    }`}
-                  >
-                    {stepOneReady
-                      ? "Stap 1 is inhoudelijk klaar voor de volgende fase."
-                      : "Stap 1 is nog niet volledig of nog niet geldig."}
-                  </div>
-                </div>
+                )}
               </div>
+            )}
 
-              {boxes.length > 0 && (
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <div className="text-sm font-semibold text-slate-900">
-                    Bestaande boxen ter referentie
-                  </div>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Handig om dubbele box-ID's te vermijden. Dit blijft referentie, maar stap 1 mag alleen verder
-                    met een bestaande site die bij de gekozen klant past.
+            {/* ════ STAP 1: Installatievoorbereiding aanmaken ════ */}
+            {selectedProvisioningStep === 1 && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">
+                    Installatievoorbereiding aanmaken
+                  </h3>
+                  <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
+                    Het systeem maakt nu een uniek installatierecord aan in de
+                    cloud. Dit record bevat een beveiligde sleutel die de Pi bij
+                    eerste opstart gebruikt om zichzelf te registreren.
                   </p>
-                  <div className="mt-4 grid gap-2 md:grid-cols-2">
-                    {boxes.slice(0, 8).map((box) => (
-                      <div
-                        key={box.id}
-                        className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
-                      >
-                        {getBoxLabel(box)}
-                      </div>
-                    ))}
-                  </div>
                 </div>
-              )}
-            </div>
-          ) : selectedProvisioningStep === 1 ? (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-xl font-bold text-slate-900">Installatievoorbereiding aanmaken</h3>
-                <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-                  Het systeem maakt nu een uniek installatierecord aan in de cloud. Dit record bevat een beveiligde sleutel die de Pi bij eerste opstart gebruikt om zichzelf te registreren.
-                </p>
-              </div>
 
-              {!stepOneReady ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
-                  Stap 1 is nog niet klaar. Kies eerst een geldige klant, site en unieke box-ID.
-                  Pas daarna heeft het zin om een echte installatievoorbereiding aan te maken.
-                </div>
-              ) : !provisioningExists ? (
-                <>
-                  <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="text-sm font-semibold text-slate-900">Klaar om aan te maken</div>
-                      <div className="mt-4 space-y-3 text-sm">
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">Klant</span>
-                          <span className="font-semibold text-slate-900">{customerLabel}</span>
-                        </div>
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">Site</span>
-                          <span className="font-semibold text-slate-900">{trimmedSiteId}</span>
-                        </div>
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">Box-ID</span>
-                          <span className="font-semibold text-slate-900">{normalizedBoxId}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="text-sm font-semibold text-slate-900">Huidige backendtoestand</div>
-                      <div className="mt-4 space-y-3 text-sm leading-7 text-slate-600">
-                        <div className="rounded-xl bg-amber-50 px-4 py-3 text-amber-900">
-                          Er is nog geen echt provisioningrecord gekoppeld aan deze invoer.
-                        </div>
-                        <div className="rounded-xl bg-slate-50 px-4 py-3">
-                          Zodra je aanmaakt, moet de backend de status en het provisioning-ID teruggeven.
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={onCreateProvisioning}
-                        disabled={!canCreateProvisioning}
-                        className="mt-4 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {provisioningBusy ? "Bezig..." : "Nu echt aanmaken in backend"}
-                      </button>
-                    </div>
+                {!stepOneReady ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
+                    Stap 1 is nog niet klaar. Kies eerst een geldige klant,
+                    site en unieke box-ID.
                   </div>
-
-                  <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm leading-7 text-blue-900">
-                    Deze stap is pas geslaagd wanneer de backend effectief een provisioningrecord terugstuurt.
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="text-sm font-semibold text-slate-900">Echt provisioningrecord</div>
-                      <div className="mt-4 space-y-3 text-sm">
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">Provisioning ID</span>
-                          <span className="font-semibold text-slate-900">{provisioningIdLabel}</span>
+                ) : !provisioningExists ? (
+                  <>
+                    <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                        <div className="mb-4 text-sm font-semibold text-slate-900">
+                          Klaar om aan te maken
                         </div>
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">Status</span>
-                          <span className="font-semibold text-slate-900">{provisioningStatusLabel}</span>
+                        <div className="space-y-2.5">
+                          <KVRow label="Klant" value={customerLabel} />
+                          <KVRow label="Site" value={trimmedSiteId} mono />
+                          <KVRow label="Box-ID" value={normalizedBoxId} mono />
                         </div>
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">Klant</span>
-                          <span className="font-semibold text-slate-900">{provisioningItem?.customerId || "-"}</span>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                        <div className="text-sm font-semibold text-slate-900">
+                          Huidige backendtoestand
                         </div>
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">Site</span>
-                          <span className="font-semibold text-slate-900">{provisioningItem?.siteId || "-"}</span>
+                        <div className="mt-4 space-y-3 text-sm leading-7">
+                          <div className="rounded-xl bg-amber-50 px-4 py-3 text-amber-900">
+                            Nog geen provisioningrecord gekoppeld.
+                          </div>
+                          <div className="rounded-xl bg-slate-50 px-4 py-3 text-slate-600">
+                            Na aanmaken geeft de backend status en ID terug.
+                          </div>
                         </div>
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">Box-ID</span>
-                          <span className="font-semibold text-slate-900">{provisioningItem?.boxId || "-"}</span>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={onCreateProvisioning}
+                          disabled={!canCreateProvisioning}
+                          className="mt-4 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {provisioningBusy
+                            ? "Bezig..."
+                            : "Aanmaken in backend"}
+                        </button>
                       </div>
                     </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="text-sm font-semibold text-slate-900">Live opvolging uit backend</div>
-                      <div className="mt-4 space-y-3 text-sm">
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">Aangemaakt op</span>
-                          <span className="font-semibold text-slate-900">{provisioningCreatedAt}</span>
+                    <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm leading-7 text-blue-900">
+                      Deze stap is pas geslaagd wanneer de backend effectief
+                      een provisioningrecord terugstuurt.
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                        <div className="mb-4 text-sm font-semibold text-slate-900">
+                          Provisioningrecord aangemaakt
                         </div>
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">Claimed op</span>
-                          <span className="font-semibold text-slate-900">{provisioningClaimedAt}</span>
-                        </div>
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">Laatste heartbeat</span>
-                          <span className="font-semibold text-slate-900">{provisioningLastHeartbeatAt}</span>
-                        </div>
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">Finalized op</span>
-                          <span className="font-semibold text-slate-900">{provisioningFinalizedAt}</span>
+                        <div className="space-y-2.5">
+                          <KVRow
+                            label="Provisioning ID"
+                            value={provisioningIdLabel}
+                            mono
+                          />
+                          <KVRow
+                            label="Status"
+                            value={provisioningStatusLabel}
+                          />
+                          <KVRow
+                            label="Klant"
+                            value={provisioningItem?.customerId || "—"}
+                          />
+                          <KVRow
+                            label="Site"
+                            value={provisioningItem?.siteId || "—"}
+                            mono
+                          />
+                          <KVRow
+                            label="Box-ID"
+                            value={provisioningItem?.boxId || "—"}
+                            mono
+                          />
                         </div>
                       </div>
-
-                      <div className="mt-4 flex flex-wrap gap-3">
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                        <div className="mb-4 text-sm font-semibold text-slate-900">
+                          Live tijdstempels
+                        </div>
+                        <div className="space-y-2.5">
+                          <KVRow
+                            label="Aangemaakt"
+                            value={provisioningCreatedAt}
+                          />
+                          <KVRow
+                            label="Geclaimd"
+                            value={provisioningClaimedAt}
+                          />
+                          <KVRow
+                            label="Heartbeat"
+                            value={provisioningLastHeartbeatAt}
+                          />
+                          <KVRow
+                            label="Afgerond"
+                            value={provisioningFinalizedAt}
+                          />
+                        </div>
                         <button
                           type="button"
                           onClick={onRefreshProvisioning}
                           disabled={!canRefreshProvisioning}
-                          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="mt-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           Ververs status
                         </button>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-4 text-sm leading-7 text-green-900">
-                    Deze stap toont nu een echt backendrecord. De cockpit mag dus alleen verder bouwen op deze bevestigde status.
-                  </div>
-                </>
-              )}
-            </div>
-          ) : selectedProvisioningStep === 2 ? (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-xl font-bold text-slate-900">SD-kaart klaarleggen</h3>
-                <ol className="mt-3 max-w-3xl space-y-1 text-sm leading-7 text-slate-600 list-decimal list-inside">
-                  <li>Klik op <strong>Bootstrap voorbereiden</strong> — dit genereert een unieke sleutel</li>
-                  <li>Klik op <strong>SD-script downloaden</strong> — sla het .bat bestand op</li>
-                  <li>Steek de SD-kaart in je PC</li>
-                  <li>Dubbelklik op het gedownloade .bat bestand — Windows vraagt automatisch om beheerdersrechten</li>
-                  <li>Klik <strong>Ja</strong> als Windows om toestemming vraagt</li>
-                  <li>Wacht ongeveer 10 minuten tot je <strong>KLAAR</strong> ziet</li>
-                  <li>Haal de SD-kaart uit je PC</li>
-                  <li>Klik <strong>SD-kaart als klaar markeren</strong></li>
-                </ol>
+                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm leading-7 text-emerald-800">
+                      Provisioningrecord bevestigd door backend. Klaar voor de
+                      volgende stap.
+                    </div>
+                  </>
+                )}
               </div>
+            )}
 
-              {!stepOneReady ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
-                  Stap 1 is nog niet klaar. Kies eerst een geldige klant, site en unieke box-ID.
-                  Anders weet je nog niet voor welke box je de kaart aan het voorbereiden bent.
+            {/* ════ STAP 2: SD-kaart flashen ════ */}
+            {selectedProvisioningStep === 2 && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">
+                    SD-kaart flashen
+                  </h3>
+                  <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
+                    Het script flasht het master image op de SD-kaart en
+                    schrijft automatisch de bootstrap-bestanden. Volg de stappen
+                    in het zwarte venster.
+                  </p>
                 </div>
-              ) : (
-                <>
-                  <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="text-sm font-semibold text-slate-900">
-                        Wat je nu fysiek moet doen
-                      </div>
 
-                      <div className="mt-4 space-y-3 text-sm text-slate-700">
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>Neem een lege SD-kaart voor <strong>{normalizedBoxId}</strong>.</span>
-                        </label>
-
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>Steek de kaart in je pc of kaartlezer.</span>
-                        </label>
-
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>Controleer dat je niet per ongeluk een andere schijf of werkkaart gaat overschrijven.</span>
-                        </label>
-
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>Bevestig voor jezelf dat deze kaart bij klant <strong>{customerLabel}</strong> en site <strong>{trimmedSiteId}</strong> hoort.</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="text-sm font-semibold text-slate-900">
-                        Waarom deze stap apart staat
-                      </div>
-
-                      <div className="mt-4 space-y-3 text-sm leading-7 text-slate-600">
-                        <p>
-                          Omdat dit een typische foutbron is. Als Wout hier al tegelijk moet nadenken over
-                          Imager, bootstrapbestanden en netwerk, gaat hij sneller een kaart of schijf verwisselen.
-                        </p>
-                        <p>
-                          Dus eerst alleen de juiste kaart klaarleggen. Pas daarna tonen we de Imager-instellingen.
-                        </p>
-                      </div>
-
-                      <div className="mt-4 rounded-xl bg-blue-50 px-4 py-4 text-sm text-blue-900">
-                        Huidige context: <strong>{normalizedBoxId}</strong> voor <strong>{customerLabel}</strong> op <strong>{trimmedSiteId}</strong>.
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm leading-7 text-blue-900">
-                    Deze stap bewaart nog niets. Het doel is alleen Wout rustig en foutarm naar de volgende fysieke stap te brengen.
-                  </div>
-                </>
-              )}
-            </div>
-          ) : selectedProvisioningStep === 3 ? (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-xl font-bold text-slate-900">Imager instellingen</h3>
-                <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-                  Het flash script gebruikt automatisch het juiste master image. Je hoeft hier niets in te stellen.
-                </p>
-              </div>
-
-              {!stepOneReady ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
-                  Stap 1 is nog niet klaar. Eerst klant, site en geldige box-ID vastleggen.
-                  Anders kunnen de Imager-instellingen nog niet betrouwbaar voorbereid worden.
-                </div>
-              ) : (
-                <>
-                  <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="text-sm font-semibold text-slate-900">
-                        Gebruik exact deze waarden
-                      </div>
-
-                      <div className="mt-4 space-y-3 text-sm">
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">OS</span>
-                          <span className="font-semibold text-slate-900">Raspberry Pi OS Lite 64-bit</span>
-                        </div>
-
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">Hostname</span>
-                          <span className="font-semibold text-slate-900">{normalizedBoxId}</span>
-                        </div>
-
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">Gebruiker</span>
-                          <span className="font-semibold text-slate-900">pi</span>
-                        </div>
-
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                          <span className="text-amber-800">Wachtwoord</span>
-                          <span className="font-semibold text-amber-900">Gebruik de vaste installatiewaarde</span>
-                        </div>
-
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">SSH</span>
-                          <span className="font-semibold text-slate-900">AAN</span>
-                        </div>
-
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">Netwerk</span>
-                          <span className="font-semibold text-slate-900">Bekabeld waar mogelijk</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="text-sm font-semibold text-slate-900">
-                        Controle voor Wout
-                      </div>
-
-                      <div className="mt-4 space-y-3 text-sm text-slate-700">
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>Ik heb Raspberry Pi Imager geopend.</span>
-                        </label>
-
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>Ik heb <strong>{normalizedBoxId}</strong> als hostname ingevuld.</span>
-                        </label>
-
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>Ik heb gebruiker <strong>pi</strong> en de vaste installatiewaarde gebruikt.</span>
-                        </label>
-
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>Ik heb SSH aangezet en de juiste kaart geselecteerd.</span>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-
+                {!stepOneReady && !provisioningExists ? (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
-                    Het wachtwoord is hier nog niet hard gekoppeld in de cockpit. Dat is bewust nog niet verzonnen in frontendcode. Gebruik voorlopig de afgesproken vaste installatiewaarde.
+                    Maak eerst een installatievoorbereiding aan in stap 2.
                   </div>
-                </>
-              )}
-            </div>
-          ) : selectedProvisioningStep === 4 ? (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-xl font-bold text-slate-900">Opstartbestanden</h3>
-                <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-                  Het script heeft automatisch de juiste bestanden op de SD-kaart gezet. Controleer alleen of de kaart bij de juiste box hoort.
-                </p>
-              </div>
-
-              {!stepOneReady && !provisioningExists ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
-                  Stap 1 is nog niet klaar en er is nog geen provisioningrecord geladen.
-                  Maak eerst een provisioning aan of laad een bestaand record.
-                </div>
-              ) : (
-                <>
-                  <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="text-sm font-semibold text-slate-900">
-                        Bestanden die later verwacht worden
-                      </div>
-
-                      <div className="mt-4 space-y-3 text-sm">
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">Verplicht</span>
-                          <span className="font-semibold text-slate-900">box_bootstrap.json</span>
-                        </div>
-
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">Optioneel</span>
-                          <span className="font-semibold text-slate-900">ssh</span>
-                        </div>
-
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="text-slate-500">Optioneel</span>
-                          <span className="font-semibold text-slate-900">userconf.txt</span>
-                        </div>
-
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
-                          <span className="text-blue-800">Voor deze box</span>
-                          <span className="font-semibold text-blue-900">{normalizedBoxId}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="text-sm font-semibold text-slate-900">
-                        Wat Wout fysiek moet doen
-                      </div>
-
-                      <div className="mt-4 space-y-3 text-sm text-slate-700">
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>Steek de vers gebrande kaart opnieuw in je pc.</span>
-                        </label>
-
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>Open de bootpartitie van de SD-kaart.</span>
-                        </label>
-
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>Zet de opstartbestanden in de hoofdmap van die partitie.</span>
-                        </label>
-
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>Controleer nog eens dat de kaart bij <strong>{normalizedBoxId}</strong> hoort voor <strong>{customerLabel}</strong>.</span>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
-                    Belangrijk: in de eindrichting horen hier alleen beperkte opstartbestanden te staan. Geen brede secrets en geen losse cloudsleutels als standaard.
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                    <div className="text-sm font-semibold text-slate-900">
-                      Bootstrap-download voorbereiden
-                    </div>
-                    <p className="mt-3 text-sm leading-7 text-slate-600">
-                      Deze actie vraagt echte beperkte bootstrapinfo op bij de backend.
-                      Dit markeert de SD-kaart nog niet als klaar.
-                    </p>
-
-                    <div className="mt-4 flex flex-wrap gap-3">
+                ) : (
+                  <>
+                    {/* Actieknoppen */}
+                    <div className="flex flex-wrap gap-3">
                       <button
                         type="button"
                         onClick={() => onPrepareBootstrapDownload?.()}
                         disabled={!canPrepareBootstrapDownload}
-                        className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {provisioningBusy ? "Bezig..." : "Bootstrap-download voorbereiden"}
+                        {provisioningBusy ? "Bezig..." : "Bootstrap voorbereiden"}
                       </button>
                       <button
                         type="button"
                         onClick={() => onGenerateScript?.()}
                         disabled={!canGenerateScript}
-                        className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         SD-script downloaden
                       </button>
@@ -936,287 +884,576 @@ export default function AdminProvisioningSection({
                         type="button"
                         onClick={() => onMarkSdPrepared?.()}
                         disabled={!canMarkSdPrepared}
-                        className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         SD-kaart als klaar markeren
                       </button>
                     </div>
 
+                    {/* 2-column: substeps + info panel */}
+                    <div className="grid gap-5 [grid-template-columns:1fr_256px]">
+
+                      {/* Substappen */}
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                        <div className="mb-5 text-sm font-semibold text-slate-900">
+                          Stappen in volgorde
+                        </div>
+                        <div className="flex flex-col">
+                          {(
+                            [
+                              {
+                                title: "SD-kaart insteken",
+                                body: (
+                                  <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                                    Steek de SD-kaart van minimaal 32 GB in je
+                                    pc. Het script detecteert hem automatisch.
+                                  </p>
+                                ),
+                              },
+                              {
+                                title: "Script uitvoeren",
+                                body: (
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    Dubbelklik op{" "}
+                                    <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">
+                                      {scriptFilename}
+                                    </span>{" "}
+                                    en klik Ja bij de UAC-melding.
+                                  </p>
+                                ),
+                              },
+                              {
+                                title: "Typ JA om te bevestigen",
+                                body: (
+                                  <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                                    Controleer de schijf in het zwarte venster
+                                    en typ{" "}
+                                    <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">
+                                      JA
+                                    </span>{" "}
+                                    om het flashen te starten.
+                                  </p>
+                                ),
+                              },
+                              {
+                                title: "Wacht tot rpi-imager klaar is (~8 min)",
+                                body: (
+                                  <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                                    rpi-imager opent automatisch en flasht het
+                                    master image. Wacht tot 100% en druk dan op
+                                    Enter.
+                                  </p>
+                                ),
+                              },
+                              {
+                                title: "SD-kaart herinsteken",
+                                body: (
+                                  <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                                    Verwijder de kaart kort, wacht op het
+                                    Windows geluid en steek hem terug in. Druk
+                                    daarna op Enter.
+                                  </p>
+                                ),
+                              },
+                              {
+                                title:
+                                  "Bootstrap bestanden worden automatisch geschreven",
+                                body: (
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    Het script schrijft{" "}
+                                    <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">
+                                      box_bootstrap.json
+                                    </span>{" "}
+                                    en{" "}
+                                    <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">
+                                      service-account.json
+                                    </span>{" "}
+                                    naar de bootpartitie.
+                                  </p>
+                                ),
+                              },
+                            ] as { title: string; body: React.ReactNode }[]
+                          ).map((substep, si) => (
+                            <div
+                              key={si}
+                              className="relative flex gap-3.5 pb-5 last:pb-0"
+                            >
+                              {/* Connector line */}
+                              {si < 5 && (
+                                <div className="absolute left-[11px] top-[26px] w-px bg-slate-200"
+                                  style={{ height: "calc(100% - 10px)" }}
+                                />
+                              )}
+                              {/* Circle indicator */}
+                              <div className="relative z-10 mt-0.5 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-[10px] font-bold text-slate-400">
+                                {si + 1}
+                              </div>
+                              {/* Content */}
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-bold text-slate-700">
+                                  {substep.title}
+                                </div>
+                                {substep.body}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Info panel */}
+                      <InfoPanel />
+                    </div>
+
+                    {/* Bootstrap download details */}
                     {hasBootstrapDownloadItem && (
-                      <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Provisioning ID</div>
-                          <div className="mt-2 break-all font-semibold text-slate-900">{bootstrapDownloadItem?.provisioningId || "-"}</div>
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                        <div className="mb-4 text-sm font-semibold text-slate-900">
+                          Bootstrap download klaar
                         </div>
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Box ID</div>
-                          <div className="mt-2 font-semibold text-slate-900">{bootstrapDownloadItem?.boxId || "-"}</div>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 md:col-span-2">
-                          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Bootstrap token</div>
-                          <div className="mt-2 break-all font-semibold text-slate-900">{bootstrapDownloadItem?.bootstrapToken || "-"}</div>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 md:col-span-2">
-                          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">API base URL</div>
-                          <div className="mt-2 break-all font-semibold text-slate-900">{bootstrapDownloadItem?.apiBaseUrl || "-"}</div>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Bootstrap versie</div>
-                          <div className="mt-2 font-semibold text-slate-900">{bootstrapDownloadItem?.bootstrapVersion || "-"}</div>
+                        <div className="grid gap-2.5 md:grid-cols-2">
+                          <KVRow
+                            label="Provisioning ID"
+                            value={bootstrapDownloadItem?.provisioningId || "—"}
+                            mono
+                          />
+                          <KVRow
+                            label="Box ID"
+                            value={bootstrapDownloadItem?.boxId || "—"}
+                            mono
+                          />
+                          <div className="md:col-span-2">
+                            <KVRow
+                              label="Bootstrap token"
+                              value={
+                                bootstrapDownloadItem?.bootstrapToken || "—"
+                              }
+                              mono
+                            />
+                          </div>
+                          <div className="md:col-span-2">
+                            <KVRow
+                              label="API base URL"
+                              value={bootstrapDownloadItem?.apiBaseUrl || "—"}
+                              mono
+                            />
+                          </div>
+                          <KVRow
+                            label="Versie"
+                            value={
+                              bootstrapDownloadItem?.bootstrapVersion || "—"
+                            }
+                          />
                         </div>
                       </div>
                     )}
-                  </div>
-                </>
-              )}
-            </div>
-          ) : selectedProvisioningStep === 5 ? (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-xl font-bold text-slate-900">Eerste opstart</h3>
-                <ol className="mt-3 max-w-3xl space-y-1 text-sm leading-7 text-slate-600 list-decimal list-inside">
-                  <li>Steek de SD-kaart in de Raspberry Pi</li>
-                  <li>Sluit de voeding aan</li>
-                  <li>Wacht 2–3 minuten</li>
-                  <li>Controleer of de status <strong>claimed</strong> of <strong>online</strong> toont</li>
-                  <li>Klik <strong>Installatie afronden</strong> als de Pi online is</li>
-                </ol>
+                  </>
+                )}
               </div>
+            )}
 
-              {!stepOneReady && !provisioningExists ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
-                  Stap 1 is nog niet klaar en er is nog geen provisioningrecord geladen.
-                  Maak eerst een provisioning aan of laad een bestaand record.
+            {/* ════ STAP 3: Opstartbestanden ════ */}
+            {selectedProvisioningStep === 3 && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">
+                    Opstartbestanden
+                  </h3>
+                  <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
+                    Het script heeft automatisch de juiste bestanden op de
+                    SD-kaart gezet. Controleer alleen of de kaart bij de juiste
+                    box hoort.
+                  </p>
                 </div>
-              ) : (
-                <>
-                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div>
-                        <div className="text-sm font-semibold text-slate-900">Backendstatus voor deze stap</div>
-                        <p className="mt-2 text-sm leading-6 text-slate-600">Na SD-kaart als klaar markeren verwacht je hier idealiter eerst Wacht op eerste opstart. Deze stap forceert zelf geen claim of online-status.</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={onRefreshProvisioning}
-                        disabled={!canRefreshProvisioning}
-                        className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        Ververs status
-                      </button>
-                    </div>
-                    <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-                      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Huidige backendstatus</div>
-                      <div className="mt-2 font-semibold text-slate-900">{provisioningStatusLabel}</div>
-                    </div>
+
+                {!stepOneReady && !provisioningExists ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
+                    Maak eerst een installatievoorbereiding aan in stap 2.
                   </div>
-
-                  <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="text-sm font-semibold text-slate-900">
-                        Wat Wout nu fysiek moet doen
-                      </div>
-
-                      <div className="mt-4 space-y-3 text-sm text-slate-700">
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>Steek de voorbereide SD-kaart in de Raspberry Pi van <strong>{normalizedBoxId}</strong>.</span>
-                        </label>
-
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>Sluit netwerk liefst bekabeld aan als dat mogelijk is op de installatielocatie.</span>
-                        </label>
-
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>Geef de Pi stroom en laat de eerste opstart rustig gebeuren.</span>
-                        </label>
-
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>Trek de voeding niet te snel uit als de box niet meteen zichtbaar reageert.</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="text-sm font-semibold text-slate-900">
-                        Wat je nu nog niet mag aannemen
-                      </div>
-
-                      <div className="mt-4 space-y-3 text-sm leading-7 text-slate-600">
-                        <div className="rounded-xl bg-slate-50 px-4 py-3">
-                          Nog niet aannemen dat de installatie gelukt is alleen omdat de Pi stroom heeft.
+                ) : (
+                  <>
+                    <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                        <div className="mb-4 text-sm font-semibold text-slate-900">
+                          Bestanden op bootpartitie
                         </div>
-                        <div className="rounded-xl bg-slate-50 px-4 py-3">
-                          Nog niet aannemen dat live connectie of claim al bevestigd is.
-                        </div>
-                        <div className="rounded-xl bg-slate-50 px-4 py-3">
-                          Nog niet automatisch naar handmatige uitzonderingen springen zolang de eerste opstart nog bezig kan zijn.
+                        <div className="space-y-2.5">
+                          <KVRow
+                            label="Verplicht"
+                            value="box_bootstrap.json"
+                            mono
+                          />
+                          <KVRow
+                            label="Automatisch"
+                            value="service-account.json"
+                            mono
+                          />
+                          <KVRow
+                            label="Voor deze box"
+                            value={normalizedBoxId || "—"}
+                            mono
+                            accent="blue"
+                          />
                         </div>
                       </div>
 
-                      <div className="mt-4 rounded-xl bg-blue-50 px-4 py-4 text-sm text-blue-900">
-                        Context: <strong>{normalizedBoxId}</strong> voor <strong>{customerLabel}</strong> op <strong>{trimmedSiteId}</strong>.
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                        <div className="mb-4 text-sm font-semibold text-slate-900">
+                          Snelle check
+                        </div>
+                        <div className="space-y-2.5 text-sm text-slate-700">
+                          {[
+                            `Kaart is voor ${normalizedBoxId || "de juiste box"}`,
+                            `Klant: ${customerLabel}`,
+                            `Site: ${trimmedSiteId || "—"}`,
+                            "Script is volledig afgelopen",
+                          ].map((item) => (
+                            <label
+                              key={item}
+                              className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+                            >
+                              <input type="checkbox" className="mt-0.5" />
+                              <span>{item}</span>
+                            </label>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm leading-7 text-blue-900">
-                    Het doel van deze stap is alleen de eerste opstart correct laten gebeuren.
-                    De echte bevestiging hoort pas later in live controle of backendstatus te komen.
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                    <div className="text-sm font-semibold text-slate-900">
-                      Bewuste grens van deze stap
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
+                      Alleen beperkte opstartbestanden horen op de SD-kaart.
+                      Geen brede secrets als standaard.
                     </div>
-                    <p className="mt-3 text-sm leading-7 text-slate-600">
-                      Deze stap zelf forceert geen online-status. Echte claim, heartbeat of online zie je alleen als de backend die status al heeft bevestigd.
-                    </p>
-                    <div className="mt-4">
-                      <button
-                        type="button"
-                        onClick={onFinalizeProvisioning}
-                        disabled={!canFinalizeProvisioning}
-                        className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        Installatie afronden
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          ) : selectedProvisioningStep === 6 ? (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-xl font-bold text-slate-900">Live controle</h3>
-                <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-                  De installatie is geslaagd als de box hier als <strong>online</strong> of <strong>ready</strong> verschijnt. Je kan nu de box testen via het portal.
-                </p>
+                  </>
+                )}
               </div>
+            )}
 
-              {!stepOneReady && !provisioningExists ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
-                  Stap 1 is nog niet klaar en er is nog geen provisioningrecord geladen.
-                  Maak eerst een provisioning aan of laad een bestaand record.
+            {/* ════ STAP 4: Eerste opstart ════ */}
+            {selectedProvisioningStep === 4 && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">
+                    Eerste opstart
+                  </h3>
+                  <ol className="mt-3 max-w-2xl list-decimal list-inside space-y-1 text-sm leading-7 text-slate-600">
+                    <li>Steek de SD-kaart in de Raspberry Pi</li>
+                    <li>Sluit de voeding aan</li>
+                    <li>Wacht 2–3 minuten</li>
+                    <li>
+                      Controleer of de status{" "}
+                      <strong>claimed</strong> of <strong>online</strong> toont
+                    </li>
+                    <li>
+                      Klik <strong>Installatie afronden</strong> als de Pi
+                      online is
+                    </li>
+                  </ol>
                 </div>
-              ) : (
-                <>
-                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div>
-                        <div className="text-sm font-semibold text-slate-900">Backendstatus voor deze stap</div>
-                        <p className="mt-2 text-sm leading-6 text-slate-600">Hier mag je alleen werken met backend- of devicebevestigde status. Claimed, online of ready worden niet lokaal verzonnen.</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={onRefreshProvisioning}
-                        disabled={!canRefreshProvisioning}
-                        className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        Ververs status
-                      </button>
-                    </div>
-                    <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-                      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Huidige backendstatus</div>
-                      <div className="mt-2 font-semibold text-slate-900">{provisioningStatusLabel}</div>
-                    </div>
-                  </div>
 
-                  <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+                {!stepOneReady && !provisioningExists ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
+                    Maak eerst een installatievoorbereiding aan in stap 2.
+                  </div>
+                ) : (
+                  <>
+                    {/* Backendstatus */}
                     <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="text-sm font-semibold text-slate-900">
-                        Wat Wout nu moet controleren
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900">
+                            Backendstatus
+                          </div>
+                          <p className="mt-1 text-sm leading-6 text-slate-600">
+                            Na SD-kaart als klaar markeren verwacht je hier
+                            eerst <em>awaiting_first_boot</em>. Na opstart{" "}
+                            <em>claimed</em>.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={onRefreshProvisioning}
+                          disabled={!canRefreshProvisioning}
+                          className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Ververs status
+                        </button>
                       </div>
-
-                      <div className="mt-4 space-y-3 text-sm text-slate-700">
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>De box heeft stroom en blijft stabiel opgestart.</span>
-                        </label>
-
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>Netwerk of bekabeling lijkt fysiek correct aangesloten.</span>
-                        </label>
-
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>Er zijn geen directe signalen dat de verkeerde kaart of verkeerde box gebruikt is.</span>
-                        </label>
-
-                        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <input type="checkbox" className="mt-1" />
-                          <span>Je controleert deze opstart voor <strong>{normalizedBoxId}</strong> bij <strong>{customerLabel}</strong> op <strong>{trimmedSiteId}</strong>.</span>
-                        </label>
+                      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+                        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                          Huidige status
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <StatusBadge status={provisioningItem?.status} />
+                          <span className="text-sm text-slate-500">
+                            {provisioningStatusLabel}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="text-sm font-semibold text-slate-900">
-                        Wat backend of device al bevestigd hebben of nog moeten bevestigen
+                    <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+                      {/* Checklist */}
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                        <div className="mb-4 text-sm font-semibold text-slate-900">
+                          Wat nu fysiek moet gebeuren
+                        </div>
+                        <div className="space-y-2.5 text-sm text-slate-700">
+                          {[
+                            `SD-kaart in ${normalizedBoxId || "de box"} gestoken`,
+                            "Netwerk bekabeld aangesloten indien mogelijk",
+                            "Voeding aangesloten — wacht op eerste opstart",
+                            "Pi heeft minimaal 2 minuten de tijd gekregen",
+                          ].map((item) => (
+                            <label
+                              key={item}
+                              className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+                            >
+                              <input type="checkbox" className="mt-0.5" />
+                              <span>{item}</span>
+                            </label>
+                          ))}
+                        </div>
                       </div>
 
-                      <div className="mt-4 space-y-3 text-sm leading-7 text-slate-600">
-                        <div className="rounded-xl bg-slate-50 px-4 py-3">
-                          De Pi heeft zichzelf geclaimd met de juiste boxcontext.
+                      {/* Afronden */}
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                        <div className="mb-4 text-sm font-semibold text-slate-900">
+                          Installatie afronden
                         </div>
-                        <div className="rounded-xl bg-slate-50 px-4 py-3">
-                          De eerste heartbeat of online-melding is binnen.
+                        <p className="text-sm leading-7 text-slate-600">
+                          Deze stap forceert geen online-status. Echte claim,
+                          heartbeat of online zie je alleen als de backend die
+                          status heeft bevestigd.
+                        </p>
+                        <div className="mt-4">
+                          <button
+                            type="button"
+                            onClick={onFinalizeProvisioning}
+                            disabled={!canFinalizeProvisioning}
+                            className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Installatie afronden
+                          </button>
                         </div>
-                        <div className="rounded-xl bg-slate-50 px-4 py-3">
-                          De backend herkent deze installatie als dezelfde box die in stap 1 voorbereid werd.
+                        <div className="mt-4 rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                          Context: <strong>{normalizedBoxId || "—"}</strong>{" "}
+                          voor <strong>{customerLabel}</strong>
                         </div>
-                      </div>
-
-                      <div className="mt-4 rounded-xl bg-amber-50 px-4 py-4 text-sm text-amber-900">
-                        Bovenaan zie je alleen echte provisioningstatus die via backend is opgehaald. Zonder backendbevestiging blijft dit voorlopig.
                       </div>
                     </div>
-                  </div>
 
-                  <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm leading-7 text-blue-900">
-                    Pas wanneer backend en device dit later echt bevestigen, mag deze installatie als klaar of online getoond worden.
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                    <div className="text-sm font-semibold text-slate-900">
-                      Bewuste grens van deze stap
+                    <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm leading-7 text-blue-900">
+                      Het doel van deze stap is alleen de eerste opstart correct
+                      laten gebeuren. De echte bevestiging komt via de
+                      backendstatus.
                     </div>
-                    <p className="mt-3 text-sm leading-7 text-slate-600">
-                      Deze cockpit toont alleen echte claim-status, heartbeat of online-status als die via backend werd opgehaald. Zonder backendbevestiging forceren we niets.
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
-          ) : (
-            <div>
-              <h3 className="text-xl font-bold text-slate-900">
-                {provisioningStepContent[selectedProvisioningStep].title}
-              </h3>
-              <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600">
-                {provisioningStepContent[selectedProvisioningStep].text}
-              </p>
-
-              <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
-                <div className="text-sm font-semibold text-slate-900">
-                  Waarom deze stap nu al tonen
-                </div>
-                <p className="mt-3 text-sm leading-7 text-slate-600">
-                  Omdat de structuur van de provisioningflow eerst juist moet zitten.
-                  Anders bouw je opnieuw verder op een scherm dat inhoudelijk te vaag is.
-                </p>
+                  </>
+                )}
               </div>
-            </div>
-          )}
+            )}
+
+            {/* ════ STAP 5: Live controle ════ */}
+            {selectedProvisioningStep === 5 && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">
+                    Live controle
+                  </h3>
+                  <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
+                    De installatie is geslaagd als de box hier als{" "}
+                    <strong>online</strong> of <strong>ready</strong> verschijnt.
+                    Je kan nu de box testen via het portal.
+                  </p>
+                </div>
+
+                {!stepOneReady && !provisioningExists ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
+                    Maak eerst een installatievoorbereiding aan in stap 2.
+                  </div>
+                ) : (
+                  <>
+                    {/* Backendstatus */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900">
+                            Backendstatus
+                          </div>
+                          <p className="mt-1 text-sm leading-6 text-slate-600">
+                            Hier mag je alleen werken met backend- of
+                            devicebevestigde status.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={onRefreshProvisioning}
+                          disabled={!canRefreshProvisioning}
+                          className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Ververs status
+                        </button>
+                      </div>
+                      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+                        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                          Huidige status
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <StatusBadge status={provisioningItem?.status} />
+                          <span className="text-sm text-slate-500">
+                            {provisioningStatusLabel}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+                      {/* Checklist */}
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                        <div className="mb-4 text-sm font-semibold text-slate-900">
+                          Wat nu controleren
+                        </div>
+                        <div className="space-y-2.5 text-sm text-slate-700">
+                          {[
+                            `Box ${normalizedBoxId || "—"} heeft stroom`,
+                            "Netwerk of bekabeling correct aangesloten",
+                            "Geen signalen van verkeerde kaart of box",
+                            `Opstart voor ${customerLabel} op ${trimmedSiteId || "—"}`,
+                          ].map((item) => (
+                            <label
+                              key={item}
+                              className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+                            >
+                              <input type="checkbox" className="mt-0.5" />
+                              <span>{item}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Backend bevestiging */}
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                        <div className="mb-4 text-sm font-semibold text-slate-900">
+                          Wat backend moet bevestigen
+                        </div>
+                        <div className="space-y-2.5 text-sm leading-7 text-slate-600">
+                          {[
+                            "Pi heeft zichzelf geclaimd met de juiste boxcontext",
+                            "Eerste heartbeat of online-melding is binnen",
+                            "Backend herkent deze installatie",
+                          ].map((item) => (
+                            <div
+                              key={item}
+                              className="rounded-xl bg-slate-50 px-4 py-3"
+                            >
+                              {item}
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                          Zonder backendbevestiging blijft de status
+                          voorlopig.
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm leading-7 text-blue-900">
+                      Pas wanneer backend en device dit bevestigen, mag deze
+                      installatie als klaar getoond worden.
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ════ STAP 6: Installatie voltooid ════ */}
+            {selectedProvisioningStep === 6 && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">
+                    Installatie voltooid
+                  </h3>
+                  <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
+                    De box is online en actief. De installatie is succesvol
+                    afgerond.
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-5">
+                  <div className="text-base font-bold text-emerald-800">
+                    Installatie geslaagd
+                  </div>
+                  <p className="mt-2 text-sm leading-7 text-emerald-700">
+                    Box <strong>{normalizedBoxId || "—"}</strong> is succesvol
+                    geïnstalleerd voor <strong>{customerLabel}</strong> op site{" "}
+                    <strong>{trimmedSiteId || "—"}</strong>.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="mb-4 text-sm font-semibold text-slate-900">
+                      Installatieoverzicht
+                    </div>
+                    <div className="space-y-2.5">
+                      <KVRow
+                        label="Box-ID"
+                        value={normalizedBoxId || "—"}
+                        mono
+                      />
+                      <KVRow label="Klant" value={customerLabel} />
+                      <KVRow
+                        label="Site"
+                        value={trimmedSiteId || "—"}
+                        mono
+                      />
+                      <KVRow
+                        label="Status"
+                        value={provisioningItem?.status || "—"}
+                        mono
+                      />
+                      <KVRow
+                        label="Provisioning ID"
+                        value={provisioningIdLabel}
+                        mono
+                      />
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="mb-4 text-sm font-semibold text-slate-900">
+                      Tijdstempels
+                    </div>
+                    <div className="space-y-2.5">
+                      <KVRow
+                        label="Aangemaakt"
+                        value={provisioningCreatedAt}
+                      />
+                      <KVRow label="Geclaimd" value={provisioningClaimedAt} />
+                      <KVRow
+                        label="Heartbeat"
+                        value={provisioningLastHeartbeatAt}
+                      />
+                      <KVRow
+                        label="Afgerond"
+                        value={provisioningFinalizedAt}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={onRefreshProvisioning}
+                      disabled={!canRefreshProvisioning}
+                      className="mt-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Ververs status
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </div>
         </div>
       </div>
     </section>
   );
 }
-
-

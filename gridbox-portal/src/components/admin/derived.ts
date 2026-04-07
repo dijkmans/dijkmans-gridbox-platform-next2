@@ -40,48 +40,41 @@ export const navigationItems: NavigationItem[] = [
 export const provisioningSteps: string[] = [
   "Nieuwe box voorbereiden",
   "Installatievoorbereiding aanmaken",
-  "SD-kaart klaarleggen",
-  "Imager instellingen",
+  "SD-kaart flashen",
   "Opstartbestanden",
   "Eerste opstart",
-  "Live controle"
+  "Live controle",
+  "Installatie voltooid"
 ];
 
 export const provisioningStepContent: ProvisioningStepContent[] = [
   {
     title: "Nieuwe box voorbereiden",
-    text:
-      "Hier hoort straks de eerste stap van de wizard te komen. Box ID, klant en site moeten hier bewust gekozen worden. Niet terug naar losse locatievelden op boxniveau."
+    text: "Kies de klant, de locatie (site) en geef de nieuwe box een ID."
   },
   {
     title: "Installatievoorbereiding aanmaken",
-    text:
-      "Deze stap moet later een backend-call worden die een provisioningrecord en beperkte bootstrapinfo aanmaakt. Niet in de frontend zelf verzinnen."
+    text: "Het systeem maakt een uniek installatierecord aan met een beveiligde bootstrap-sleutel."
   },
   {
-    title: "SD-kaart klaarleggen",
-    text:
-      "Wout moet hier maar één fysieke taak tegelijk zien. Geen technische chaos, gewoon duidelijke checkstappen."
-  },
-  {
-    title: "Imager instellingen",
-    text:
-      "Hostname, gebruiker, wachtwoord, SSH en OS-keuze moeten zichtbaar op het scherm staan. Niets uit het hoofd laten onthouden."
+    title: "SD-kaart flashen",
+    text: "Het script flasht het master image en schrijft automatisch de bootstrap-bestanden."
   },
   {
     title: "Opstartbestanden",
-    text:
-      "De richting blijft beperkt bootstrapmateriaal. Geen brede secrets als standaard op de SD-kaart."
+    text: "Controleer of de kaart bij de juiste box hoort. Het script heeft de bestanden automatisch geplaatst."
   },
   {
     title: "Eerste opstart",
-    text:
-      "Deze stap moet later live tonen wanneer de Pi zichzelf claimt en voor het eerst online komt."
+    text: "Steek de SD-kaart in de Pi en sluit de stroom aan. Wacht 2–3 minuten op de eerste registratie."
   },
   {
     title: "Live controle",
-    text:
-      "Pas wanneer backend en device dit echt bevestigen, mag een installatie als klaar getoond worden."
+    text: "Pas wanneer backend en device dit bevestigen, mag de installatie als klaar getoond worden."
+  },
+  {
+    title: "Installatie voltooid",
+    text: "De box is online en actief. De installatie is succesvol afgerond."
   }
 ];
 
