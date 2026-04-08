@@ -1,8 +1,8 @@
 # CURRENT WORKSTATE
 
-## Status — 2026-04-06
+## Status — 2026-04-08
 
-Provisioning flow end-to-end werkend en gevalideerd. gbox-005 en gbox-006 draaien op listener v1.0.54 met bootstrap flow. gbox-005 gefixed als master referentie. SD-script volledig geautomatiseerd: bootpartitie 3-staps detectie en service-account.json automatisch gekopieerd.
+Provisioning flow end-to-end werkend en gevalideerd. Master image bijgewerkt naar v1.0.54c met correcte service-account.json. SD-script verwijst naar v1.0.54c. Bootstrap-init service geïnstalleerd op gbox-005. Verwijder knop toegevoegd aan provisioning overzicht.
 
 ## Architectuur (vastgelegd)
 
@@ -50,6 +50,17 @@ Provisioning flow end-to-end werkend en gevalideerd. gbox-005 en gbox-006 draaie
 - Importeerbare TypeScript design tokens in `gridbox-portal/src/lib/design-tokens.ts`
 - Bootstrap initialisatie volledig automatisch bij eerste opstart
 - Geen manuele SSH of bestandskopieën meer nodig na flashen
+
+## Fixes 2026-04-08
+
+- `bootstrap-init` service geïnstalleerd op gbox-005
+- `service-account.json` gecorrigeerd op gbox-005 (was verlopen)
+- `runtime_config.json` aangemaakt voor gbox-005 met provisioning `U2DAv6yW7FIUiN0BYorh`
+- Master image v1.0.54c aangemaakt met correcte service-account.json
+- Upload v1.0.54c naar GCS gestart (nog bezig)
+- SD-script verwijst nu naar v1.0.54c (was 54b)
+- Verwijder knop toegevoegd aan provisioning overzicht in admin
+- `isPiOnline` fallback toegevoegd voor boxen zonder runtime_config
 
 ## Fixes 2026-04-07
 
@@ -108,7 +119,10 @@ Provisioning flow end-to-end werkend en gevalideerd. gbox-005 en gbox-006 draaie
 9. Remote acties: Pi herstarten, router herstarten via RMS
 10. SIM saldo en dataverbruik via RMS
 11. Operations Center uitbreiden met acties per box
-12. **Nieuw master image v1.0.54b aanmaken en uploaden naar GCS** — inclusief bootstrap-init service
+12. **Master image v1.0.54c upload naar GCS nog bezig** — aangemaakt, nog niet volledig geupload
+13. Installatiecockpit UI verbeteren: substappen en voortgangsindicatie
+14. gbox-006 opnieuw installeren als test met nieuwe flow (v1.0.54c + bootstrap-init)
+15. Camera DHCP beheer via RUT241 static leases
 
 ## Regels
 
