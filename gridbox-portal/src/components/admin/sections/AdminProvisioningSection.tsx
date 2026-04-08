@@ -633,7 +633,7 @@ export default function AdminProvisioningSection({
                       <KVRow label="Site" value={trimmedSiteId || "—"} mono />
                       <KVRow
                         label="Box-ID"
-                        value={normalizedBoxId || "—"}
+                        value={provisioningItem?.boxId || normalizedBoxId || "—"}
                         mono
                       />
                     </div>
@@ -1089,7 +1089,7 @@ export default function AdminProvisioningSection({
                           />
                           <KVRow
                             label="Voor deze box"
-                            value={normalizedBoxId || "—"}
+                            value={provisioningItem?.boxId || normalizedBoxId || "—"}
                             mono
                             accent="blue"
                           />
@@ -1397,7 +1397,7 @@ export default function AdminProvisioningSection({
                     <div className="space-y-2.5">
                       <KVRow
                         label="Box-ID"
-                        value={normalizedBoxId || "—"}
+                        value={provisioningItem?.boxId || normalizedBoxId || "—"}
                         mono
                       />
                       <KVRow label="Klant" value={customerLabel} />

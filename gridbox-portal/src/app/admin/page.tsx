@@ -634,7 +634,7 @@ export default function AdminPage() {
       }
 
       const blob = await res.blob();
-      const boxId = provisioningItem?.boxId || provisioningId;
+      const boxId = provisioningItem?.boxId || provisioningBoxId.trim().toLowerCase();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
