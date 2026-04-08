@@ -386,7 +386,7 @@ export default function AdminProvisioningSection({
           <span className="text-slate-200">·</span>
           <span className="text-xs text-slate-500">Box:</span>
           <strong className="text-xs font-semibold text-slate-900">
-            {normalizedBoxId || "—"}
+            {provisioningItem?.boxId || normalizedBoxId || "—"}
           </strong>
           <div className="ml-auto flex gap-2">
             <button
