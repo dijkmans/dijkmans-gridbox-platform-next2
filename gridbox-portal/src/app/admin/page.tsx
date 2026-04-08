@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
 import AuthPanel from "@/components/AuthPanel";
 import AdminSidebar from "@/components/admin/AdminSidebar";
@@ -61,6 +62,8 @@ import {
 
 
 export default function AdminPage() {
+  const router = useRouter();
+  const urlProvisioningProcessedRef = useRef(false);
   const [customers, setCustomers] = useState<CustomerItem[]>([]);
   const [memberships, setMemberships] = useState<MembershipItem[]>([]);
   const [invites, setInvites] = useState<InviteItem[]>([]);
@@ -202,6 +205,24 @@ export default function AdminPage() {
       unsubscribe();
     };
   }, []);
+
+  // Auto-load provisioning from URL param after initial data load
+  useEffect(() => {
+    if (loading) return;
+    if (urlProvisioningProcessedRef.current) return;
+    const id = new URLSearchParams(window.location.search).get("provisioning");
+    if (!id) return;
+    urlProvisioningProcessedRef.current = true;
+    fetchProvisioningById(id).then((item) => {
+      if (item) setActiveSection("provisioning");
+    });
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleSelectProvisioning(id: string) {
+    router.push(`/admin?provisioning=${encodeURIComponent(id)}`);
+    setActiveSection("provisioning");
+    fetchProvisioningById(id);
+  }
 
   async function postJson(url: string, body: object) {
     const user = auth.currentUser;
@@ -1101,6 +1122,7 @@ export default function AdminPage() {
                 provisioningStatusLabels={provisioningStatusLabels}
                 formatDate={formatDate}
                 onDeleteProvisioning={handleDeleteProvisioning}
+                onSelectProvisioning={handleSelectProvisioning}
               />
             )}
           </div>

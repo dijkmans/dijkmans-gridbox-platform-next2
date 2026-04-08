@@ -8,6 +8,7 @@ type AdminLogsSectionProps = {
   provisioningStatusLabels: Record<string, string>;
   formatDate: (value?: string | null | { _seconds: number; _nanoseconds: number }) => string;
   onDeleteProvisioning?: (id: string) => void;
+  onSelectProvisioning?: (id: string) => void;
 };
 
 const STATUS_STYLES: Record<string, string> = {
@@ -26,6 +27,7 @@ export default function AdminLogsSection({
   provisioningStatusLabels,
   formatDate,
   onDeleteProvisioning,
+  onSelectProvisioning,
 }: AdminLogsSectionProps) {
   return (
     <section className="space-y-6">
@@ -61,7 +63,11 @@ export default function AdminLogsSection({
                   "-";
 
                 return (
-                  <tr key={item.id} className="border-b border-slate-100">
+                  <tr
+                    key={item.id}
+                    className="cursor-pointer border-b border-slate-100 transition hover:bg-slate-50"
+                    onClick={() => onSelectProvisioning?.(item.id)}
+                  >
                     <td className="py-4 pr-4 font-semibold text-slate-900">
                       {item.boxId || item.id}
                     </td>
@@ -81,7 +87,8 @@ export default function AdminLogsSection({
                       {onDeleteProvisioning && (
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             if (window.confirm(`Provisioning ${item.boxId || item.id} verwijderen?`)) {
                               onDeleteProvisioning(item.id);
                             }
