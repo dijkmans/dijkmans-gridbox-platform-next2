@@ -786,6 +786,33 @@ def load_box_state_from_firestore():
 # HEARTBEAT + SOFTWARE STATUS
 # =========================================================
 
+def get_gateway_mac():
+    """Detecteert het MAC-adres van de default gateway via 'ip route' en 'arp'."""
+    if platform.system() == "Windows":
+        return None
+    try:
+        result = subprocess.run(
+            ["ip", "route", "show", "default"],
+            capture_output=True, text=True, timeout=5
+        )
+        match = re.search(r"default via (\S+)", result.stdout)
+        if not match:
+            return None
+        gateway_ip = match.group(1)
+
+        arp_result = subprocess.run(
+            ["arp", "-n", gateway_ip],
+            capture_output=True, text=True, timeout=5
+        )
+        mac_match = re.search(r"([0-9a-f]{2}(?::[0-9a-f]{2}){5})", arp_result.stdout, re.IGNORECASE)
+        if not mac_match:
+            return None
+        return mac_match.group(1).lower()
+    except Exception as e:
+        log(f"WARN: get_gateway_mac fout: {e}")
+        return None
+
+
 def try_backend_heartbeat(version_raspberry, software_update):
     if not isinstance(runtime_config, dict) or not runtime_config:
         return False
@@ -806,6 +833,10 @@ def try_backend_heartbeat(version_raspberry, software_update):
 
     if provisioning_id:
         payload["provisioningId"] = provisioning_id
+
+    gateway_mac = get_gateway_mac()
+    if gateway_mac:
+        payload["gatewayMac"] = gateway_mac
 
     try:
         response = requests.post(heartbeat_url, json=payload, timeout=20)
