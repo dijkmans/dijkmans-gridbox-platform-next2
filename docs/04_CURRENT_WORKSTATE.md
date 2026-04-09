@@ -125,6 +125,8 @@ Provisioning flow end-to-end werkend en gevalideerd. Master image bijgewerkt naa
 15. Camera DHCP beheer via RUT241 static leases
 16. **Automatische `rmsDeviceId` koppeling:** Pi detecteert gateway MAC-adres bij heartbeat → API matcht met RMS device lijst op serienummer (via lokale router API `GET http://{gateway}/api/v1/system/board`) → `rmsDeviceId` automatisch ingevuld in Firestore
 17. **Operations Center:** boxes grafisch groeperen per router/locatie
+18. **Automatische software updates op Pi:** bij nieuwe commit/release automatisch `softwareUpdateRequested` triggeren voor alle actieve boxes
+19. **Operations Center:** toon software versie per box, badge "Update beschikbaar" als Pi niet op laatste versie zit
 
 ## Regels
 
