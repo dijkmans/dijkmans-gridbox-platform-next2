@@ -123,6 +123,8 @@ Provisioning flow end-to-end werkend en gevalideerd. Master image bijgewerkt naa
 13. Installatiecockpit UI verbeteren: substappen en voortgangsindicatie
 14. gbox-006 opnieuw installeren als test met nieuwe flow (v1.0.54c + bootstrap-init)
 15. Camera DHCP beheer via RUT241 static leases
+16. **Automatische `rmsDeviceId` koppeling:** Pi detecteert gateway MAC-adres bij heartbeat → API matcht met RMS device lijst op serienummer (via lokale router API `GET http://{gateway}/api/v1/system/board`) → `rmsDeviceId` automatisch ingevuld in Firestore
+17. **Operations Center:** boxes grafisch groeperen per router/locatie
 
 ## Regels
 
