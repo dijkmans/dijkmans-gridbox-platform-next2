@@ -10,23 +10,36 @@ function nowIso(): string {
 }
 
 async function matchRmsDeviceByMac(gatewayMac: string): Promise<number | null> {
-  if (!env.rmsApiToken) return null;
+  if (!env.rmsApiToken) {
+    console.log("[rms-match] Geen RMS_API_TOKEN beschikbaar, skip");
+    return null;
+  }
   try {
     const res = await fetch(`${env.rmsApiBaseUrl}/devices`, {
       headers: { Authorization: `Bearer ${env.rmsApiToken}` }
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.log(`[rms-match] RMS /devices fout: HTTP ${res.status}`);
+      return null;
+    }
     const data = await res.json() as { success: boolean; data?: Array<Record<string, unknown>> };
-    if (!data.success || !Array.isArray(data.data)) return null;
+    if (!data.success || !Array.isArray(data.data)) {
+      console.log(`[rms-match] RMS response ongeldig: success=${data.success}, data=${Array.isArray(data.data) ? "array" : typeof data.data}`);
+      return null;
+    }
     const normalizedTarget = gatewayMac.toLowerCase();
     for (const device of data.data) {
       const deviceMac = typeof device.mac === "string" ? device.mac.toLowerCase() : null;
       if (deviceMac === normalizedTarget) {
-        return typeof device.id === "number" ? device.id : null;
+        const matchedId = typeof device.id === "number" ? device.id : null;
+        console.log(`[rms-match] Match gevonden: MAC ${gatewayMac} → rmsDeviceId=${matchedId} (${device.name ?? ""})`);
+        return matchedId;
       }
     }
+    console.log(`[rms-match] Geen match voor MAC ${gatewayMac}`);
     return null;
-  } catch {
+  } catch (err) {
+    console.log(`[rms-match] Fout bij RMS API call: ${err}`);
     return null;
   }
 }
