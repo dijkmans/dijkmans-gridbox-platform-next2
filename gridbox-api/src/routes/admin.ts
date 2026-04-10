@@ -1603,11 +1603,27 @@ router.post("/admin/provisioning/:id/finalize", async (req, res) => {
 
     const provisioningData = provisioningDoc.data() ?? {};
     const status = typeof provisioningData.status === "string" ? provisioningData.status : "";
+    const boxId = typeof provisioningData.boxId === "string" ? provisioningData.boxId.trim() : "";
+    const customerId = typeof provisioningData.customerId === "string" ? provisioningData.customerId.trim() : "";
 
     if (status !== "online") {
       return res.status(409).json({
         error: "FINALIZE_NOT_ALLOWED",
         message: "Provisioning kan alleen afgerond worden vanuit status online"
+      });
+    }
+
+    if (!boxId) {
+      return res.status(400).json({
+        error: "PROVISIONING_BOX_ID_MISSING",
+        message: "Provisioning bevat geen geldige boxId — kan niet afronden"
+      });
+    }
+
+    if (!customerId) {
+      return res.status(400).json({
+        error: "PROVISIONING_CUSTOMER_ID_MISSING",
+        message: "Provisioning bevat geen geldige customerId — kan niet afronden"
       });
     }
 
@@ -1624,10 +1640,24 @@ router.post("/admin/provisioning/:id/finalize", async (req, res) => {
       { merge: true }
     );
 
+    // Automatisch customerBoxAccess aanmaken na finalize
+    const accessDocId = `${customerId}__${boxId}`;
+    await db.collection("customerBoxAccess").doc(accessDocId).set(
+      {
+        customerId,
+        boxId,
+        active: true,
+        updatedAt,
+        addedBy: context.portalUser.email || "unknown"
+      },
+      { merge: true }
+    );
+
     return res.json({
       ok: true,
       id: provisioningId,
-      status: "ready"
+      status: "ready",
+      customerBoxAccessId: accessDocId
     });
   } catch (error) {
     const statusCode = getStatusCode(error);
@@ -1923,7 +1953,8 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "# AutoPlay terug inschakelen",
       "reg delete 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer' /v NoDriveTypeAutoRun /f | Out-Null",
       "",
-      `Write-Host \"Klaar. SD-kaart is klaar voor installatie van box: ${boxId}\"`
+      "$_bootstrap = $BootstrapJson | ConvertFrom-Json",
+      "Write-Host \"Klaar. SD-kaart is klaar voor installatie van box: $($_bootstrap.boxId)\" -ForegroundColor Green"
     ].join("\r\n");
 
     // Encode PS1 as UTF-16LE Base64 for PowerShell -EncodedCommand

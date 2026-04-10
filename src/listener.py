@@ -387,12 +387,19 @@ def get_repo_commit():
         return "unknown"
 
 def ensure_target_tag_exists(tag_name):
-    run_cmd_checked(["git", "fetch", "--tags", "origin"], cwd=REPO_ROOT, timeout=20)
+    # Probeer tags te fetchen, maar gooi geen exception als dit mislukt.
+    # Als de tag lokaal al bestaat (vorige fetch), kan de update toch doorgaan.
+    try:
+        run_cmd_checked(["git", "fetch", "--tags", "origin"], cwd=REPO_ROOT, timeout=20)
+    except Exception as e:
+        log(f"WARN: git fetch --tags mislukt ({e}) — controleer of tag {tag_name} lokaal beschikbaar is")
 
     result = run_cmd(
         ["git", "rev-parse", "-q", "--verify", f"refs/tags/{tag_name}"],
         cwd=REPO_ROOT
     )
+    if result.returncode != 0:
+        log(f"WARN: ensure_target_tag_exists: tag '{tag_name}' niet gevonden (lokaal noch remote)")
     return result.returncode == 0
 
 def ensure_repo_clean_for_checkout():
@@ -786,8 +793,8 @@ def load_box_state_from_firestore():
 # HEARTBEAT + SOFTWARE STATUS
 # =========================================================
 
-def get_gateway_mac():
-    """Detecteert het MAC-adres van de default gateway via 'ip route' en 'arp'."""
+def get_gateway_ip():
+    """Geeft het IP-adres van de default gateway terug, of None."""
     if platform.system() == "Windows":
         return None
     try:
@@ -796,10 +803,17 @@ def get_gateway_mac():
             capture_output=True, text=True, timeout=5
         )
         match = re.search(r"default via (\S+)", result.stdout)
-        if not match:
-            return None
-        gateway_ip = match.group(1)
+        return match.group(1) if match else None
+    except Exception:
+        return None
 
+
+def get_gateway_mac():
+    """Detecteert het MAC-adres van de default gateway via 'ip route' en 'arp'."""
+    gateway_ip = get_gateway_ip()
+    if not gateway_ip:
+        return None
+    try:
         arp_result = subprocess.run(
             ["arp", "-n", gateway_ip],
             capture_output=True, text=True, timeout=5
@@ -811,6 +825,83 @@ def get_gateway_mac():
     except Exception as e:
         log(f"WARN: get_gateway_mac fout: {e}")
         return None
+
+
+def get_gateway_serial():
+    """Vraagt het serienummer op van de lokale Teltonika-router via GET /api/v1/system/board.
+    Geeft None terug als de router niet bereikbaar is of geen serienummer retourneert.
+    Logt elk faalpad zodat problemen zichtbaar zijn in de service-output.
+    """
+    gateway_ip = get_gateway_ip()
+    if not gateway_ip:
+        log("WARN: get_gateway_serial: gateway IP niet detecteerbaar via 'ip route'")
+        return None
+    try:
+        resp = requests.get(
+            f"http://{gateway_ip}/api/v1/system/board",
+            timeout=3
+        )
+        if not resp.ok:
+            log(f"WARN: get_gateway_serial: router API op {gateway_ip} antwoordde HTTP {resp.status_code}")
+            return None
+        data = resp.json()
+        board = data.get("board", {})
+        serial = board.get("serial") or board.get("sn") or board.get("serial_number")
+        if serial and isinstance(serial, str):
+            log(f"INFO: get_gateway_serial: serienummer gevonden: {serial.strip()}")
+            return serial.strip()
+        log(f"WARN: get_gateway_serial: geen serial-veld in router response. Beschikbare velden: {list(board.keys())}")
+        return None
+    except requests.exceptions.ConnectionError as e:
+        log(f"WARN: get_gateway_serial: router API niet bereikbaar op {gateway_ip} — {e}")
+        return None
+    except requests.exceptions.Timeout:
+        log(f"WARN: get_gateway_serial: timeout bij verbinding met {gateway_ip}")
+        return None
+    except Exception as e:
+        log(f"WARN: get_gateway_serial: onverwachte fout: {type(e).__name__}: {e}")
+        return None
+
+
+def get_gateway_mac_fallback():
+    """Detecteert het MAC-adres van de default gateway via 'arp -n' of 'ip neigh show'.
+    Bedoeld als fallback wanneer het serienummer niet beschikbaar is.
+    """
+    gateway_ip = get_gateway_ip()
+    if not gateway_ip:
+        return None
+
+    # Probeer eerst arp -n
+    try:
+        arp_result = subprocess.run(
+            ["arp", "-n", gateway_ip],
+            capture_output=True, text=True, timeout=5
+        )
+        mac_match = re.search(r"([0-9a-f]{2}(?::[0-9a-f]{2}){5})", arp_result.stdout, re.IGNORECASE)
+        if mac_match:
+            mac = mac_match.group(1).lower()
+            log(f"INFO: get_gateway_mac_fallback: MAC via arp -n: {mac}")
+            return mac
+        log(f"WARN: get_gateway_mac_fallback: arp -n gaf geen MAC voor {gateway_ip}: {arp_result.stdout.strip()!r}")
+    except Exception as e:
+        log(f"WARN: get_gateway_mac_fallback: arp -n fout: {e}")
+
+    # Fallback: ip neigh show
+    try:
+        neigh_result = subprocess.run(
+            ["ip", "neigh", "show", gateway_ip],
+            capture_output=True, text=True, timeout=5
+        )
+        mac_match = re.search(r"([0-9a-f]{2}(?::[0-9a-f]{2}){5})", neigh_result.stdout, re.IGNORECASE)
+        if mac_match:
+            mac = mac_match.group(1).lower()
+            log(f"INFO: get_gateway_mac_fallback: MAC via ip neigh: {mac}")
+            return mac
+        log(f"WARN: get_gateway_mac_fallback: ip neigh gaf geen MAC voor {gateway_ip}: {neigh_result.stdout.strip()!r}")
+    except Exception as e:
+        log(f"WARN: get_gateway_mac_fallback: ip neigh fout: {e}")
+
+    return None
 
 
 def try_backend_heartbeat(version_raspberry, software_update):
@@ -867,6 +958,12 @@ def update_pi_status():
         latest_github = get_latest_github_tag()
         version_raspberry = get_running_version()
         target_version = sw_cfg.get("targetVersion", VERSION)
+
+        # Als git fetch faalt, val terug op targetVersion zodat de heartbeat
+        # leesbaar blijft en softwareUpdateRequested: true gewoon verwerkt wordt.
+        if latest_github == "error":
+            latest_github = target_version or VERSION
+            log(f"WARN: GitHub tag fetch mislukt — latestGithub valt terug op targetVersion: {latest_github}")
         deployment_mode = sw_cfg.get("deploymentMode", "firestore")
         software_update_requested = bool(sw_cfg.get("softwareUpdateRequested", False))
 
@@ -913,6 +1010,14 @@ def update_pi_status():
             "updatedAt": nu.isoformat(),
             "updatedBy": f"gridbox-service-{VERSION}"
         }, merge=True)
+
+        gateway_serial = get_gateway_serial()
+        if gateway_serial:
+            box_doc_ref.update({"hardware.gatewaySerial": gateway_serial})
+        else:
+            gateway_mac = get_gateway_mac_fallback()
+            if gateway_mac:
+                box_doc_ref.update({"hardware.gatewayMac": gateway_mac})
 
         refresh_cached_config()
         log(
