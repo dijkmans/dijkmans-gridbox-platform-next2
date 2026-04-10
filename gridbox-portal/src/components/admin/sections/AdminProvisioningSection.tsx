@@ -263,6 +263,16 @@ export default function AdminProvisioningSection({
     bootstrapDownloadItem?.bootstrapToken
   );
 
+  const sdMarked = [
+    "awaiting_first_boot",
+    "claimed",
+    "online",
+    "ready",
+    "failed",
+  ].includes(provisioningItem?.status || "");
+
+  const sdStepProgress = sdMarked ? 100 : hasBootstrapDownloadItem ? 33 : 0;
+
   const scriptFilename = `gridbox-sd-${normalizedBoxId || "gbox-xxx"}.bat`;
 
   // Step nav state helper
@@ -895,9 +905,26 @@ export default function AdminProvisioningSection({
 
                       {/* Substappen */}
                       <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                        <div className="mb-5 text-sm font-semibold text-slate-900">
+                        <div className="mb-4 text-sm font-semibold text-slate-900">
                           Stappen in volgorde
                         </div>
+
+                        {/* Voortgangsbalk */}
+                        <div className="mb-5">
+                          <div className="mb-1.5 flex items-center justify-between">
+                            <span className="text-xs text-slate-500">Voortgang</span>
+                            <span className="text-xs font-semibold text-slate-700">
+                              {sdStepProgress}%
+                            </span>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-slate-100">
+                            <div
+                              className="h-1.5 rounded-full bg-slate-900 transition-all duration-500"
+                              style={{ width: `${sdStepProgress}%` }}
+                            />
+                          </div>
+                        </div>
+
                         <div className="flex flex-col">
                           {(
                             [
@@ -909,6 +936,7 @@ export default function AdminProvisioningSection({
                                     pc. Het script detecteert hem automatisch.
                                   </p>
                                 ),
+                                status: hasBootstrapDownloadItem || sdMarked ? "done" : "idle",
                               },
                               {
                                 title: "Script uitvoeren",
@@ -921,6 +949,7 @@ export default function AdminProvisioningSection({
                                     en klik Ja bij de UAC-melding.
                                   </p>
                                 ),
+                                status: hasBootstrapDownloadItem || sdMarked ? "done" : "idle",
                               },
                               {
                                 title: "Typ JA om te bevestigen",
@@ -934,6 +963,7 @@ export default function AdminProvisioningSection({
                                     om het flashen te starten.
                                   </p>
                                 ),
+                                status: sdMarked ? "done" : hasBootstrapDownloadItem ? "active" : "idle",
                               },
                               {
                                 title: "Wacht tot rpi-imager klaar is (~8 min)",
@@ -944,6 +974,7 @@ export default function AdminProvisioningSection({
                                     Enter.
                                   </p>
                                 ),
+                                status: sdMarked ? "done" : hasBootstrapDownloadItem ? "active" : "idle",
                               },
                               {
                                 title: "SD-kaart herinsteken",
@@ -954,10 +985,10 @@ export default function AdminProvisioningSection({
                                     daarna op Enter.
                                   </p>
                                 ),
+                                status: sdMarked ? "done" : hasBootstrapDownloadItem ? "active" : "idle",
                               },
                               {
-                                title:
-                                  "Bootstrap bestanden worden automatisch geschreven",
+                                title: "Bootstrap bestanden worden automatisch geschreven",
                                 body: (
                                   <p className="mt-1 text-xs text-slate-500">
                                     Het script schrijft{" "}
@@ -971,8 +1002,9 @@ export default function AdminProvisioningSection({
                                     naar de bootpartitie.
                                   </p>
                                 ),
+                                status: sdMarked ? "done" : hasBootstrapDownloadItem ? "active" : "idle",
                               },
-                            ] as { title: string; body: React.ReactNode }[]
+                            ] as { title: string; body: React.ReactNode; status: "idle" | "active" | "done" }[]
                           ).map((substep, si) => (
                             <div
                               key={si}
@@ -980,17 +1012,52 @@ export default function AdminProvisioningSection({
                             >
                               {/* Connector line */}
                               {si < 5 && (
-                                <div className="absolute left-[11px] top-[26px] w-px bg-slate-200"
+                                <div
+                                  className={`absolute left-[11px] top-[26px] w-px transition-colors duration-300 ${
+                                    substep.status === "done"
+                                      ? "bg-emerald-200"
+                                      : "bg-slate-200"
+                                  }`}
                                   style={{ height: "calc(100% - 10px)" }}
                                 />
                               )}
-                              {/* Circle indicator */}
-                              <div className="relative z-10 mt-0.5 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-[10px] font-bold text-slate-400">
-                                {si + 1}
+                              {/* Status indicator */}
+                              <div
+                                className={`relative z-10 mt-0.5 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border text-[10px] font-bold transition-colors duration-300 ${
+                                  substep.status === "done"
+                                    ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                                    : substep.status === "active"
+                                    ? "animate-pulse border-blue-200 bg-blue-50 text-blue-700"
+                                    : "border-slate-200 bg-white text-slate-400"
+                                }`}
+                              >
+                                {substep.status === "done" ? (
+                                  <svg
+                                    className="h-3 w-3"
+                                    viewBox="0 0 12 12"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <polyline points="2,6 5,9 10,3" />
+                                  </svg>
+                                ) : (
+                                  si + 1
+                                )}
                               </div>
                               {/* Content */}
                               <div className="flex-1 min-w-0">
-                                <div className="text-sm font-bold text-slate-700">
+                                <div
+                                  className={`text-sm font-bold ${
+                                    substep.status === "done"
+                                      ? "text-slate-700"
+                                      : substep.status === "active"
+                                      ? "text-slate-900"
+                                      : "text-slate-500"
+                                  }`}
+                                >
                                   {substep.title}
                                 </div>
                                 {substep.body}
