@@ -130,7 +130,7 @@ function PageContentRouter() {
   const [refreshKey, setRefreshKey] = useState(Date.now());
   const [toast, setToast] = useState({ visible: false, msg: "" });
 
-  const [sharesOpen, setSharesOpen] = useState(false);
+  const [sharesOpen, setSharesOpen] = useState(searchParams.get("tab") === "toegang");
 
   const [sharePhone, setSharePhone] = useState("+32");
   const [shareLabel, setShareLabel] = useState("");

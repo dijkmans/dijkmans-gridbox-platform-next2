@@ -510,7 +510,7 @@ export default function Home() {
                           onActionComplete={loadBoxes}
                         />
                         <Link
-                          href={`/portal/box?id=${encodeURIComponent(box.id)}#toegang`}
+                          href={`/portal/box?id=${encodeURIComponent(box.id)}&tab=toegang`}
                           className="rounded-xl border border-slate-200 bg-white px-8 py-3 text-base font-semibold text-slate-700 transition hover:bg-slate-50"
                         >
                           Toegang beheren
