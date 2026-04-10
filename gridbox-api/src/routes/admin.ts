@@ -1747,7 +1747,7 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
     const gcsStorage = new Storage();
     const masterImageObject = gcsStorage
       .bucket("gridbox-platform.firebasestorage.app")
-      .file("master-images/Gridbox_master_v1.0.55.img");
+      .file("master-images/Gridbox_master_v1.0.56.img");
 
     const [signedUrl] = await masterImageObject.getSignedUrl({
       version: "v4",
@@ -1793,7 +1793,7 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       `# Provisioning ID: ${provisioningId}`,
       "",
       "$ImagerPath = \"C:\\Program Files\\Raspberry Pi Ltd\\Imager\\rpi-imager.exe\"",
-      "$ImagePath  = \"$env:USERPROFILE\\Downloads\\Gridbox_master_v1.0.55.img\"",
+      "$ImagePath  = \"$env:USERPROFILE\\Downloads\\Gridbox_master_v1.0.56.img\"",
       `$GcsUrl     = "${signedUrl}"`,
       "",
       "if (-not (Test-Path $ImagerPath)) {",
