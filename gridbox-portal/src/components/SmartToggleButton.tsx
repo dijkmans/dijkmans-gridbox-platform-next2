@@ -58,7 +58,7 @@ export default function SmartToggleButton({
       <button
         onClick={handleToggle}
         disabled={disabled}
-        className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-xl border border-slate-200 bg-white px-8 py-3 text-base font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isProcessing ? "Bezig..." : "Sluiten"}
       </button>
@@ -69,7 +69,7 @@ export default function SmartToggleButton({
     <button
       onClick={handleToggle}
       disabled={disabled}
-      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+      className="rounded-xl bg-slate-900 px-8 py-3 text-base font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {isProcessing ? "Bezig..." : "Openen"}
     </button>
