@@ -1,6 +1,6 @@
 # CURRENT WORKSTATE
 
-## Status — 2026-04-08
+## Status — 2026-04-10
 
 Provisioning flow end-to-end werkend en gevalideerd. Master image bijgewerkt naar v1.0.54c met correcte service-account.json. SD-script verwijst naar v1.0.54c. Bootstrap-init service geïnstalleerd op gbox-005. Verwijder knop toegevoegd aan provisioning overzicht.
 
@@ -50,6 +50,21 @@ Provisioning flow end-to-end werkend en gevalideerd. Master image bijgewerkt naa
 - Importeerbare TypeScript design tokens in `gridbox-portal/src/lib/design-tokens.ts`
 - Bootstrap initialisatie volledig automatisch bij eerste opstart
 - Geen manuele SSH of bestandskopieën meer nodig na flashen
+
+## Fixes 2026-04-10
+
+- Bootstrap marker probleem ontdekt en opgelost — `.bootstrap_initialized` marker werd meegenomen in master image, waardoor bootstrap op nieuwe boxen niet uitvoerde
+- gbox-002 manueel gefixd via `rm .bootstrap_initialized` op de Pi
+- Master image v1.0.56 aangemaakt zonder marker
+- Upload v1.0.56 naar GCS bezig
+- SD-script bijgewerkt naar v1.0.56 (was v1.0.55)
+- Bug gefixd: INSTALLATIE sectie toonde verkeerd boxId — `fetchProvisioningById` synchroniseerde `provisioningBoxId` niet, waardoor oude formulierwaarde zichtbaar bleef
+- Visuele substap-status toegevoegd aan stap 3 (SD-kaart flashen): grijs/blauw pulsend/groen vinkje per substap op basis van `hasBootstrapDownloadItem` en `sdMarked`
+- Voortgangsbalk toegevoegd aan stap 3 (0% / 33% / 100%)
+- Stap 4 (Eerste opstart) herbouwd: substappen met visuele status, live Pi-status indicator (wachten/claimed/online)
+- Stap 5 (Live controle) herbouwd: heartbeat tijd, listener versie, I2C/relais status, "Installatie afronden" alleen actief bij `online` of `ready`
+- `canFinalizeProvisioning` uitgebreid: nu ook actief bij status `ready` (was alleen `online`)
+- `listenerVersion` en `i2cStatus` toegevoegd aan `AdminProvisioningItem` type en normalizer — klaar voor backendkoppeling
 
 ## Fixes 2026-04-08
 
@@ -119,9 +134,9 @@ Provisioning flow end-to-end werkend en gevalideerd. Master image bijgewerkt naa
 9. Remote acties: Pi herstarten, router herstarten via RMS
 10. SIM saldo en dataverbruik via RMS
 11. Operations Center uitbreiden met acties per box
-12. **Master image v1.0.54c upload naar GCS nog bezig** — aangemaakt, nog niet volledig geupload
-13. Installatiecockpit UI verbeteren: substappen en voortgangsindicatie
-14. gbox-006 opnieuw installeren als test met nieuwe flow (v1.0.54c + bootstrap-init)
+12. **Master image v1.0.56 upload naar GCS nog bezig** — aangemaakt zonder bootstrap marker, nog niet volledig geupload
+13. ~~**Installatiecockpit UI verbeteren: substappen en voortgangsindicatie**~~ — afgewerkt: stap 3 voortgangsbalk + substap-status, stap 4 live Pi-status, stap 5 heartbeat/versie/I2C
+14. gbox-002 opnieuw testen met v1.0.56 image na voltooide GCS upload
 15. Camera DHCP beheer via RUT241 static leases
 16. **Automatische `rmsDeviceId` koppeling:** Pi detecteert gateway MAC-adres bij heartbeat → API matcht met RMS device lijst op serienummer (via lokale router API `GET http://{gateway}/api/v1/system/board`) → `rmsDeviceId` automatisch ingevuld in Firestore
 17. **Operations Center:** boxes grafisch groeperen per router/locatie
