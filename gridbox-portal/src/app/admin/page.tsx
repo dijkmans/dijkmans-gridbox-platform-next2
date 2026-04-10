@@ -435,7 +435,9 @@ export default function AdminPage() {
       lastHeartbeatAt:
         typeof source.lastHeartbeatAt === "string" ? source.lastHeartbeatAt : null,
       finalizedAt: typeof source.finalizedAt === "string" ? source.finalizedAt : null,
-      finalizedBy: typeof source.finalizedBy === "string" ? source.finalizedBy : null
+      finalizedBy: typeof source.finalizedBy === "string" ? source.finalizedBy : null,
+      listenerVersion: typeof source.listenerVersion === "string" ? source.listenerVersion : null,
+      i2cStatus: typeof source.i2cStatus === "string" ? source.i2cStatus : null,
     };
   }
 
@@ -851,7 +853,9 @@ export default function AdminPage() {
     ? provisioningStatusLabels[provisioningStatus]
     : provisioningItem?.status || "Nog geen provisioning geladen";
 
-  const canFinalizeProvisioning = provisioningStatus === "online" && !provisioningBusy;
+  const canFinalizeProvisioning =
+    (provisioningStatus === "online" || provisioningStatus === "ready") &&
+    !provisioningBusy;
   const canRefreshProvisioning =
     !provisioningBusy &&
     (provisioningLookupId.trim().length > 0 || Boolean(provisioningItem?.id));

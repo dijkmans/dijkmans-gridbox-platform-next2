@@ -1202,19 +1202,11 @@ export default function AdminProvisioningSection({
                   <h3 className="text-xl font-bold text-slate-900">
                     Eerste opstart
                   </h3>
-                  <ol className="mt-3 max-w-2xl list-decimal list-inside space-y-1 text-sm leading-7 text-slate-600">
-                    <li>Steek de SD-kaart in de Raspberry Pi</li>
-                    <li>Sluit de voeding aan</li>
-                    <li>Wacht 2–3 minuten</li>
-                    <li>
-                      Controleer of de status{" "}
-                      <strong>claimed</strong> of <strong>online</strong> toont
-                    </li>
-                    <li>
-                      Klik <strong>Installatie afronden</strong> als de Pi
-                      online is
-                    </li>
-                  </ol>
+                  <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
+                    Volg de stappen hieronder. De Pi registreert zichzelf
+                    automatisch na opstart. De status wordt automatisch
+                    bijgewerkt.
+                  </p>
                 </div>
 
                 {!stepOneReady && !provisioningExists ? (
@@ -1223,96 +1215,174 @@ export default function AdminProvisioningSection({
                   </div>
                 ) : (
                   <>
-                    {/* Backendstatus */}
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                        <div>
-                          <div className="text-sm font-semibold text-slate-900">
-                            Backendstatus
+                    {/* Substappen + live status naast elkaar */}
+                    <div className="grid gap-5 [grid-template-columns:1fr_256px]">
+
+                      {/* Substappen */}
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                        <div className="mb-5 text-sm font-semibold text-slate-900">
+                          Stappen in volgorde
+                        </div>
+                        <div className="flex flex-col">
+                          {(() => {
+                            const piClaimed = ["claimed", "online", "ready", "failed"].includes(
+                              provisioningItem?.status || ""
+                            );
+                            const piOnline = ["online", "ready"].includes(
+                              provisioningItem?.status || ""
+                            );
+                            const awaitingBoot = provisioningItem?.status === "awaiting_first_boot";
+
+                            const steps: { title: string; body: React.ReactNode; status: "idle" | "active" | "done" }[] = [
+                              {
+                                title: "SD-kaart uit PC halen",
+                                body: (
+                                  <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                                    Verwijder de SD-kaart veilig uit je pc.
+                                  </p>
+                                ),
+                                status: piClaimed ? "done" : awaitingBoot ? "active" : "idle",
+                              },
+                              {
+                                title: "SD-kaart in Raspberry Pi steken",
+                                body: (
+                                  <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                                    Steek de SD-kaart in de sleuf aan de
+                                    onderkant van de Pi.
+                                  </p>
+                                ),
+                                status: piClaimed ? "done" : awaitingBoot ? "active" : "idle",
+                              },
+                              {
+                                title: "Voeding aansluiten op Pi",
+                                body: (
+                                  <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                                    Sluit de USB-C voeding aan. De Pi start
+                                    automatisch op.
+                                  </p>
+                                ),
+                                status: piClaimed ? "done" : awaitingBoot ? "active" : "idle",
+                              },
+                              {
+                                title: "Wacht 2–3 minuten",
+                                body: (
+                                  <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                                    De Pi registreert zichzelf automatisch bij
+                                    het platform. Geen actie nodig.
+                                  </p>
+                                ),
+                                status: piClaimed ? "done" : awaitingBoot ? "active" : "idle",
+                              },
+                              {
+                                title: "Status wordt automatisch bijgewerkt",
+                                body: (
+                                  <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                                    Gebruik de knop <em>Ververs status</em> om
+                                    de registratie te bevestigen.
+                                  </p>
+                                ),
+                                status: piOnline ? "done" : piClaimed ? "active" : awaitingBoot ? "active" : "idle",
+                              },
+                            ];
+
+                            return steps.map((substep, si) => (
+                              <div
+                                key={si}
+                                className="relative flex gap-3.5 pb-5 last:pb-0"
+                              >
+                                {si < steps.length - 1 && (
+                                  <div
+                                    className={`absolute left-[11px] top-[26px] w-px transition-colors duration-300 ${
+                                      substep.status === "done" ? "bg-emerald-200" : "bg-slate-200"
+                                    }`}
+                                    style={{ height: "calc(100% - 10px)" }}
+                                  />
+                                )}
+                                <div
+                                  className={`relative z-10 mt-0.5 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border text-[10px] font-bold transition-colors duration-300 ${
+                                    substep.status === "done"
+                                      ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                                      : substep.status === "active"
+                                      ? "animate-pulse border-blue-200 bg-blue-50 text-blue-700"
+                                      : "border-slate-200 bg-white text-slate-400"
+                                  }`}
+                                >
+                                  {substep.status === "done" ? (
+                                    <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <polyline points="2,6 5,9 10,3" />
+                                    </svg>
+                                  ) : (
+                                    si + 1
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className={`text-sm font-bold ${
+                                    substep.status === "done"
+                                      ? "text-slate-700"
+                                      : substep.status === "active"
+                                      ? "text-slate-900"
+                                      : "text-slate-500"
+                                  }`}>
+                                    {substep.title}
+                                  </div>
+                                  {substep.body}
+                                </div>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      </div>
+
+                      {/* Live status indicator */}
+                      <div className="flex flex-col gap-3">
+                        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                          <div className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                            Pi-status
                           </div>
-                          <p className="mt-1 text-sm leading-6 text-slate-600">
-                            Na SD-kaart als klaar markeren verwacht je hier
-                            eerst <em>awaiting_first_boot</em>. Na opstart{" "}
-                            <em>claimed</em>.
-                          </p>
+                          {(() => {
+                            const s = provisioningItem?.status || "";
+                            const isClaimed = s === "claimed";
+                            const isOnline = s === "online" || s === "ready";
+                            const isWaiting = !isClaimed && !isOnline;
+                            return (
+                              <div className="flex flex-col gap-2">
+                                <div className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold ${
+                                  isWaiting
+                                    ? "bg-slate-50 text-slate-500"
+                                    : "bg-white text-slate-300"
+                                }`}>
+                                  <span className={`h-2 w-2 rounded-full ${isWaiting ? "bg-slate-300 animate-pulse" : "bg-slate-200"}`} />
+                                  Wachten op Pi...
+                                </div>
+                                <div className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold ${
+                                  isClaimed
+                                    ? "bg-blue-50 text-blue-700"
+                                    : "bg-white text-slate-300"
+                                }`}>
+                                  <span className={`h-2 w-2 rounded-full ${isClaimed ? "bg-blue-400 animate-pulse" : "bg-slate-200"}`} />
+                                  claimed
+                                </div>
+                                <div className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold ${
+                                  isOnline
+                                    ? "bg-emerald-50 text-emerald-700"
+                                    : "bg-white text-slate-300"
+                                }`}>
+                                  <span className={`h-2 w-2 rounded-full ${isOnline ? "bg-emerald-400" : "bg-slate-200"}`} />
+                                  online
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
                         <button
                           type="button"
                           onClick={onRefreshProvisioning}
                           disabled={!canRefreshProvisioning}
-                          className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          Ververs status
+                          {provisioningBusy ? "Bezig..." : "Ververs status"}
                         </button>
                       </div>
-                      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-                        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                          Huidige status
-                        </div>
-                        <div className="mt-2 flex items-center gap-2">
-                          <StatusBadge status={provisioningItem?.status} />
-                          <span className="text-sm text-slate-500">
-                            {provisioningStatusLabel}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-                      {/* Checklist */}
-                      <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                        <div className="mb-4 text-sm font-semibold text-slate-900">
-                          Wat nu fysiek moet gebeuren
-                        </div>
-                        <div className="space-y-2.5 text-sm text-slate-700">
-                          {[
-                            `SD-kaart in ${normalizedBoxId || "de box"} gestoken`,
-                            "Netwerk bekabeld aangesloten indien mogelijk",
-                            "Voeding aangesloten — wacht op eerste opstart",
-                            "Pi heeft minimaal 2 minuten de tijd gekregen",
-                          ].map((item) => (
-                            <label
-                              key={item}
-                              className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
-                            >
-                              <input type="checkbox" className="mt-0.5" />
-                              <span>{item}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Afronden */}
-                      <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                        <div className="mb-4 text-sm font-semibold text-slate-900">
-                          Installatie afronden
-                        </div>
-                        <p className="text-sm leading-7 text-slate-600">
-                          Deze stap forceert geen online-status. Echte claim,
-                          heartbeat of online zie je alleen als de backend die
-                          status heeft bevestigd.
-                        </p>
-                        <div className="mt-4">
-                          <button
-                            type="button"
-                            onClick={onFinalizeProvisioning}
-                            disabled={!canFinalizeProvisioning}
-                            className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            Installatie afronden
-                          </button>
-                        </div>
-                        <div className="mt-4 rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-900">
-                          Context: <strong>{normalizedBoxId || "—"}</strong>{" "}
-                          voor <strong>{customerLabel}</strong>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm leading-7 text-blue-900">
-                      Het doel van deze stap is alleen de eerste opstart correct
-                      laten gebeuren. De echte bevestiging komt via de
-                      backendstatus.
                     </div>
                   </>
                 )}
@@ -1327,9 +1397,9 @@ export default function AdminProvisioningSection({
                     Live controle
                   </h3>
                   <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
-                    De installatie is geslaagd als de box hier als{" "}
-                    <strong>online</strong> of <strong>ready</strong> verschijnt.
-                    Je kan nu de box testen via het portal.
+                    Controleer of de box correct online is gekomen. Rond de
+                    installatie af zodra de status{" "}
+                    <strong>online</strong> of <strong>ready</strong> toont.
                   </p>
                 </div>
 
@@ -1339,93 +1409,126 @@ export default function AdminProvisioningSection({
                   </div>
                 ) : (
                   <>
-                    {/* Backendstatus */}
+                    {/* Status + ververs */}
                     <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                        <div>
-                          <div className="text-sm font-semibold text-slate-900">
-                            Backendstatus
-                          </div>
-                          <p className="mt-1 text-sm leading-6 text-slate-600">
-                            Hier mag je alleen werken met backend- of
-                            devicebevestigde status.
-                          </p>
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="text-sm font-semibold text-slate-900">
+                          Backendstatus
                         </div>
                         <button
                           type="button"
                           onClick={onRefreshProvisioning}
                           disabled={!canRefreshProvisioning}
-                          className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          Ververs status
+                          {provisioningBusy ? "Bezig..." : "Ververs status"}
                         </button>
                       </div>
-                      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-                        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                          Huidige status
-                        </div>
-                        <div className="mt-2 flex items-center gap-2">
-                          <StatusBadge status={provisioningItem?.status} />
-                          <span className="text-sm text-slate-500">
-                            {provisioningStatusLabel}
-                          </span>
-                        </div>
+                      <div className="mt-4 flex items-center gap-2">
+                        <StatusBadge status={provisioningItem?.status} />
+                        <span className="text-sm text-slate-500">
+                          {provisioningStatusLabel}
+                        </span>
                       </div>
                     </div>
 
-                    <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-                      {/* Checklist */}
+                    {/* Device details grid */}
+                    <div className="grid gap-4 lg:grid-cols-3">
+                      {/* Laatste heartbeat */}
                       <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                        <div className="mb-4 text-sm font-semibold text-slate-900">
-                          Wat nu controleren
+                        <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                          Laatste heartbeat
                         </div>
-                        <div className="space-y-2.5 text-sm text-slate-700">
-                          {[
-                            `Box ${normalizedBoxId || "—"} heeft stroom`,
-                            "Netwerk of bekabeling correct aangesloten",
-                            "Geen signalen van verkeerde kaart of box",
-                            `Opstart voor ${customerLabel} op ${trimmedSiteId || "—"}`,
-                          ].map((item) => (
-                            <label
-                              key={item}
-                              className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
-                            >
-                              <input type="checkbox" className="mt-0.5" />
-                              <span>{item}</span>
-                            </label>
-                          ))}
+                        <div className="mt-2 text-sm font-semibold text-slate-900">
+                          {provisioningItem?.lastHeartbeatAt
+                            ? new Date(provisioningItem.lastHeartbeatAt).toLocaleString("nl-NL", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                second: "2-digit",
+                              })
+                            : "—"}
                         </div>
+                        {provisioningItem?.lastHeartbeatAt && (
+                          <div className="mt-1 text-xs text-slate-500">
+                            {(() => {
+                              const diff = Date.now() - new Date(provisioningItem.lastHeartbeatAt!).getTime();
+                              const sec = Math.floor(diff / 1000);
+                              if (sec < 60) return `${sec}s geleden`;
+                              if (sec < 3600) return `${Math.floor(sec / 60)}m geleden`;
+                              return `${Math.floor(sec / 3600)}u geleden`;
+                            })()}
+                          </div>
+                        )}
                       </div>
 
-                      {/* Backend bevestiging */}
+                      {/* Listener versie */}
                       <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                        <div className="mb-4 text-sm font-semibold text-slate-900">
-                          Wat backend moet bevestigen
+                        <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                          Listener versie
                         </div>
-                        <div className="space-y-2.5 text-sm leading-7 text-slate-600">
-                          {[
-                            "Pi heeft zichzelf geclaimd met de juiste boxcontext",
-                            "Eerste heartbeat of online-melding is binnen",
-                            "Backend herkent deze installatie",
-                          ].map((item) => (
-                            <div
-                              key={item}
-                              className="rounded-xl bg-slate-50 px-4 py-3"
-                            >
-                              {item}
-                            </div>
-                          ))}
+                        <div className="mt-2 font-mono text-sm font-semibold text-slate-900">
+                          {provisioningItem?.listenerVersion || "—"}
                         </div>
-                        <div className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                          Zonder backendbevestiging blijft de status
-                          voorlopig.
+                        {!provisioningItem?.listenerVersion && (
+                          <div className="mt-1 text-xs text-slate-400">
+                            Nog niet gerapporteerd
+                          </div>
+                        )}
+                      </div>
+
+                      {/* I2C / relais */}
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                        <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                          Relais (I2C)
                         </div>
+                        <div className={`mt-2 text-sm font-semibold ${
+                          provisioningItem?.i2cStatus === "ok"
+                            ? "text-emerald-700"
+                            : provisioningItem?.i2cStatus
+                            ? "text-amber-700"
+                            : "text-slate-900"
+                        }`}>
+                          {provisioningItem?.i2cStatus || "—"}
+                        </div>
+                        {!provisioningItem?.i2cStatus && (
+                          <div className="mt-1 text-xs text-slate-400">
+                            Nog niet gerapporteerd
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm leading-7 text-blue-900">
-                      Pas wanneer backend en device dit bevestigen, mag deze
-                      installatie als klaar getoond worden.
+                    {/* Installatie afronden */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900">
+                            Installatie afronden
+                          </div>
+                          <p className="mt-1 text-sm leading-6 text-slate-600">
+                            Alleen beschikbaar als de backend{" "}
+                            <strong>online</strong> of{" "}
+                            <strong>ready</strong> bevestigt.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={onFinalizeProvisioning}
+                          disabled={!canFinalizeProvisioning}
+                          className="shrink-0 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Installatie afronden
+                        </button>
+                      </div>
+                      {!canFinalizeProvisioning && (
+                        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                          Wacht op backendbevestiging. Huidige status:{" "}
+                          <strong>{provisioningItem?.status || "onbekend"}</strong>.
+                        </div>
+                      )}
                     </div>
                   </>
                 )}
