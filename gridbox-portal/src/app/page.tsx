@@ -44,42 +44,27 @@ type SiteGroup = {
 };
 
 function getStatusLabel(status: PortalBox["status"]) {
-  if (status === "online") return "ONLINE";
-  if (status === "offline") return "OFFLINE";
-  if (status === "warning") return "WAARSCHUWING";
-  return "ONBEKEND";
+  if (status === "online") return "online";
+  if (status === "offline") return "offline";
+  if (status === "warning") return "waarschuwing";
+  return "onbekend";
 }
 
-function getStatusColors(status: PortalBox["status"]) {
-  if (status === "online") {
-    return {
-      background: "#dcfce7",
-      color: "#166534",
-      border: "#86efac"
-    };
-  }
+function getStatusBadgeClass(status: PortalBox["status"]) {
+  if (status === "online") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "warning") return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-slate-200 bg-slate-50 text-slate-400";
+}
 
-  if (status === "offline") {
-    return {
-      background: "#fee2e2",
-      color: "#991b1b",
-      border: "#fca5a5"
-    };
-  }
+function getStatusDotClass(status: PortalBox["status"]) {
+  if (status === "online") return "bg-emerald-500";
+  if (status === "warning") return "bg-amber-400";
+  return "bg-slate-300";
+}
 
-  if (status === "warning") {
-    return {
-      background: "#fef3c7",
-      color: "#92400e",
-      border: "#fcd34d"
-    };
-  }
-
-  return {
-    background: "#e5e7eb",
-    color: "#374151",
-    border: "#d1d5db"
-  };
+function formatBoxId(id: string) {
+  if (!id) return id;
+  return id.charAt(0).toUpperCase() + id.slice(1);
 }
 
 function formatTimeAgo(value?: string) {
@@ -366,185 +351,244 @@ export default function Home() {
   }
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background: "#f5f7fb",
-        color: "#111827",
-        fontFamily: "Arial, sans-serif",
-        padding: "22px"
-      }}
-    >
-      <div style={{ maxWidth: "1320px", margin: "0 auto" }}>
-        <section
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) 220px",
-            gap: "18px",
-            alignItems: "stretch",
-            marginBottom: "18px"
-          }}
-        >
-          {/* Header Dashboard Block */}
-          <div style={{ background: "#ffffff", borderRadius: "24px", padding: "10px 14px", boxShadow: "0 14px 40px rgba(15, 23, 42, 0.08)", border: "1px solid #e5e7eb" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-              {gridboxLogoUrl ? (
-                <img src={gridboxLogoUrl} alt="Gridbox" style={{ width: "96px", height: "42px", objectFit: "contain", borderRadius: "14px", background: "#ffffff" }} />
-              ) : (
-                <div style={{ width: "88px", height: "42px", borderRadius: "16px", background: "#0f172a", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: "14px" }}>
-                  GRIDBOX
-                </div>
-              )}
-              <div>
-                <div style={{ fontSize: "22px", fontWeight: 900, letterSpacing: "0.03em", lineHeight: 1.1 }}>GRIDBOX DASHBOARD</div>
-                <div style={{ marginTop: "4px", color: "#059669", fontWeight: 800, fontSize: "14px" }}>LIVE AUTO-SYNC ACTIEF</div>
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+
+      {/* ─── Header ─────────────────────────────────────────── */}
+      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3.5">
+
+          {/* Logo */}
+          <div className="flex items-center gap-3">
+            {gridboxLogoUrl ? (
+              <img src={gridboxLogoUrl} alt="Gridbox" className="h-8 w-auto object-contain" />
+            ) : (
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-900">
+                <svg className="h-4 w-4 text-white" viewBox="0 0 16 16" fill="currentColor">
+                  <rect x="1" y="1" width="6" height="6" rx="1.5"/>
+                  <rect x="9" y="1" width="6" height="6" rx="1.5"/>
+                  <rect x="1" y="9" width="6" height="6" rx="1.5"/>
+                  <rect x="9" y="9" width="6" height="6" rx="1.5"/>
+                </svg>
               </div>
+            )}
+            <div className="leading-tight">
+              <div className="text-sm font-bold text-slate-900">Gridbox</div>
+              <div className="text-[11px] text-slate-400">Klantportaal</div>
             </div>
           </div>
 
-          {/* User Block */}
-          <div style={{ background: "#ffffff", borderRadius: "24px", padding: "14px 16px", boxShadow: "0 14px 40px rgba(15, 23, 42, 0.08)", border: "1px solid #e5e7eb" }}>
-            <div style={{ fontSize: "11px", fontWeight: 800, letterSpacing: "0.12em", color: "#6b7280", marginBottom: "12px" }}>AANGEMELD ALS</div>
-            {user ? (
-              <>
-                <div style={{ fontSize: "17px", fontWeight: 800, lineHeight: 1.25 }}>{user.displayName || "Onbekende gebruiker"}</div>
-                <div style={{ color: "#4b5563", marginTop: "6px", marginBottom: "8px", wordBreak: "break-word" }}>{user.email || "Geen e-mail"}</div>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
-                  {customerLogoUrl ? (
-                    <img src={customerLogoUrl} alt="Klantlogo" style={{ width: "108px", height: "42px", objectFit: "contain", borderRadius: "14px" }} />
-                  ) : (
-                    <div style={{ minWidth: "68px", height: "42px", borderRadius: "14px", background: "#eef2ff", color: "#312e81", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800 }}>KLANT</div>
-                  )}
-                  <button onClick={handleLogout} style={{ border: "none", borderRadius: "14px", background: "#0f172a", color: "#ffffff", padding: "11px 15px", fontWeight: 700, cursor: "pointer" }}>Afmelden</button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div style={{ fontSize: "17px", fontWeight: 700, marginBottom: "4px" }}>Niet aangemeld</div>
-                <div style={{ color: "#4b5563", marginBottom: "16px" }}>Meld je aan om je Gridboxen te bekijken.</div>
-                <button onClick={handleLogin} style={{ border: "none", borderRadius: "14px", background: "#0f172a", color: "#ffffff", padding: "11px 15px", fontWeight: 700, cursor: "pointer" }}>Aanmelden met Google</button>
-              </>
-            )}
+          {/* User */}
+          {user ? (
+            <div className="flex items-center gap-3">
+              <div className="hidden text-right sm:block">
+                <div className="text-sm font-semibold text-slate-900">{user.displayName || "Gebruiker"}</div>
+                <div className="text-xs text-slate-400">{user.email || ""}</div>
+              </div>
+              {customerLogoUrl && (
+                <img src={customerLogoUrl} alt="Klantlogo" className="hidden h-7 w-auto object-contain sm:block" />
+              )}
+              <button
+                onClick={handleLogout}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+              >
+                Afmelden
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={handleLogin}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              Aanmelden met Google
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* ─── Main ───────────────────────────────────────────── */}
+      <main className="mx-auto max-w-5xl px-6 py-8">
+
+        {/* Site filter */}
+        <div className="mb-7 flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Site</span>
+          <button
+            onClick={() => setSelectedSiteId("all")}
+            className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
+              selectedSiteId === "all"
+                ? "border-slate-900 bg-slate-900 text-white"
+                : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            Alle sites
+          </button>
+          {filterOptions.map((option) => (
+            <button
+              key={option.siteId}
+              onClick={() => setSelectedSiteId(option.siteId)}
+              className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
+                selectedSiteId === option.siteId
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {option.siteName}
+            </button>
+          ))}
+          <span className="ml-auto text-xs text-slate-400">
+            {visibleBoxCount} van {totalBoxCount} boxen
+          </span>
+        </div>
+
+        {/* Loading / message */}
+        {loading && boxes.length === 0 && (
+          <div className="mb-6 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-500">
+            Boxen laden...
           </div>
-        </section>
-
-        {/* View Filter */}
-        <section style={{ background: "#ffffff", borderRadius: "24px", padding: "16px 20px", boxShadow: "0 14px 40px rgba(15, 23, 42, 0.08)", border: "1px solid #e5e7eb", marginBottom: "18px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-            <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.1em", color: "#6b7280", marginRight: "2px" }}>VIEW-FILTER</div>
-            <button onClick={() => setSelectedSiteId("all")} style={{ border: selectedSiteId === "all" ? "1px solid #0f172a" : "1px solid #d1d5db", borderRadius: "999px", background: selectedSiteId === "all" ? "#0f172a" : "#ffffff", color: selectedSiteId === "all" ? "#ffffff" : "#111827", padding: "9px 15px", fontWeight: 700, cursor: "pointer" }}>Alle sites</button>
-            {filterOptions.map((option) => (
-              <button key={option.siteId} onClick={() => setSelectedSiteId(option.siteId)} style={{ border: selectedSiteId === option.siteId ? "1px solid #0f172a" : "1px solid #d1d5db", borderRadius: "999px", background: selectedSiteId === option.siteId ? "#0f172a" : "#ffffff", color: selectedSiteId === option.siteId ? "#ffffff" : "#111827", padding: "9px 15px", fontWeight: 700, cursor: "pointer" }}>{option.siteName}</button>
-            ))}
-            <div style={{ marginLeft: "auto", color: "#4b5563", fontWeight: 700 }}>{visibleBoxCount} van {totalBoxCount} Gridboxen zichtbaar</div>
+        )}
+        {message && !loading && (
+          <div className="mb-6 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-semibold text-slate-700">
+            {message}
           </div>
-        </section>
+        )}
 
-        {loading && boxes.length === 0 && <div style={{ background: "#ffffff", borderRadius: "20px", padding: "14px 16px", border: "1px solid #e5e7eb", marginBottom: "18px" }}>Boxen laden...</div>}
-        {message && !loading && <div style={{ background: "#ffffff", borderRadius: "20px", padding: "14px 16px", border: "1px solid #e5e7eb", marginBottom: "18px", color: "#374151", fontWeight: 600 }}>{message}</div>}
-
+        {/* Site groups */}
         {visibleGroups.map((group) => (
-          <section key={group.siteId} style={{ marginBottom: "26px" }}>
-            <h2 style={{ fontSize: "18px", fontWeight: 900, letterSpacing: "0.04em", marginBottom: "14px" }}>{group.siteName.toUpperCase()}</h2>
+          <section key={group.siteId} className="mb-8">
 
-            {/* DE ECHTE HORIZONTALE LAYOUT VAN JOUW MOCKUP */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "18px" }}>
-              {group.boxes.map((box) => {
-                const statusColors = getStatusColors(box.status);
+            {/* Site label */}
+            <div className="mb-3 flex items-center gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Site</span>
+              <span className="text-sm font-semibold text-slate-700">{group.siteName}</span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-400">
+                {group.boxes.length} {group.boxes.length === 1 ? "box" : "boxen"}
+              </span>
+            </div>
 
-                return (
-                  <article
-                    key={box.id}
-                    style={{
-                      width: "100%",
-                      background: "#ffffff",
-                      borderRadius: "16px",
-                      padding: "24px",
-                      border: "1px solid #d1d5db",
-                      boxShadow: "0 4px 12px rgba(15, 23, 42, 0.05)",
-                      display: "flex",
-                      flexWrap: "wrap",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "24px"
-                    }}
-                  >
-                    {/* LINKER KANT: Info, Status & Knoppen */}
-                    <div style={{ flex: "1 1 300px", display: "flex", flexDirection: "column", gap: "16px" }}>
-                      
-                      {/* Titel & Status naast elkaar */}
-                      <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
-                        <h3 style={{ fontSize: "22px", fontWeight: 900, margin: 0, color: "#111827" }}>
-                          {box.id.toUpperCase()}
-                        </h3>
-                        <div style={{ border: `1px solid ${statusColors.border}`, background: statusColors.background, color: statusColors.color, borderRadius: "999px", padding: "6px 12px", fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" }}>
+            <div className="flex flex-col gap-3">
+              {group.boxes.map((box) => (
+                <article
+                  key={box.id}
+                  className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_1px_3px_0_rgb(0,0,0,0.04)]"
+                >
+                  <div className="flex flex-wrap items-start gap-5 px-6 py-5">
+
+                    {/* Left: identity + actions */}
+                    <div className="flex min-w-0 flex-1 flex-col gap-1">
+
+                      {/* Name + status */}
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <span className="text-base font-bold text-slate-900">
+                          {formatBoxId(box.id)}
+                        </span>
+                        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${getStatusBadgeClass(box.status)}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${getStatusDotClass(box.status)}`} />
                           {getStatusLabel(box.status)}
-                        </div>
+                        </span>
+                        {box.boxIsOpen && (
+                          <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                            open
+                          </span>
+                        )}
                       </div>
 
-                      {/* Subtitel & Info */}
-                      <div>
-                        <div style={{ fontSize: "15px", fontWeight: 700, color: "#374151" }}>
-                          {box.displayName}
-                        </div>
-                        <div style={{ fontSize: "14px", fontWeight: 600, color: "#4b5563", marginTop: "4px" }}>
-                          Laatste actie: {formatLastAction(box)}
-                        </div>
+                      {/* Display name */}
+                      <div className="text-sm text-slate-500">{box.displayName}</div>
+
+                      {/* Last action */}
+                      <div className="mt-0.5 text-xs text-slate-400">
+                        {formatLastAction(box)}
                       </div>
 
-                      {/* Knoppen op een rij */}
-                      <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginTop: "4px" }}>
-                        <div style={{ minWidth: "160px" }}>
-                          <SmartToggleButton boxId={box.id} boxName={box.displayName} isOpen={box.boxIsOpen} canInteract={box.canOpen} onNotify={(msg) => setToast(msg)} onActionComplete={loadBoxes} />
-                        </div>
-                        <Link href={`/portal/box?id=${encodeURIComponent(box.id)}`} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: "12px", border: "1px solid #d1d5db", background: "#ffffff", color: "#111827", padding: "0 20px", height: "46px", fontWeight: 800, fontSize: "13px", textDecoration: "none" }}>
-                          MEER / COCKPIT
+                      {/* Buttons */}
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <SmartToggleButton
+                          boxId={box.id}
+                          boxName={box.displayName}
+                          isOpen={box.boxIsOpen}
+                          canInteract={box.canOpen}
+                          onNotify={(msg) => setToast(msg)}
+                          onActionComplete={loadBoxes}
+                        />
+                        <Link
+                          href={`/portal/box?id=${encodeURIComponent(box.id)}#toegang`}
+                          className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                        >
+                          Toegang beheren
+                        </Link>
+                        <Link
+                          href={`/portal/box?id=${encodeURIComponent(box.id)}`}
+                          className="px-2 py-2 text-sm font-semibold text-slate-400 transition hover:text-slate-700"
+                        >
+                          Details →
                         </Link>
                       </div>
                     </div>
 
-                    {/* RECHTER KANT: GSM Nummers (Grijze Box) */}
-                    <div style={{ flex: "0 0 auto", minWidth: "300px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "20px" }}>
-                      <div style={{ fontSize: "11px", fontWeight: 800, color: "#6b7280", letterSpacing: "0.05em", marginBottom: "16px" }}>
-                        GEDEELDE GSM-NUMMERS
-                      </div>
-
-                      {/* Pillen per nummer (als ze in de data zitten) */}
-                      {box.shareSummary && box.shareSummary.phoneNumbers && box.shareSummary.phoneNumbers.length > 0 ? (
-                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "16px" }}>
-                          {box.shareSummary.phoneNumbers.map((num) => (
-                            <div key={num} style={{ background: "#ffffff", border: "1px solid #bfdbfe", borderRadius: "999px", padding: "6px 14px", fontSize: "13px", fontWeight: 700, color: "#1e40af", display: "flex", alignItems: "center", gap: "6px" }}>
-                              <span style={{ fontSize: "14px" }}>{"\u{1F4F1}"}</span> {num}
-                            </div>
-                          ))}
+                    {/* Right: GSM numbers */}
+                    {box.shareSummary && (
+                      <div className="w-64 shrink-0 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                          Gedeelde toegang
                         </div>
-                      ) : null}
-
-                      <div style={{ fontSize: "14px", fontWeight: 700, color: "#374151" }}>
-                        {box.shareSummary?.totalActive || 0} nummers gekoppeld
+                        {box.shareSummary.phoneNumbers && box.shareSummary.phoneNumbers.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {box.shareSummary.phoneNumbers.map((num) => (
+                              <span
+                                key={num}
+                                className="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-white px-3 py-1 text-xs font-semibold text-blue-700"
+                              >
+                                <svg className="h-3 w-3 shrink-0" viewBox="0 0 12 12" fill="currentColor">
+                                  <path d="M8 1H4a1 1 0 00-1 1v8a1 1 0 001 1h4a1 1 0 001-1V2a1 1 0 00-1-1zM6 10.25a.75.75 0 110-1.5.75.75 0 010 1.5z"/>
+                                </svg>
+                                {num}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div className="mt-3 text-xs text-slate-400">
+                          {box.shareSummary.totalActive || 0} {(box.shareSummary.totalActive || 0) === 1 ? "nummer" : "nummers"} gekoppeld
+                        </div>
                       </div>
-                    </div>
+                    )}
 
-                  </article>
-                );
-              })}
+                  </div>
+                </article>
+              ))}
             </div>
           </section>
         ))}
 
-        <footer style={{ marginTop: "12px", padding: "12px 0 6px 0", textAlign: "center", color: "#6b7280", fontWeight: 700 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px", flexWrap: "wrap" }}>
-            {footerLogoUrl && <img src={footerLogoUrl} alt="Gridbox footer" style={{ height: "22px", width: "auto", objectFit: "contain" }} />}
-            <span>{footerText}</span>
-          </div>
-        </footer>
-      </div>
+      </main>
 
+      {/* ─── Footer ─────────────────────────────────────────── */}
+      <footer className="border-t border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-2">
+            {footerLogoUrl ? (
+              <img src={footerLogoUrl} alt="Gridbox" className="h-5 w-auto object-contain" />
+            ) : (
+              <div className="flex h-5 w-5 items-center justify-center rounded-md bg-slate-900">
+                <svg className="h-3 w-3 text-white" viewBox="0 0 16 16" fill="currentColor">
+                  <rect x="1" y="1" width="6" height="6" rx="1.5"/>
+                  <rect x="9" y="1" width="6" height="6" rx="1.5"/>
+                  <rect x="1" y="9" width="6" height="6" rx="1.5"/>
+                  <rect x="9" y="9" width="6" height="6" rx="1.5"/>
+                </svg>
+              </div>
+            )}
+            <span className="text-xs text-slate-400">{footerText}</span>
+          </div>
+          <span className="text-xs text-slate-300">© 2026</span>
+        </div>
+      </footer>
+
+      {/* Toast */}
       {toast && (
-        <div style={{ position: "fixed", right: "24px", bottom: "24px", background: "#111827", color: "#ffffff", padding: "14px 18px", borderRadius: "14px", boxShadow: "0 16px 40px rgba(17, 24, 39, 0.28)", fontWeight: 700, zIndex: 1000 }}>
+        <div className="fixed bottom-6 right-6 z-50 rounded-2xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-semibold text-slate-900 shadow-[0_8px_30px_rgb(0,0,0,0.12)]">
           {toast}
         </div>
       )}
-    </main>
+
+    </div>
   );
 }
