@@ -51,6 +51,22 @@ Provisioning flow end-to-end werkend en gevalideerd. Master image bijgewerkt naa
 - Bootstrap initialisatie volledig automatisch bij eerste opstart
 - Geen manuele SSH of bestandskopieën meer nodig na flashen
 
+## Fixes 2026-04-10 (sessie 2)
+
+- Camera DHCP beheer volledig gebouwd: GET/POST/DELETE /operations/boxes/:boxId/cameras
+- IP automatisch voorgesteld uit range 192.168.10.100–249
+- snapshotUrl automatisch berekend en weggeschreven naar hardware.camera.snapshotUrl op hoofddocument bij toevoegen én verwijderen camera
+- Camera sectie toegevoegd aan Operations Center per box-kaart met lazy loading, inline formulier en verwijderknop
+- 4 camera bugs gefixed in Operations Center (hang op loading, sectie klapte dicht, geen logging, auth header ontbrak)
+- customerBoxAccess automatisch aangemaakt bij finalize-provisioning — nooit meer manueel
+- SD-script slotmelding gefixed — leest boxId nu uit box_bootstrap.json variabele in plaats van hardcoded waarde
+- Automatische rmsDeviceId koppeling via gateway serienummer (Teltonika API) met MAC-adres fallback (arp/ip neigh)
+- latestGithub "error" blokkeert software updates niet meer — fallback naar targetVersion
+- Software versie badge toegevoegd aan Operations Center — groen als op target, oranje met pijl als update beschikbaar
+- gbox-003 succesvol geïnstalleerd met v1.0.56, bootstrap marker bug bevestigd opgelost
+- gbox-003 customerBoxAccess manueel toegevoegd voor Powergrid bv (wordt voortaan automatisch gedaan)
+- v1.0.57 getriggerd op gbox-003, gbox-005, gbox-006
+
 ## Fixes 2026-04-10
 
 - Bootstrap marker probleem ontdekt en opgelost — `.bootstrap_initialized` marker werd meegenomen in master image, waardoor bootstrap op nieuwe boxen niet uitvoerde
