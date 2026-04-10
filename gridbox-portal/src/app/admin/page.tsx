@@ -480,6 +480,9 @@ export default function AdminPage() {
 
       setProvisioningItem(nextProvisioningItem);
       setProvisioningLookupId(nextProvisioningItem.id);
+      if (nextProvisioningItem.boxId) {
+        setProvisioningBoxId(nextProvisioningItem.boxId);
+      }
       return nextProvisioningItem;
     } catch (error) {
       setErrorMessage("Netwerkfout bij ophalen provisioning");
