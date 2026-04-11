@@ -27,6 +27,10 @@ gridbox-api/dist/
 
 box_config.json
 src/box_config.json
+runtime_config.json
+src/runtime_config.json
+src/test_connection.py
+src/__pycache__/
 
 .env
 .env.local

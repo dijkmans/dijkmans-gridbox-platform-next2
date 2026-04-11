@@ -192,13 +192,16 @@ router.get("/operations/boxes", async (req, res) => {
         (box["status"] === "online" ? (box["updatedAt"] ?? null) : null);
 
       const str = (v: unknown) => (typeof v === "string" && v ? v : null);
+      const bool = (v: unknown) => typeof v === "boolean" ? v : null;
 
       return {
         ...box,
         lastHeartbeatAt,
-        versionRaspberry: str(software?.["versionRaspberry"]),
-        targetVersion:    str(software?.["targetVersion"]),
-        latestGithub:     str(software?.["latestGithub"]),
+        versionRaspberry:        str(software?.["versionRaspberry"]),
+        targetVersion:           str(software?.["targetVersion"]),
+        latestGithub:            str(software?.["latestGithub"]),
+        softwareUpdateRequested: bool(software?.["softwareUpdateRequested"]),
+        updateStatus:            str(software?.["updateStatus"]),
         rms: rmsData ? extractRmsSummary(rmsData) : null
       };
     });
@@ -620,6 +623,43 @@ router.post("/operations/software/trigger-all", async (req, res) => {
     if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
     console.error("FOUT in POST /operations/software/trigger-all", error);
     return res.status(500).json({ error: "TRIGGER_ALL_FAILED", message: "Kon bulk update niet triggeren" });
+  }
+});
+
+router.post("/operations/boxes/:boxId/reset-and-update", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const boxId = req.params.boxId?.trim();
+    if (!boxId) {
+      return res.status(400).json({ error: "INVALID_BOX_ID", message: "boxId is verplicht" });
+    }
+
+    const db = getFirestore();
+    const boxDoc = await db.collection("boxes").doc(boxId).get();
+    if (!boxDoc.exists) {
+      return res.status(404).json({ error: "BOX_NOT_FOUND", message: "Box bestaat niet" });
+    }
+
+    const now = new Date().toISOString();
+    const commandRef = await db
+      .collection("boxes").doc(boxId)
+      .collection("commands")
+      .add({
+        command: "RESET_AND_UPDATE",
+        status: "pending",
+        source: "operations",
+        createdAt: now,
+      });
+
+    console.log(`[reset-and-update] ${boxId} commando aangemaakt: ${commandRef.id}`);
+    return res.json({ boxId, commandId: commandRef.id, command: "RESET_AND_UPDATE" });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
+    console.error("FOUT in POST /operations/boxes/:boxId/reset-and-update", error);
+    return res.status(500).json({ error: "RESET_AND_UPDATE_FAILED", message: "Kon commando niet aanmaken" });
   }
 });
 

@@ -3,6 +3,7 @@ import os
 import platform
 import re
 import shlex
+import shutil
 import subprocess
 import threading
 import time
@@ -35,7 +36,7 @@ from db_manager import get_db
 # - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.59-hotfix"
+VERSION = "v1.0.60"
 KEY_PATH = "service-account.json"
 BOOTSTRAP_PATH = "box_bootstrap.json"
 RUNTIME_CONFIG_PATH = "runtime_config.json"
@@ -45,6 +46,7 @@ TIMEZONE = ZoneInfo("Europe/Brussels")
 HEARTBEAT_INTERVAL_SECONDS = 300
 SOFTWARE_POLL_INTERVAL_SECONDS = 15
 GITHUB_TAG_CACHE_TTL_SECONDS = 900
+GITHUB_TAG_ERROR_RETRY_SECONDS = 60  # kortere TTL bij fout
 
 # I2C & GPIO Config
 I2C_BUS = 1
@@ -349,7 +351,8 @@ def get_latest_github_tag(force=False):
     global github_tag_cache
 
     now_ts = time.time()
-    if not force and (now_ts - github_tag_cache["fetched_at"] < GITHUB_TAG_CACHE_TTL_SECONDS):
+    ttl = GITHUB_TAG_ERROR_RETRY_SECONDS if github_tag_cache["value"] == "error" else GITHUB_TAG_CACHE_TTL_SECONDS
+    if not force and (now_ts - github_tag_cache["fetched_at"] < ttl):
         return github_tag_cache["value"]
 
     pattern = get_github_tag_pattern()
@@ -403,7 +406,7 @@ def ensure_target_tag_exists(tag_name):
     return result.returncode == 0
 
 def ensure_repo_clean_for_checkout():
-    # Controleer eerst of er lokale wijzigingen zijn
+    # Stap 1: check dirty tracked files
     status_result = run_cmd(
         ["git", "status", "--porcelain", "--untracked-files=no"],
         cwd=REPO_ROOT
@@ -413,8 +416,7 @@ def ensure_repo_clean_for_checkout():
 
     dirty_lines = [line.strip() for line in (status_result.stdout or "").splitlines() if line.strip()]
     if dirty_lines:
-        # Log wat er weggegooid gaat worden vóór de reset
-        log(f"INFO: ensure_repo_clean_for_checkout: {len(dirty_lines)} gewijzigde bestanden gevonden — voer git reset --hard uit:")
+        log(f"INFO: {len(dirty_lines)} gewijzigde bestanden gevonden - voer git reset --hard uit:")
         for line in dirty_lines:
             log(f"  {line}")
 
@@ -424,19 +426,37 @@ def ensure_repo_clean_for_checkout():
                 f"git reset --hard mislukt (exit {reset_result.returncode}): "
                 f"{(reset_result.stderr or '').strip()}"
             )
-        log("INFO: ensure_repo_clean_for_checkout: git reset --hard geslaagd — repo is nu schoon")
+        log("INFO: git reset --hard geslaagd")
 
-        # Verifieer dat de reset volledig is
-        verify = run_cmd(
-            ["git", "status", "--porcelain", "--untracked-files=no"],
-            cwd=REPO_ROOT
+    # Stap 2: verwijder __pycache__ directories zodat Python bytecode de repo niet dirty maakt
+    # Dit is nodig omdat bij oude git-commits .pyc bestanden getrackt waren (nu verwijderd uit git)
+    for dirpath, dirnames, _ in os.walk(REPO_ROOT):
+        if "__pycache__" in dirnames:
+            cache_path = os.path.join(dirpath, "__pycache__")
+            shutil.rmtree(cache_path, ignore_errors=True)
+            dirnames.remove("__pycache__")
+            log(f"INFO: {cache_path} verwijderd")
+
+    # Stap 3: verifieer dat repo schoon is
+    # Verwijderde getrackte .pyc bestanden (D-status) zijn acceptabel — git checkout verwijdert ze sowieso
+    verify = run_cmd(
+        ["git", "status", "--porcelain", "--untracked-files=no"],
+        cwd=REPO_ROOT
+    )
+    remaining = [l.strip() for l in (verify.stdout or "").splitlines() if l.strip()]
+
+    non_pyc_dirty = [
+        l for l in remaining
+        if not (l.startswith("D ") and ("__pycache__" in l or l.endswith(".pyc")))
+    ]
+
+    if non_pyc_dirty:
+        raise RuntimeError(
+            f"Repo is niet schoon voor checkout: {'; '.join(non_pyc_dirty[:5])}"
         )
-        remaining = [l.strip() for l in (verify.stdout or "").splitlines() if l.strip()]
-        if remaining:
-            raise RuntimeError(
-                f"Repo is nog steeds niet schoon na git reset --hard: {'; '.join(remaining[:3])}"
-            )
 
+    if remaining:
+        log(f"INFO: {len(remaining)} verwijderde pyc-bestanden genegeerd (checkout ruimt ze op)")
 def checkout_target_version(tag_name):
     run_cmd_checked(["git", "checkout", "--detach", tag_name], cwd=REPO_ROOT, timeout=30)
 
@@ -818,7 +838,7 @@ def get_gateway_ip():
         return None
     try:
         result = subprocess.run(
-            ["ip", "route", "show", "default"],
+            ["ip", "-4", "route", "show", "default"],
             capture_output=True, text=True, timeout=5
         )
         # Zoek specifiek naar een IPv4-adres na 'default via'

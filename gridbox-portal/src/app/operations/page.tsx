@@ -37,6 +37,8 @@ type OperationsBoxItem = {
   versionRaspberry?: string | null;
   targetVersion?: string | null;
   latestGithub?: string | null;
+  softwareUpdateRequested?: boolean | null;
+  updateStatus?: string | null;
 };
 
 type CameraRecord = {
@@ -125,6 +127,8 @@ export default function OperationsPage() {
   const [triggerBusy, setTriggerBusy] = useState<Record<string, boolean>>({});
   const [triggerAllBusy, setTriggerAllBusy] = useState(false);
   const [confirmAll, setConfirmAll] = useState(false);
+  const [countdown, setCountdown] = useState(30);
+  const [resetBusy, setResetBusy] = useState<Record<string, boolean>>({});
 
   function patchCam(boxId: string, patch: Partial<BoxCameraState>) {
     setCameraState((prev) => ({
@@ -134,6 +138,7 @@ export default function OperationsPage() {
   }
 
   async function loadData() {
+    setCountdown(30);
     try {
       setLoading(true);
       setErrorMessage("");
@@ -306,7 +311,7 @@ export default function OperationsPage() {
       );
       if (res.ok) {
         setBoxes((prev) =>
-          prev.map((b) => b.id === boxId ? { ...b, targetVersion } : b)
+          prev.map((b) => b.id === boxId ? { ...b, targetVersion, softwareUpdateRequested: true } : b)
         );
       }
     } catch (err) {
@@ -339,6 +344,30 @@ export default function OperationsPage() {
     }
   }
 
+  async function handleResetAndUpdate(boxId: string) {
+    setResetBusy((prev) => ({ ...prev, [boxId]: true }));
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      const token = await user.getIdToken();
+      const res = await fetch(
+        apiUrl(`/operations/boxes/${encodeURIComponent(boxId)}/reset-and-update`),
+        { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
+      );
+      if (res.ok) {
+        setBoxes((prev) =>
+          prev.map((b) => b.id === boxId ? { ...b, updateStatus: "PENDING", softwareUpdateRequested: true } : b)
+        );
+      } else {
+        console.error("[handleResetAndUpdate] API fout", res.status);
+      }
+    } catch (err) {
+      console.error("[handleResetAndUpdate] fout", err);
+    } finally {
+      setResetBusy((prev) => ({ ...prev, [boxId]: false }));
+    }
+  }
+
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
       if (user) {
@@ -348,6 +377,21 @@ export default function OperationsPage() {
       }
     });
     return () => unsubscribe();
+  }, []);
+
+  // Auto-refresh elke 30 seconden
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          loadData();
+          return 30;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const totalBoxes = boxes.length;
@@ -412,7 +456,7 @@ export default function OperationsPage() {
 
         {/* ── Software update kaart ── */}
         <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 pb-4">
             <div className="flex flex-wrap items-center gap-6">
               <div>
                 <div className="text-xs text-slate-500">Laatste versie (GitHub)</div>
@@ -440,9 +484,12 @@ export default function OperationsPage() {
                     type="button"
                     disabled={triggerAllBusy}
                     onClick={handleTriggerAll}
-                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-700 disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-700 disabled:opacity-50"
                   >
-                    Ja, update alle
+                    {triggerAllBusy && (
+                      <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                    )}
+                    {triggerAllBusy ? "Bezig..." : "Ja, update alle"}
                   </button>
                   <button
                     type="button"
@@ -463,6 +510,9 @@ export default function OperationsPage() {
                 </button>
               )}
             </div>
+          </div>
+          <div className="border-t border-slate-100 pt-3 text-right text-xs text-slate-400">
+            Auto-ververs over {countdown}s
           </div>
         </div>
 
@@ -515,7 +565,12 @@ export default function OperationsPage() {
 
                   {/* ── Versie badge + update knop ── */}
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {versionKnown ? (
+                    {box.softwareUpdateRequested ? (
+                      <span className="inline-flex animate-pulse items-center gap-1 rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-semibold text-orange-800">
+                        <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
+                        Update lopende...
+                      </span>
+                    ) : versionKnown ? (
                       versionMatch ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-800">
                           <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
@@ -536,14 +591,35 @@ export default function OperationsPage() {
                         versie onbekend
                       </span>
                     )}
-                    {latestVersion && box.versionRaspberry && box.versionRaspberry !== latestVersion && (
+                    {latestVersion && box.versionRaspberry && box.versionRaspberry !== latestVersion && !box.softwareUpdateRequested && (
                       <button
                         type="button"
                         disabled={!!triggerBusy[box.id]}
                         onClick={() => handleTriggerUpdate(box.id, latestVersion)}
-                        className="rounded-full bg-slate-900 px-2.5 py-0.5 text-xs font-bold text-white transition hover:bg-slate-700 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-2.5 py-0.5 text-xs font-bold text-white transition hover:bg-slate-700 disabled:opacity-50"
                       >
-                        {triggerBusy[box.id] ? "..." : `Update → ${latestVersion}`}
+                        {triggerBusy[box.id] ? (
+                          <>
+                            <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                            Bezig...
+                          </>
+                        ) : `Update → ${latestVersion}`}
+                      </button>
+                    )}
+                    {box.updateStatus === "FAILED" && !box.softwareUpdateRequested && (
+                      <button
+                        type="button"
+                        disabled={!!resetBusy[box.id]}
+                        onClick={() => handleResetAndUpdate(box.id)}
+                        className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-2.5 py-0.5 text-xs font-bold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+                        title="Voert git reset --hard uit op de Pi en herstart de update"
+                      >
+                        {resetBusy[box.id] ? (
+                          <>
+                            <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                            Bezig...
+                          </>
+                        ) : "Reset & Update"}
                       </button>
                     )}
                   </div>
