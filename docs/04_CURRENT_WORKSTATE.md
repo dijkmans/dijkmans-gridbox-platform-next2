@@ -1,5 +1,52 @@
 # CURRENT WORKSTATE
 
+## Status — 2026-04-11
+
+Software update flow structureel gerepareerd. Root cause dirty repo gevonden en opgelost. v1.0.60 getagd en gepusht. gbox-003, gbox-005, gbox-006 getriggerd naar v1.0.60. gbox-003 en gbox-005 hebben SSH nodig voor eenmalige handmatige reset (zie openstaande punten).
+
+## Fixes 2026-04-11 — Structurele software update fix
+
+### Root causes gevonden (dirty repo probleem)
+
+- **`box_config.json` was getrackt in git** (commit `bbe2232`): elke runtime write maakte repo dirty → update blokkeerde
+- **`src/test_connection.py` was getrackt in git**: lokaal gewijzigd op Pi → dirty
+- **`src/__pycache__/db_manager.cpython-313.pyc` was getrackt in git bij bbe2232**: Python update dit bestand bij elke import → altijd dirty
+- **v1.0.54 `ensure_repo_clean_for_checkout()` doet géén git reset**: gooit direct RuntimeError bij dirty repo, geen herstelpoging → kip-en-ei: Pi kon zichzelf niet updaten om de fix te krijgen
+- **`ip route` zonder `-4` flag**: als Pi ook IPv6 routing heeft → geen IPv4 gateway gevonden → gatewayMac/Serial leeg
+- **`latestGithub: error`**: git fetch --tags faalt op Pi, error gecacht voor 900s — nu retry na 60s
+
+### Structurele fixes (v1.0.60)
+
+- `git rm --cached box_config.json src/test_connection.py` — verwijderd uit git tracking, staan al in .gitignore
+- `.gitignore` uitgebreid: `src/test_connection.py`, `runtime_config.json`, `src/__pycache__/`
+- `ensure_repo_clean_for_checkout()` verbeterd:
+  - git reset --hard HEAD zoals voorheen
+  - Verwijdert nu ook alle `__pycache__/` directories na de reset
+  - Accepteert `D`-status (deleted) .pyc bestanden — git checkout verwijdert ze sowieso
+  - Gooit alleen RuntimeError bij niet-.pyc dirty files
+- `get_latest_github_tag()`: kortere retry-TTL van 60s bij fout (was 900s)
+- `get_gateway_ip()`: gebruikt `ip -4 route` in plaats van `ip route` — IPv4-only
+- `RESET_AND_UPDATE` commando toegevoegd aan command handler
+
+### Na v1.0.60 geldt voor nieuwe installaties
+
+- `box_config.json` en `__pycache__/` zijn niet meer getrackt
+- Repo blijft na opstart schoon
+- Software updates werken automatisch zonder SSH
+
+### Beperking voor gbox-003 en gbox-005 (v1.0.54)
+
+Deze Pi's draaien v1.0.54 die géén git reset in `ensure_repo_clean_for_checkout()` heeft. Ze kunnen zichzelf NIET updaten naar v1.0.60 — ook niet met softwareUpdateRequested=true. SSH is vereist voor eenmalige handmatige reset:
+
+```bash
+cd /home/pi/dijkmans-gridbox-platform-next2
+git reset --hard HEAD
+git fetch --tags
+# Pi pikt targetVersion=v1.0.60 op en update automatisch
+```
+
+Na die SSH-reset update de Pi automatisch dankzij `softwareUpdateRequested=true` in Firestore.
+
 ## Status — 2026-04-10
 
 Provisioning flow end-to-end werkend en gevalideerd. Master image bijgewerkt naar v1.0.54c met correcte service-account.json. SD-script verwijst naar v1.0.54c. Bootstrap-init service geïnstalleerd op gbox-005. Verwijder knop toegevoegd aan provisioning overzicht.
