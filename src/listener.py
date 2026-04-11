@@ -794,7 +794,7 @@ def load_box_state_from_firestore():
 # =========================================================
 
 def get_gateway_ip():
-    """Geeft het IP-adres van de default gateway terug, of None."""
+    """Geeft het IPv4-adres van de default gateway terug, of None."""
     if platform.system() == "Windows":
         return None
     try:
@@ -802,10 +802,43 @@ def get_gateway_ip():
             ["ip", "route", "show", "default"],
             capture_output=True, text=True, timeout=5
         )
-        match = re.search(r"default via (\S+)", result.stdout)
-        return match.group(1) if match else None
-    except Exception:
+        # Zoek specifiek naar een IPv4-adres na 'default via'
+        match = re.search(r"default via (\d+\.\d+\.\d+\.\d+)", result.stdout)
+        if match:
+            return match.group(1)
+        log(f"WARN: get_gateway_ip: geen IPv4 gateway gevonden in: {result.stdout.strip()!r}")
         return None
+    except Exception as e:
+        log(f"WARN: get_gateway_ip: fout: {e}")
+        return None
+
+
+def ping_gateway(gateway_ip: str) -> bool:
+    """Ping de gateway 1x om de ARP-cache te vullen. Geeft True terug als bereikbaar."""
+    try:
+        result = subprocess.run(
+            ["ping", "-c", "1", "-W", "2", gateway_ip],
+            capture_output=True, timeout=6
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def get_mac_from_proc_arp(gateway_ip: str) -> str | None:
+    """Leest het MAC-adres van een IP uit /proc/net/arp (meest betrouwbaar op Linux)."""
+    try:
+        with open("/proc/net/arp", "r") as f:
+            for line in f:
+                parts = line.split()
+                # Formaat: IP HW_type Flags HW_addr Mask Device
+                if len(parts) >= 4 and parts[0] == gateway_ip:
+                    mac = parts[3]
+                    if re.match(r"^[0-9a-f]{2}(:[0-9a-f]{2}){5}$", mac, re.IGNORECASE):
+                        return mac.lower()
+    except Exception:
+        pass
+    return None
 
 
 def get_gateway_mac():
@@ -864,14 +897,28 @@ def get_gateway_serial():
 
 
 def get_gateway_mac_fallback():
-    """Detecteert het MAC-adres van de default gateway via 'arp -n' of 'ip neigh show'.
-    Bedoeld als fallback wanneer het serienummer niet beschikbaar is.
+    """Detecteert het MAC-adres van de default gateway.
+    Volgorde: ping (vult ARP-cache) → /proc/net/arp → arp -n → ip neigh show
+    Geeft het MAC-adres als lowercase string terug, of None bij mislukking.
     """
     gateway_ip = get_gateway_ip()
     if not gateway_ip:
+        log("WARN: get_gateway_mac_fallback: geen gateway IP beschikbaar")
         return None
 
-    # Probeer eerst arp -n
+    # Ping de gateway om de ARP-cache te vullen vóór de lookups
+    reachable = ping_gateway(gateway_ip)
+    if not reachable:
+        log(f"WARN: get_gateway_mac_fallback: gateway {gateway_ip} niet bereikbaar via ping")
+
+    # 1. /proc/net/arp — meest betrouwbaar, altijd aanwezig op Linux
+    mac = get_mac_from_proc_arp(gateway_ip)
+    if mac:
+        log(f"INFO: get_gateway_mac_fallback: MAC via /proc/net/arp: {mac} (gateway={gateway_ip})")
+        return mac
+    log(f"WARN: get_gateway_mac_fallback: geen entry voor {gateway_ip} in /proc/net/arp")
+
+    # 2. arp -n
     try:
         arp_result = subprocess.run(
             ["arp", "-n", gateway_ip],
@@ -886,7 +933,7 @@ def get_gateway_mac_fallback():
     except Exception as e:
         log(f"WARN: get_gateway_mac_fallback: arp -n fout: {e}")
 
-    # Fallback: ip neigh show
+    # 3. ip neigh show
     try:
         neigh_result = subprocess.run(
             ["ip", "neigh", "show", gateway_ip],
@@ -1011,13 +1058,26 @@ def update_pi_status():
             "updatedBy": f"gridbox-service-{VERSION}"
         }, merge=True)
 
-        gateway_serial = get_gateway_serial()
-        if gateway_serial:
-            box_doc_ref.update({"hardware.gatewaySerial": gateway_serial})
-        else:
+        # Gateway detectie — schrijf altijd gatewayIp zodat detectie zichtbaar is in Firestore
+        gateway_ip = get_gateway_ip()
+        hw_update: dict = {"hardware.gatewayIp": gateway_ip or "unknown"}
+
+        if gateway_ip:
+            gateway_serial = get_gateway_serial()
+            if gateway_serial:
+                hw_update["hardware.gatewaySerial"] = gateway_serial
+                log(f"INFO: gateway serial: {gateway_serial}")
+            else:
+                log(f"WARN: gateway serial niet beschikbaar voor {gateway_ip}")
+
             gateway_mac = get_gateway_mac_fallback()
             if gateway_mac:
-                box_doc_ref.update({"hardware.gatewayMac": gateway_mac})
+                hw_update["hardware.gatewayMac"] = gateway_mac
+                log(f"INFO: gateway MAC: {gateway_mac}")
+            else:
+                log(f"WARN: gateway MAC niet beschikbaar voor {gateway_ip}")
+
+        box_doc_ref.update(hw_update)
 
         refresh_cached_config()
         log(
