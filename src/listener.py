@@ -35,7 +35,7 @@ from db_manager import get_db
 # - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.51"
+VERSION = "v1.0.59-hotfix"
 KEY_PATH = "service-account.json"
 BOOTSTRAP_PATH = "box_bootstrap.json"
 RUNTIME_CONFIG_PATH = "runtime_config.json"
@@ -1575,6 +1575,33 @@ def handle_command(doc_ref, data):
                 light_delay = float(lighting_cfg.get("lightOffDelaySeconds", 60))
                 cancel_timer(light_off_timer)
                 light_off_timer = start_daemon_timer(light_delay, lambda: light.off())
+
+            elif cmd == "RESET_AND_UPDATE":
+                log(f"RESET_AND_UPDATE commando ontvangen (Bron: {source})")
+
+                # Stap 1: repo schoonmaken zodat checkout mogelijk wordt
+                reset_result = run_cmd(["git", "reset", "--hard", "HEAD"], cwd=REPO_ROOT)
+                if reset_result.returncode != 0:
+                    raise RuntimeError(
+                        f"git reset --hard mislukt (exit {reset_result.returncode}): "
+                        f"{(reset_result.stderr or '').strip()}"
+                    )
+                log("INFO: git reset --hard geslaagd — repo is schoon")
+
+                # Stap 2: meest recente tags ophalen van remote
+                fetch_result = run_cmd(["git", "fetch", "--tags", "origin"], cwd=REPO_ROOT)
+                if fetch_result.returncode != 0:
+                    log(f"WARN: git fetch --tags mislukt: {(fetch_result.stderr or '').strip()}")
+                else:
+                    log("INFO: git fetch --tags geslaagd")
+
+                # Stap 3: Firestore resetten — software poll pikt update op bij volgende cyclus
+                write_software_fields({
+                    "softwareUpdateRequested": True,
+                    "lastError": None,
+                    "updateStatus": "PENDING",
+                })
+                log("INFO: Firestore velden gereset — software poll start update bij volgende cyclus")
 
             else:
                 raise ValueError(f"Onbekend commando: {cmd}")
