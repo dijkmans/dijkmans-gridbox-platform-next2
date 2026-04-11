@@ -403,20 +403,39 @@ def ensure_target_tag_exists(tag_name):
     return result.returncode == 0
 
 def ensure_repo_clean_for_checkout():
-    result = run_cmd(
+    # Controleer eerst of er lokale wijzigingen zijn
+    status_result = run_cmd(
         ["git", "status", "--porcelain", "--untracked-files=no"],
         cwd=REPO_ROOT
     )
-    if result.returncode != 0:
+    if status_result.returncode != 0:
         raise RuntimeError("Kon git status niet uitlezen.")
 
-    dirty_lines = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
+    dirty_lines = [line.strip() for line in (status_result.stdout or "").splitlines() if line.strip()]
     if dirty_lines:
-        preview = "; ".join(dirty_lines[:5])
-        raise RuntimeError(
-            "Repo bevat lokale wijzigingen. Checkout naar andere tag is niet veilig. "
-            f"Eerste regels: {preview}"
+        # Log wat er weggegooid gaat worden vóór de reset
+        log(f"INFO: ensure_repo_clean_for_checkout: {len(dirty_lines)} gewijzigde bestanden gevonden — voer git reset --hard uit:")
+        for line in dirty_lines:
+            log(f"  {line}")
+
+        reset_result = run_cmd(["git", "reset", "--hard", "HEAD"], cwd=REPO_ROOT)
+        if reset_result.returncode != 0:
+            raise RuntimeError(
+                f"git reset --hard mislukt (exit {reset_result.returncode}): "
+                f"{(reset_result.stderr or '').strip()}"
+            )
+        log("INFO: ensure_repo_clean_for_checkout: git reset --hard geslaagd — repo is nu schoon")
+
+        # Verifieer dat de reset volledig is
+        verify = run_cmd(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            cwd=REPO_ROOT
         )
+        remaining = [l.strip() for l in (verify.stdout or "").splitlines() if l.strip()]
+        if remaining:
+            raise RuntimeError(
+                f"Repo is nog steeds niet schoon na git reset --hard: {'; '.join(remaining[:3])}"
+            )
 
 def checkout_target_version(tag_name):
     run_cmd_checked(["git", "checkout", "--detach", tag_name], cwd=REPO_ROOT, timeout=30)

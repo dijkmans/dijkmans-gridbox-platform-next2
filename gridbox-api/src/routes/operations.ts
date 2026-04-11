@@ -191,9 +191,14 @@ router.get("/operations/boxes", async (req, res) => {
         box["lastHeartbeatAt"] ??
         (box["status"] === "online" ? (box["updatedAt"] ?? null) : null);
 
+      const str = (v: unknown) => (typeof v === "string" && v ? v : null);
+
       return {
         ...box,
         lastHeartbeatAt,
+        versionRaspberry: str(software?.["versionRaspberry"]),
+        targetVersion:    str(software?.["targetVersion"]),
+        latestGithub:     str(software?.["latestGithub"]),
         rms: rmsData ? extractRmsSummary(rmsData) : null
       };
     });
@@ -479,6 +484,142 @@ router.delete("/operations/boxes/:boxId/cameras/:cameraId", async (req, res) => 
     if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
     console.error("FOUT in DELETE /operations/boxes/:boxId/cameras/:cameraId", error);
     return res.status(500).json({ error: "CAMERA_DELETE_FAILED", message: "Kon camera niet verwijderen" });
+  }
+});
+
+// ─── Software update beheer ───────────────────────────────────────────
+
+function parseVersion(tag: string): [number, number, number] | null {
+  const m = tag.match(/^v(\d+)\.(\d+)\.(\d+)$/);
+  if (!m) return null;
+  return [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10)];
+}
+
+async function fetchLatestGithubTag(): Promise<string | null> {
+  try {
+    const headers: Record<string, string> = { "User-Agent": "gridbox-api" };
+    if (env.githubToken) {
+      headers["Authorization"] = `token ${env.githubToken}`;
+    }
+
+    // GitHub pagineert op 30 tags — haal de eerste pagina op (voldoende voor v1.0.x reeks)
+    const res = await fetch(
+      "https://api.github.com/repos/dijkmans/dijkmans-gridbox-platform-next2/tags?per_page=100",
+      { headers }
+    );
+    if (!res.ok) {
+      console.warn(`[fetchLatestGithubTag] GitHub API antwoordde ${res.status}`);
+      return null;
+    }
+
+    const tags = await res.json() as Array<{ name: string }>;
+
+    // Filter op v1.0.x patroon en sorteer semantisch aflopend
+    const parsed = tags
+      .map((t) => ({ name: t.name, ver: parseVersion(t.name) }))
+      .filter((t): t is { name: string; ver: [number, number, number] } => t.ver !== null)
+      .sort((a, b) => {
+        for (let i = 0; i < 3; i++) {
+          if (b.ver[i] !== a.ver[i]) return b.ver[i] - a.ver[i];
+        }
+        return 0;
+      });
+
+    return parsed.length > 0 ? parsed[0].name : null;
+  } catch (err) {
+    console.warn("[fetchLatestGithubTag] fout:", err);
+    return null;
+  }
+}
+
+router.get("/operations/software/latest", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+    const latestVersion = await fetchLatestGithubTag();
+    return res.json({ latestVersion });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
+    return res.status(500).json({ error: "SOFTWARE_LATEST_FAILED", message: "Kon laatste versie niet ophalen" });
+  }
+});
+
+router.post("/operations/boxes/:boxId/trigger-update", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const boxId = req.params.boxId?.trim();
+    if (!boxId) {
+      return res.status(400).json({ error: "INVALID_BOX_ID", message: "boxId is verplicht" });
+    }
+
+    const body = req.body as { targetVersion?: string };
+    const targetVersion = typeof body.targetVersion === "string" ? body.targetVersion.trim() : "";
+    if (!targetVersion) {
+      return res.status(400).json({ error: "MISSING_TARGET_VERSION", message: "targetVersion is verplicht" });
+    }
+
+    const db = getFirestore();
+    const boxDoc = await db.collection("boxes").doc(boxId).get();
+    if (!boxDoc.exists) {
+      return res.status(404).json({ error: "BOX_NOT_FOUND", message: "Box bestaat niet" });
+    }
+
+    await db.collection("boxes").doc(boxId).update({
+      "software.targetVersion": targetVersion,
+      "software.softwareUpdateRequested": true,
+    });
+
+    console.log(`[trigger-update] ${boxId} → ${targetVersion}`);
+    return res.json({ boxId, targetVersion, softwareUpdateRequested: true });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
+    console.error("FOUT in POST /operations/boxes/:boxId/trigger-update", error);
+    return res.status(500).json({ error: "TRIGGER_UPDATE_FAILED", message: "Kon update niet triggeren" });
+  }
+});
+
+router.post("/operations/software/trigger-all", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const body = req.body as { targetVersion?: string };
+    const targetVersion = typeof body.targetVersion === "string" ? body.targetVersion.trim() : "";
+    if (!targetVersion) {
+      return res.status(400).json({ error: "MISSING_TARGET_VERSION", message: "targetVersion is verplicht" });
+    }
+
+    const db = getFirestore();
+    const snapshot = await db.collection("boxes")
+      .where("status", "in", ["online", "ready"])
+      .get();
+
+    if (snapshot.empty) {
+      return res.json({ updated: 0, boxIds: [], targetVersion });
+    }
+
+    const batch = db.batch();
+    const boxIds: string[] = [];
+    for (const doc of snapshot.docs) {
+      batch.update(doc.ref, {
+        "software.targetVersion": targetVersion,
+        "software.softwareUpdateRequested": true,
+      });
+      boxIds.push(doc.id);
+    }
+    await batch.commit();
+
+    console.log(`[trigger-all] ${boxIds.length} boxes → ${targetVersion}: ${boxIds.join(", ")}`);
+    return res.json({ updated: boxIds.length, boxIds, targetVersion });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
+    console.error("FOUT in POST /operations/software/trigger-all", error);
+    return res.status(500).json({ error: "TRIGGER_ALL_FAILED", message: "Kon bulk update niet triggeren" });
   }
 });
 

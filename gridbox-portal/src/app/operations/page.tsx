@@ -34,6 +34,9 @@ type OperationsBoxItem = {
   lastHeartbeatAt?: string | { _seconds: number; _nanoseconds: number } | null;
   rmsDeviceId?: number | null;
   rms: RmsSummary | null;
+  versionRaspberry?: string | null;
+  targetVersion?: string | null;
+  latestGithub?: string | null;
 };
 
 type CameraRecord = {
@@ -118,6 +121,10 @@ export default function OperationsPage() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [cameraState, setCameraState] = useState<Record<string, BoxCameraState>>({});
+  const [latestVersion, setLatestVersion] = useState<string | null>(null);
+  const [triggerBusy, setTriggerBusy] = useState<Record<string, boolean>>({});
+  const [triggerAllBusy, setTriggerAllBusy] = useState(false);
+  const [confirmAll, setConfirmAll] = useState(false);
 
   function patchCam(boxId: string, patch: Partial<BoxCameraState>) {
     setCameraState((prev) => ({
@@ -138,9 +145,10 @@ export default function OperationsPage() {
       }
 
       const token = await user.getIdToken();
-      const res = await fetch(apiUrl("/operations/boxes"), {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const [res, swRes] = await Promise.all([
+        fetch(apiUrl("/operations/boxes"), { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(apiUrl("/operations/software/latest"), { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
 
       const data = await res.json();
 
@@ -150,6 +158,14 @@ export default function OperationsPage() {
       }
 
       setBoxes(data.items || []);
+      console.log("[loadData] boxes response:", (data.items || []).map((b: OperationsBoxItem) => ({
+        id: b.id, versionRaspberry: b.versionRaspberry, targetVersion: b.targetVersion
+      })));
+
+      if (swRes.ok) {
+        const swData = await swRes.json();
+        setLatestVersion(swData.latestVersion ?? null);
+      }
     } catch {
       setErrorMessage("Netwerkfout bij ophalen operationsdata");
     } finally {
@@ -274,6 +290,55 @@ export default function OperationsPage() {
     }
   }
 
+  async function handleTriggerUpdate(boxId: string, targetVersion: string) {
+    setTriggerBusy((prev) => ({ ...prev, [boxId]: true }));
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      const token = await user.getIdToken();
+      const res = await fetch(
+        apiUrl(`/operations/boxes/${encodeURIComponent(boxId)}/trigger-update`),
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ targetVersion }),
+        }
+      );
+      if (res.ok) {
+        setBoxes((prev) =>
+          prev.map((b) => b.id === boxId ? { ...b, targetVersion } : b)
+        );
+      }
+    } catch (err) {
+      console.error("[handleTriggerUpdate] fout", err);
+    } finally {
+      setTriggerBusy((prev) => ({ ...prev, [boxId]: false }));
+    }
+  }
+
+  async function handleTriggerAll() {
+    if (!latestVersion) return;
+    setTriggerAllBusy(true);
+    setConfirmAll(false);
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      const token = await user.getIdToken();
+      const res = await fetch(apiUrl("/operations/software/trigger-all"), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ targetVersion: latestVersion }),
+      });
+      if (res.ok) {
+        await loadData();
+      }
+    } catch (err) {
+      console.error("[handleTriggerAll] fout", err);
+    } finally {
+      setTriggerAllBusy(false);
+    }
+  }
+
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
       if (user) {
@@ -290,6 +355,12 @@ export default function OperationsPage() {
   const offlineBoxes = totalBoxes - onlineBoxes;
   const warningBoxes = boxes.filter(
     (b) => isCreditExpiringSoon(b.rms?.creditExpireDate ?? null)
+  ).length;
+  const upToDateBoxes = boxes.filter(
+    (b) => b.versionRaspberry && latestVersion && b.versionRaspberry === latestVersion
+  ).length;
+  const behindBoxes = boxes.filter(
+    (b) => b.versionRaspberry && latestVersion && b.versionRaspberry !== latestVersion
   ).length;
 
   return (
@@ -339,6 +410,62 @@ export default function OperationsPage() {
           </div>
         </div>
 
+        {/* ── Software update kaart ── */}
+        <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-6">
+              <div>
+                <div className="text-xs text-slate-500">Laatste versie (GitHub)</div>
+                <div className="mt-1 font-mono text-lg font-bold text-slate-900">
+                  {latestVersion ?? "—"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500">Up-to-date</div>
+                <div className="mt-1 text-lg font-bold text-green-700">{upToDateBoxes}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500">Achter</div>
+                <div className="mt-1 text-lg font-bold text-amber-700">{behindBoxes}</div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {confirmAll ? (
+                <>
+                  <span className="text-sm text-slate-600">
+                    Alle online boxes updaten naar <span className="font-mono font-bold">{latestVersion}</span>?
+                  </span>
+                  <button
+                    type="button"
+                    disabled={triggerAllBusy}
+                    onClick={handleTriggerAll}
+                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-700 disabled:opacity-50"
+                  >
+                    Ja, update alle
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmAll(false)}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                  >
+                    Annuleer
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  disabled={!latestVersion || triggerAllBusy}
+                  onClick={() => setConfirmAll(true)}
+                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-700 disabled:opacity-40"
+                >
+                  {triggerAllBusy ? "Bezig..." : `Alle boxes updaten naar ${latestVersion ?? "..."}`}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
         {errorMessage && (
           <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-800">
             {errorMessage}
@@ -356,6 +483,8 @@ export default function OperationsPage() {
               const rmsOnline = box.rms?.rmsStatus === "online";
               const creditWarn = isCreditExpiringSoon(box.rms?.creditExpireDate ?? null);
               const cam = cameraState[box.id] ?? DEFAULT_CAM_STATE;
+              const versionKnown = box.versionRaspberry && box.targetVersion;
+              const versionMatch = versionKnown && box.versionRaspberry === box.targetVersion;
 
               return (
                 <div
@@ -382,6 +511,41 @@ export default function OperationsPage() {
                         </span>
                       )}
                     </div>
+                  </div>
+
+                  {/* ── Versie badge + update knop ── */}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {versionKnown ? (
+                      versionMatch ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-800">
+                          <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                          {box.versionRaspberry}
+                        </span>
+                      ) : (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800"
+                          title={`Target: ${box.targetVersion}`}
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                          {box.versionRaspberry} → {box.targetVersion}
+                        </span>
+                      )
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-500">
+                        <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                        versie onbekend
+                      </span>
+                    )}
+                    {latestVersion && box.versionRaspberry && box.versionRaspberry !== latestVersion && (
+                      <button
+                        type="button"
+                        disabled={!!triggerBusy[box.id]}
+                        onClick={() => handleTriggerUpdate(box.id, latestVersion)}
+                        className="rounded-full bg-slate-900 px-2.5 py-0.5 text-xs font-bold text-white transition hover:bg-slate-700 disabled:opacity-50"
+                      >
+                        {triggerBusy[box.id] ? "..." : `Update → ${latestVersion}`}
+                      </button>
+                    )}
                   </div>
 
                   {/* ── Netwerk/Pi details ── */}
