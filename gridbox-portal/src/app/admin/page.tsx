@@ -1,7 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { FormEvent, useEffect, useState } from "react";
 import { auth } from "@/lib/firebase";
 import AuthPanel from "@/components/AuthPanel";
 import AdminSidebar from "@/components/admin/AdminSidebar";
@@ -21,9 +20,7 @@ import {
   fetchAdminInvites,
   fetchAdminRoles,
   fetchAdminProvisionings,
-  deleteAdminProvisioning,
   fetchAdminPath,
-  fetchAdminSuggestBoxId,
   postAdminJson,
   deleteAdminPath
 } from "@/components/admin/adminApi";
@@ -62,8 +59,6 @@ import {
 
 
 export default function AdminPage() {
-  const router = useRouter();
-  const urlProvisioningProcessedRef = useRef(false);
   const [customers, setCustomers] = useState<CustomerItem[]>([]);
   const [memberships, setMemberships] = useState<MembershipItem[]>([]);
   const [invites, setInvites] = useState<InviteItem[]>([]);
@@ -205,24 +200,6 @@ export default function AdminPage() {
       unsubscribe();
     };
   }, []);
-
-  // Auto-load provisioning from URL param after initial data load
-  useEffect(() => {
-    if (loading) return;
-    if (urlProvisioningProcessedRef.current) return;
-    const id = new URLSearchParams(window.location.search).get("provisioning");
-    if (!id) return;
-    urlProvisioningProcessedRef.current = true;
-    fetchProvisioningById(id).then((item) => {
-      if (item) setActiveSection("provisioning");
-    });
-  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function handleSelectProvisioning(id: string) {
-    router.push(`/admin?provisioning=${encodeURIComponent(id)}`);
-    setActiveSection("provisioning");
-    fetchProvisioningById(id);
-  }
 
   async function postJson(url: string, body: object) {
     const user = auth.currentUser;
@@ -435,9 +412,7 @@ export default function AdminPage() {
       lastHeartbeatAt:
         typeof source.lastHeartbeatAt === "string" ? source.lastHeartbeatAt : null,
       finalizedAt: typeof source.finalizedAt === "string" ? source.finalizedAt : null,
-      finalizedBy: typeof source.finalizedBy === "string" ? source.finalizedBy : null,
-      listenerVersion: typeof source.listenerVersion === "string" ? source.listenerVersion : null,
-      i2cStatus: typeof source.i2cStatus === "string" ? source.i2cStatus : null,
+      finalizedBy: typeof source.finalizedBy === "string" ? source.finalizedBy : null
     };
   }
 
@@ -482,9 +457,6 @@ export default function AdminPage() {
 
       setProvisioningItem(nextProvisioningItem);
       setProvisioningLookupId(nextProvisioningItem.id);
-      if (nextProvisioningItem.boxId) {
-        setProvisioningBoxId(nextProvisioningItem.boxId);
-      }
       return nextProvisioningItem;
     } catch (error) {
       setErrorMessage("Netwerkfout bij ophalen provisioning");
@@ -660,11 +632,11 @@ export default function AdminPage() {
       }
 
       const blob = await res.blob();
-      const boxId = provisioningItem?.boxId || provisioningBoxId.trim().toLowerCase();
+      const boxId = provisioningItem?.boxId || provisioningId;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `gridbox-sd-${boxId}.bat`;
+      a.download = `gridbox-sd-${boxId}.ps1`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -722,27 +694,6 @@ export default function AdminPage() {
     } finally {
       setProvisioningBusy(false);
     }
-  }
-
-  async function handleDeleteProvisioning(id: string) {
-    const user = auth.currentUser;
-    if (!user) return;
-    const token = await user.getIdToken();
-    const res = await deleteAdminProvisioning(id, { token });
-    if (res.ok) {
-      setProvisioningItems((prev) => prev.filter((item) => item.id !== id));
-      setSuccessMessage("Provisioning verwijderd");
-    } else {
-      const data = await res.json().catch(() => ({}));
-      setErrorMessage(data.message || "Verwijderen mislukt");
-    }
-  }
-
-  async function handleSuggestBoxId(): Promise<string | null> {
-    const user = auth.currentUser;
-    if (!user) return null;
-    const token = await user.getIdToken();
-    return fetchAdminSuggestBoxId({ token });
   }
 
   async function handleRefreshProvisioning() {
@@ -853,9 +804,7 @@ export default function AdminPage() {
     ? provisioningStatusLabels[provisioningStatus]
     : provisioningItem?.status || "Nog geen provisioning geladen";
 
-  const canFinalizeProvisioning =
-    (provisioningStatus === "online" || provisioningStatus === "ready") &&
-    !provisioningBusy;
+  const canFinalizeProvisioning = provisioningStatus === "online" && !provisioningBusy;
   const canRefreshProvisioning =
     !provisioningBusy &&
     (provisioningLookupId.trim().length > 0 || Boolean(provisioningItem?.id));
@@ -966,7 +915,6 @@ export default function AdminPage() {
                   onGenerateScript={handleGenerateScript}
                   onMarkSdPrepared={handleMarkSdPrepared}
                   onStepChange={setSelectedProvisioningStep}
-                  onSuggestBoxId={handleSuggestBoxId}
                 />
               </section>
             )}
@@ -1128,8 +1076,6 @@ export default function AdminPage() {
                 customers={customers}
                 provisioningStatusLabels={provisioningStatusLabels}
                 formatDate={formatDate}
-                onDeleteProvisioning={handleDeleteProvisioning}
-                onSelectProvisioning={handleSelectProvisioning}
               />
             )}
           </div>

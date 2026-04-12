@@ -1,5 +1,4 @@
 import { createHash, randomBytes } from "crypto";
-import { Storage } from "@google-cloud/storage";
 import { Router } from "express";
 import { requirePortalUser } from "../auth/verifyBearerToken";
 import { getMembershipByEmail } from "../repositories/membershipRepository";
@@ -1084,64 +1083,6 @@ router.delete("/admin/invites/:inviteId", async (req, res) => {
   }
 });
 
-router.get("/admin/provisioning/suggest-box-id", async (req, res) => {
-  try {
-    await requirePlatformAdmin(req.header("Authorization") || undefined);
-
-    const db = getFirestore();
-
-    const [boxesSnap, provisioningsSnap] = await Promise.all([
-      db.collection("boxes").get(),
-      db.collection("provisionings").get()
-    ]);
-
-    const gboxPattern = /^gbox-(\d+)$/;
-
-    const usedNumbers = new Set<number>();
-
-    for (const doc of boxesSnap.docs) {
-      const m = doc.id.match(gboxPattern);
-      if (m) usedNumbers.add(parseInt(m[1], 10));
-    }
-
-    for (const doc of provisioningsSnap.docs) {
-      const boxId = doc.data()?.boxId;
-      if (typeof boxId === "string") {
-        const m = boxId.match(gboxPattern);
-        if (m) usedNumbers.add(parseInt(m[1], 10));
-      }
-    }
-
-    // Find next free number starting at 1
-    let next = 1;
-    while (usedNumbers.has(next)) next++;
-    const suggested = `gbox-${String(next).padStart(3, "0")}`;
-
-    // Optional: validate a specific boxId
-    const queryBoxId = typeof req.query.boxId === "string" ? req.query.boxId.trim() : null;
-    if (queryBoxId) {
-      const m = queryBoxId.match(gboxPattern);
-      if (!m) {
-        return res.status(400).json({
-          error: "INVALID_BOX_ID_FORMAT",
-          message: "boxId moet voldoen aan het formaat gbox-XXX"
-        });
-      }
-      const num = parseInt(m[1], 10);
-      const available = !usedNumbers.has(num);
-      return res.json({ suggested, queried: queryBoxId, available });
-    }
-
-    return res.json({ suggested });
-  } catch (err) {
-    console.error("suggest-box-id error:", err);
-    return res.status(500).json({
-      error: "SUGGEST_BOX_ID_FAILED",
-      message: "Kon geen suggestie genereren"
-    });
-  }
-});
-
 router.post("/admin/provisioning/boxes", async (req, res) => {
   try {
     const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
@@ -1603,27 +1544,11 @@ router.post("/admin/provisioning/:id/finalize", async (req, res) => {
 
     const provisioningData = provisioningDoc.data() ?? {};
     const status = typeof provisioningData.status === "string" ? provisioningData.status : "";
-    const boxId = typeof provisioningData.boxId === "string" ? provisioningData.boxId.trim() : "";
-    const customerId = typeof provisioningData.customerId === "string" ? provisioningData.customerId.trim() : "";
 
     if (status !== "online") {
       return res.status(409).json({
         error: "FINALIZE_NOT_ALLOWED",
         message: "Provisioning kan alleen afgerond worden vanuit status online"
-      });
-    }
-
-    if (!boxId) {
-      return res.status(400).json({
-        error: "PROVISIONING_BOX_ID_MISSING",
-        message: "Provisioning bevat geen geldige boxId — kan niet afronden"
-      });
-    }
-
-    if (!customerId) {
-      return res.status(400).json({
-        error: "PROVISIONING_CUSTOMER_ID_MISSING",
-        message: "Provisioning bevat geen geldige customerId — kan niet afronden"
       });
     }
 
@@ -1640,24 +1565,10 @@ router.post("/admin/provisioning/:id/finalize", async (req, res) => {
       { merge: true }
     );
 
-    // Automatisch customerBoxAccess aanmaken na finalize
-    const accessDocId = `${customerId}__${boxId}`;
-    await db.collection("customerBoxAccess").doc(accessDocId).set(
-      {
-        customerId,
-        boxId,
-        active: true,
-        updatedAt,
-        addedBy: context.portalUser.email || "unknown"
-      },
-      { merge: true }
-    );
-
     return res.json({
       ok: true,
       id: provisioningId,
-      status: "ready",
-      customerBoxAccessId: accessDocId
+      status: "ready"
     });
   } catch (error) {
     const statusCode = getStatusCode(error);
@@ -1682,30 +1593,6 @@ router.post("/admin/provisioning/:id/finalize", async (req, res) => {
       error: "ADMIN_PROVISIONING_FINALIZE_FAILED",
       message: "Kon provisioning niet afronden"
     });
-  }
-});
-
-router.delete("/admin/provisioning/:id", async (req, res) => {
-  try {
-    await requirePlatformAdmin(req.header("Authorization") || undefined);
-
-    const provisioningId = req.params.id?.trim();
-    if (!provisioningId) {
-      return res.status(400).json({ error: "INVALID_PROVISIONING_ID", message: "Provisioning id is verplicht" });
-    }
-
-    const db = getFirestore();
-    const ref = db.collection("provisionings").doc(provisioningId);
-    const doc = await ref.get();
-
-    if (!doc.exists) {
-      return res.status(404).json({ error: "PROVISIONING_NOT_FOUND", message: "Provisioning bestaat niet" });
-    }
-
-    await ref.delete();
-    return res.json({ success: true, id: provisioningId });
-  } catch (err: any) {
-    return res.status(err.status ?? 500).json({ error: err.code ?? "SERVER_ERROR", message: err.message ?? "Onbekende fout" });
   }
 });
 
@@ -1774,17 +1661,6 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
     const apiBaseUrl = `${req.protocol}://${host}`;
     const bootstrapVersion = "v1";
 
-    const gcsStorage = new Storage();
-    const masterImageObject = gcsStorage
-      .bucket("gridbox-platform.firebasestorage.app")
-      .file("master-images/Gridbox_master_v1.0.56.img");
-
-    const [signedUrl] = await masterImageObject.getSignedUrl({
-      version: "v4",
-      action: "read",
-      expires: Date.now() + 2 * 60 * 60 * 1000
-    });
-
     const cloudInitUserData = [
       "#cloud-config",
       "hostname: " + boxId,
@@ -1798,11 +1674,7 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "    passwd: \"$6$tg23.88YXBunN.r4$6El6fTCo4xsXSMh97vjq887wBTRLNhoESpYrhh8r0aaL1FLcmAGHK1tz9nwddranvunS2CBoILivN559d/Byr0\"",
       "ssh_pwauth: true",
       "chpasswd:",
-      "  expire: false",
-      "runcmd:",
-      "  - raspi-config nonint do_i2c 0",
-      "  - echo 'dtparam=i2c_arm=on' >> /boot/firmware/config.txt",
-      "  - modprobe i2c-dev"
+      "  expire: false"
     ].join("\n");
 
     const bootstrapJson = JSON.stringify(
@@ -1823,19 +1695,16 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       `# Provisioning ID: ${provisioningId}`,
       "",
       "$ImagerPath = \"C:\\Program Files\\Raspberry Pi Ltd\\Imager\\rpi-imager.exe\"",
-      "$ImagePath  = \"$env:USERPROFILE\\Downloads\\Gridbox_master_v1.0.56.img\"",
-      `$GcsUrl     = "${signedUrl}"`,
+      "$ImagePath  = \"$env:USERPROFILE\\Downloads\\Gridbox_master_v1.img\"",
       "",
       "if (-not (Test-Path $ImagerPath)) {",
-      "    Write-Error \"rpi-imager niet gevonden. Download via https://www.raspberrypi.com/software/\"",
+      "    Write-Error \"rpi-imager niet gevonden op $ImagerPath\"",
       "    exit 1",
       "}",
       "",
       "if (-not (Test-Path $ImagePath)) {",
-      "    Write-Host \"Master image niet gevonden lokaal. Downloaden via signed URL...\" -ForegroundColor Yellow",
-      "    $ProgressPreference = 'SilentlyContinue'",
-      "    Invoke-WebRequest -Uri $GcsUrl -OutFile $ImagePath -UseBasicParsing",
-      "    Write-Host \"Master image gedownload naar $ImagePath\" -ForegroundColor Green",
+      "    Write-Error \"Master image niet gevonden op $ImagePath\"",
+      "    exit 1",
       "}",
       "",
       "# SD-kaart detectie",
@@ -1855,10 +1724,6 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "    exit 0",
       "}",
       "",
-      "# AutoPlay uitschakelen tijdens flashen",
-      "$autoPlayKey = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\AutoplayHandlers\\UserChosenExecuteHandlers'",
-      "reg add 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer' /v NoDriveTypeAutoRun /t REG_DWORD /d 255 /f | Out-Null",
-      "",
       "# Cloud-init userdata tijdelijk opslaan",
       `$TempDir = "C:\\Windows\\Temp\\gridbox-${boxId}"`,
       "New-Item -ItemType Directory -Force -Path $TempDir | Out-Null",
@@ -1872,17 +1737,17 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "Write-Host \"Flashen gestart...\"",
       "& $ImagerPath --cli --disable-verify --cloudinit-userdata $CloudInitPath $ImagePath $diskPath",
       "",
-      "Write-Host \"\"",
-      "Write-Host \"rpi-imager is gestart en flasht de SD-kaart.\" -ForegroundColor Cyan",
-      "Write-Host \"\"",
-      "Write-Host \"Wacht tot rpi-imager 100% toont en het venster sluit.\" -ForegroundColor Yellow",
-      "Write-Host \"\"",
-      "$null = Read-Host \"Druk op ENTER als rpi-imager volledig klaar is\"",
-      "Write-Host \"\"",
-      "Write-Host \"SD-kaart kort verwijderen en opnieuw insteken...\" -ForegroundColor Yellow",
-      "Write-Host \"Wacht op het Windows geluid voordat je verder gaat.\"",
-      "Write-Host \"\"",
-      "$null = Read-Host \"Druk op ENTER nadat je de SD-kaart opnieuw ingestoken hebt\"",
+      "# Wacht tot rpi-imager volledig afgesloten is (spawnt child process, -Wait is niet betrouwbaar)",
+      "Write-Host \"Wachten tot rpi-imager volledig klaar is...\"",
+      "$imagerName = [System.IO.Path]::GetFileNameWithoutExtension($ImagerPath)",
+      "$processWait = 0",
+      "while ($processWait -lt 120) {",
+      "    $running = Get-Process -Name $imagerName -ErrorAction SilentlyContinue",
+      "    if (-not $running) { break }",
+      "    Start-Sleep -Seconds 2",
+      "    $processWait += 2",
+      "}",
+      "Write-Host \"rpi-imager proces afgesloten. SD-kaart wordt opnieuw ingelezen...\"",
       "Start-Sleep -Seconds 5",
       "",
       "# box_bootstrap.json op bootpartitie zetten",
@@ -1890,105 +1755,71 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       bootstrapJson,
       "'@",
       "",
-      "# Wachten tot bootpartitie gemount is (max 120 seconden, 3 sec per poging = 40 pogingen)",
+      "# Wachten tot bootpartitie gemount is (max 30 seconden)",
+      "Write-Host \"Wachten op bootpartitie...\"",
       "$bootDriveLetter = $null",
-      "$attempt = 0",
-      "while ($attempt -lt 40) {",
-      "    $attempt++",
-      "    Write-Host \"Wachten op bootpartitie... ($attempt/40 pogingen)\"",
+      "$waited = 0",
+      "while ($waited -lt 60) {",
       "    $vol = Get-Volume | Where-Object { $_.FileSystemLabel -in @('bootfs', 'boot') } | Select-Object -First 1",
       "    if ($vol -and $vol.DriveLetter) {",
       "        $bootDriveLetter = $vol.DriveLetter",
-      "        Write-Host \"Bootpartitie gevonden via label op ${bootDriveLetter}:\" -ForegroundColor Green",
+      "        Write-Host \"Bootpartitie gevonden via label op ${bootDriveLetter}:\"",
       "        break",
       "    }",
       "    Start-Sleep -Seconds 3",
+      "    $waited += 3",
       "}",
       "",
-      "# Fallback: zoek FAT32 volumes met label 'bootfs'",
+      "# Fallback: zoek kleine FAT32 partitie (<300MB) als label niet gevonden",
       "if (-not $bootDriveLetter) {",
-      "    $bootfsVols = @(Get-Volume | Where-Object { $_.FileSystem -eq 'FAT32' -and $_.FileSystemLabel -eq 'bootfs' -and $_.DriveLetter })",
-      "    if ($bootfsVols.Count -eq 1) {",
-      "        $bootDriveLetter = $bootfsVols[0].DriveLetter",
-      "        Write-Host \"Bootpartitie automatisch gevonden via FAT32+bootfs label op ${bootDriveLetter}:\" -ForegroundColor Green",
-      "    } elseif ($bootfsVols.Count -gt 1) {",
-      "        Write-Warning \"Meerdere FAT32 volumes met label 'bootfs' gevonden. Kies handmatig:\"",
-      "        $bootfsVols | Format-Table DriveLetter, FileSystemLabel, FileSystem, @{L='Grootte';E={[math]::Round($_.Size/1MB)+'MB'}} -AutoSize | Out-String | Write-Host",
-      "        $manualLetter = Read-Host \"Voer de stationsletter van de bootpartitie in (bijv. E)\"",
-      "        $manualLetter = $manualLetter.Trim().TrimEnd(':').ToUpper()",
-      "        if ($manualLetter -match '^[A-Z]$') { $bootDriveLetter = $manualLetter }",
+      "    Write-Host \"Label niet gevonden, probeer FAT32 fallback...\"",
+      "    $vol = Get-Partition | Where-Object { $_.Size -lt 300MB } |",
+      "        ForEach-Object { Get-Volume -Partition $_ -ErrorAction SilentlyContinue } |",
+      "        Where-Object { $_.FileSystem -eq 'FAT32' -and $_.DriveLetter } |",
+      "        Select-Object -First 1",
+      "    if ($vol -and $vol.DriveLetter) {",
+      "        $bootDriveLetter = $vol.DriveLetter",
+      "        Write-Host \"Bootpartitie gevonden via FAT32 fallback op ${bootDriveLetter}:\"",
+      "    }",
+      "}",
+      "",
+      "if (-not $bootDriveLetter) {",
+      "    Write-Warning \"Bootpartitie niet automatisch gevonden.\"",
+      "    Write-Host \"Beschikbare volumes:\"",
+      "    Get-Volume | Where-Object { $_.DriveLetter } | Format-Table DriveLetter, FileSystemLabel, FileSystem, @{L='Grootte';E={[math]::Round($_.Size/1MB)+'MB'}} -AutoSize | Out-String | Write-Host",
+      "    $manualLetter = Read-Host \"Voer de stationsletter van de bootpartitie in (bijv. E)\"",
+      "    $manualLetter = $manualLetter.Trim().TrimEnd(':').ToUpper()",
+      "    if ($manualLetter -match '^[A-Z]$') {",
+      "        $bootDriveLetter = $manualLetter",
       "    } else {",
-      "        Write-Warning \"Geen FAT32 volume met label 'bootfs' gevonden. Beschikbare volumes:\"",
-      "        Get-Volume | Where-Object { $_.DriveLetter } | Format-Table DriveLetter, FileSystemLabel, FileSystem, @{L='Grootte';E={[math]::Round($_.Size/1MB)+'MB'}} -AutoSize | Out-String | Write-Host",
-      "        $manualLetter = Read-Host \"Voer de stationsletter van de bootpartitie in (bijv. E)\"",
-      "        $manualLetter = $manualLetter.Trim().TrimEnd(':').ToUpper()",
-      "        if ($manualLetter -match '^[A-Z]$') {",
-      "            $bootDriveLetter = $manualLetter",
-      "        } else {",
-      "            Write-Warning \"Ongeldige stationsletter. box_bootstrap.json wordt NIET geschreven.\"",
-      "            Write-Host \"Schrijf het bestand zelf naar de bootpartitie. Inhoud:\"",
-      "            Write-Host $BootstrapJson",
-      "        }",
+      "        Write-Warning \"Ongeldige stationsletter. box_bootstrap.json wordt NIET geschreven.\"",
+      "        Write-Host \"Schrijf het bestand zelf naar de bootpartitie. Inhoud:\"",
+      "        Write-Host $BootstrapJson",
       "    }",
       "}",
       "",
       "if ($bootDriveLetter) {",
-      "    Write-Host \"Wacht 3 seconden voor schrijven...\"",
-      "    Start-Sleep -Seconds 3",
       "    $BootstrapPath = \"${bootDriveLetter}:\\box_bootstrap.json\"",
       "    [System.IO.File]::WriteAllText($BootstrapPath, $BootstrapJson, (New-Object System.Text.UTF8Encoding $false))",
-      "    Write-Host \"box_bootstrap.json geschreven naar $BootstrapPath\" -ForegroundColor Green",
+      "    Write-Host \"box_bootstrap.json geschreven naar $BootstrapPath\"",
       "",
       "    # service-account.json kopiëren naar bootpartitie",
-      "    $ServiceAccountSource = Join-Path $env:USERPROFILE 'Downloads\\service-account.json'",
+      "    $ServiceAccountSource = Join-Path $PSScriptRoot 'service-account.json'",
       "    if (Test-Path $ServiceAccountSource) {",
       "        $ServiceAccountDest = \"${bootDriveLetter}:\\service-account.json\"",
       "        Copy-Item $ServiceAccountSource $ServiceAccountDest -Force",
-      "        Write-Host \"service-account.json gekopieerd naar $ServiceAccountDest\" -ForegroundColor Green",
+      "        Write-Host \"service-account.json gekopieerd naar $ServiceAccountDest\"",
       "    } else {",
       "        Write-Warning \"service-account.json niet gevonden naast dit script. Kopieer het zelf naar ${bootDriveLetter}:\\service-account.json\"",
       "    }",
       "}",
       "",
-      "# AutoPlay terug inschakelen",
-      "reg delete 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer' /v NoDriveTypeAutoRun /f | Out-Null",
-      "",
-      "$_bootstrap = $BootstrapJson | ConvertFrom-Json",
-      "Write-Host \"Klaar. SD-kaart is klaar voor installatie van box: $($_bootstrap.boxId)\" -ForegroundColor Green"
+      `Write-Host \"Klaar. SD-kaart is klaar voor installatie van box: ${boxId}\"`
     ].join("\r\n");
 
-    // Encode PS1 as UTF-16LE Base64 for PowerShell -EncodedCommand
-    const ps1Buf = Buffer.alloc(script.length * 2);
-    for (let i = 0; i < script.length; i++) {
-      ps1Buf.writeUInt16LE(script.charCodeAt(i), i * 2);
-    }
-    const encodedScript = ps1Buf.toString("base64");
-
-    const batScript = [
-      "@echo off",
-      `title Gridbox SD-kaart flash - ${boxId}`,
-      ":: Controleer administrator rechten",
-      "net session >nul 2>&1",
-      "if %errorLevel% neq 0 (",
-      "    echo Beheerdersrechten vereist. Opnieuw starten als administrator...",
-      "    powershell -Command \"Start-Process '%~f0' -Verb RunAs\"",
-      "    exit /b",
-      ")",
-      "echo.",
-      `echo  Gridbox SD-kaart flash script`,
-      `echo  Box: ${boxId}`,
-      `echo  Provisioning: ${provisioningId}`,
-      "echo.",
-      "echo  PowerShell script wordt uitgevoerd...",
-      "echo.",
-      `powershell -ExecutionPolicy Bypass -EncodedCommand ${encodedScript}`,
-      "echo.",
-      "pause"
-    ].join("\r\n");
-
-    res.setHeader("Content-Type", "application/octet-stream");
-    res.setHeader("Content-Disposition", `attachment; filename="gridbox-sd-${boxId}.bat"`);
-    return res.status(200).send(batScript);
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="gridbox-sd-${boxId}.ps1"`);
+    return res.status(200).send(script);
   } catch (error) {
     const statusCode = getStatusCode(error);
 

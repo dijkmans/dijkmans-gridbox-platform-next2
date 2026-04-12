@@ -15,6 +15,7 @@ import { getStorage } from "firebase-admin/storage";
 
 const router = Router();
 
+const ACTIVE_PORTAL_BOX_IDS = ["gbox-004", "gbox-005", "gbox-006"];
 const STORAGE_BUCKET_NAME = "gridbox-platform.firebasestorage.app";
 
 function canOperateBox(role?: string | null) {
@@ -890,6 +891,13 @@ router.post("/portal/boxes/:id/open", async (req, res) => {
       });
     }
 
+    if (!ACTIVE_PORTAL_BOX_IDS.includes(boxId)) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
     if (boxId === "gbox-004") {
       return res.status(403).json({
         error: "OPEN_NOT_ALLOWED",
@@ -977,6 +985,13 @@ router.post("/portal/boxes/:id/close", async (req, res) => {
       return res.status(403).json({
         error: "FORBIDDEN",
         message: "Je hebt geen toegang om deze box te sluiten"
+      });
+    }
+
+    if (!ACTIVE_PORTAL_BOX_IDS.includes(boxId)) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
       });
     }
 

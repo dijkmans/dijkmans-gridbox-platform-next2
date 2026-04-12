@@ -10,6 +10,4 @@
 
   rmsApiToken: process.env.RMS_API_TOKEN || "",
   rmsApiBaseUrl: "https://rms.teltonika-networks.com/api",
-  githubToken: process.env.GITHUB_TOKEN || "",
-  apiBaseUrl: process.env.API_BASE_URL || "",
 };

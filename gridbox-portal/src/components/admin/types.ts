@@ -96,6 +96,4 @@ export type AdminProvisioningItem = {
   finalizedAt?: string | null;
   finalizedBy?: string | null;
   lastError?: string | null;
-  listenerVersion?: string | null;
-  i2cStatus?: string | null;
 };

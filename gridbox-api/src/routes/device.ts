@@ -1,47 +1,11 @@
 import { createHash } from "crypto";
 import { Router } from "express";
 import { getFirestore } from "firebase-admin/firestore";
-import { env } from "../config/env";
 
 const router = Router();
 
 function nowIso(): string {
   return new Date().toISOString();
-}
-
-async function matchRmsDeviceByMac(gatewayMac: string): Promise<number | null> {
-  if (!env.rmsApiToken) {
-    console.log("[rms-match] Geen RMS_API_TOKEN beschikbaar, skip");
-    return null;
-  }
-  try {
-    const res = await fetch(`${env.rmsApiBaseUrl}/devices`, {
-      headers: { Authorization: `Bearer ${env.rmsApiToken}` }
-    });
-    if (!res.ok) {
-      console.log(`[rms-match] RMS /devices fout: HTTP ${res.status}`);
-      return null;
-    }
-    const data = await res.json() as { success: boolean; data?: Array<Record<string, unknown>> };
-    if (!data.success || !Array.isArray(data.data)) {
-      console.log(`[rms-match] RMS response ongeldig: success=${data.success}, data=${Array.isArray(data.data) ? "array" : typeof data.data}`);
-      return null;
-    }
-    const normalizedTarget = gatewayMac.toLowerCase();
-    for (const device of data.data) {
-      const deviceMac = typeof device.mac === "string" ? device.mac.toLowerCase() : null;
-      if (deviceMac === normalizedTarget) {
-        const matchedId = typeof device.id === "number" ? device.id : null;
-        console.log(`[rms-match] Match gevonden: MAC ${gatewayMac} → rmsDeviceId=${matchedId} (${device.name ?? ""})`);
-        return matchedId;
-      }
-    }
-    console.log(`[rms-match] Geen match voor MAC ${gatewayMac}`);
-    return null;
-  } catch (err) {
-    console.log(`[rms-match] Fout bij RMS API call: ${err}`);
-    return null;
-  }
 }
 
 function hashBootstrapToken(value: string): string {
@@ -156,17 +120,16 @@ router.post("/device/bootstrap/claim", async (req, res) => {
       });
     }
 
-    const host = req.get("host");
-    const apiBaseUrl =
-      env.apiBaseUrl ||
-      (host ? `https://${host}` : null);
+        const host = req.get("host");
 
-    if (!apiBaseUrl) {
+    if (!host) {
       return res.status(500).json({
         error: "API_BASE_URL_UNAVAILABLE",
         message: "Kon geen geldige apiBaseUrl bepalen"
       });
     }
+
+    const apiBaseUrl = `${req.protocol}://${host}`;
     const claimedAt = nowIso();
     const boxRef = db.collection("boxes").doc(boxId);
     const batch = db.batch();
@@ -247,10 +210,6 @@ router.post("/device/heartbeat", async (req, res) => {
       typeof body.software === "object" && body.software !== null && !Array.isArray(body.software)
         ? body.software as Record<string, unknown>
         : undefined;
-    const gatewayMac =
-      typeof body.gatewayMac === "string" && body.gatewayMac.trim()
-        ? body.gatewayMac.trim().toLowerCase()
-        : null;
 
     if (!rawBoxId) {
       return res.status(400).json({
@@ -363,15 +322,6 @@ router.post("/device/heartbeat", async (req, res) => {
         },
         { merge: true }
       );
-    }
-
-    // RMS device koppeling via gateway MAC (eenmalig, als rmsDeviceId nog niet bekend)
-    if (gatewayMac && !boxDoc.data()?.rmsDeviceId) {
-      const rmsDeviceId = await matchRmsDeviceByMac(gatewayMac);
-      if (rmsDeviceId !== null) {
-        await boxRef.set({ rmsDeviceId, gatewayMac }, { merge: true });
-        console.log(`[heartbeat] rmsDeviceId ${rmsDeviceId} gekoppeld aan ${boxId} via gateway MAC ${gatewayMac}`);
-      }
     }
 
     return res.json({

@@ -130,7 +130,7 @@ function PageContentRouter() {
   const [refreshKey, setRefreshKey] = useState(Date.now());
   const [toast, setToast] = useState({ visible: false, msg: "" });
 
-  const [sharesOpen, setSharesOpen] = useState(searchParams.get("tab") === "toegang");
+  const [sharesOpen, setSharesOpen] = useState(false);
 
   const [sharePhone, setSharePhone] = useState("+32");
   const [shareLabel, setShareLabel] = useState("");
@@ -276,26 +276,6 @@ function PageContentRouter() {
   return (
     <main style={STYLES.container}>
       <header style={{ marginBottom: "40px" }}>
-        <div style={{ marginBottom: "16px" }}>
-          <Link
-            href="/"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "6px 14px",
-              borderRadius: "10px",
-              border: `1px solid ${THEME.border}`,
-              background: "#fff",
-              color: THEME.muted,
-              fontSize: "13px",
-              fontWeight: "600",
-              textDecoration: "none",
-            }}
-          >
-            ← Terug naar overzicht
-          </Link>
-        </div>
         <h1 style={{ fontSize: "2.8rem", fontWeight: "900", letterSpacing: "-1.5px", color: THEME.primary }}>
           {box?.displayName}
         </h1>
@@ -436,7 +416,9 @@ function PageContentRouter() {
         </div>
       )}
 
-      <footer style={{ marginTop: "100px", paddingBottom: "40px" }} />
+      <footer style={{ marginTop: "100px", paddingBottom: "40px", borderTop: `1px solid ${THEME.border}`, paddingTop: "30px" }}>
+         <Link href="/" style={{ color: THEME.muted, textDecoration: "none", fontWeight: "600", fontSize: "14px" }}>← TERUG NAAR OVERZICHT</Link>
+      </footer>
 
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
