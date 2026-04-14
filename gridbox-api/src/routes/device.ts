@@ -1,8 +1,39 @@
 import { createHash } from "crypto";
 import { Router } from "express";
 import { getFirestore } from "firebase-admin/firestore";
+import { env } from "../config/env";
 
 const router = Router();
+
+async function tryLinkRmsDevice(boxId: string, gatewayMac: string): Promise<void> {
+  try {
+    const url = `${env.rmsApiBaseUrl}/devices`;
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${env.rmsApiToken}` }
+    });
+    if (!response.ok) {
+      console.error(`tryLinkRmsDevice: RMS API fout ${response.status} voor ${boxId}`);
+      return;
+    }
+    const data = await response.json() as { data?: Array<{ id: number; mac?: string }> };
+    const devices = data.data ?? [];
+    const normalize = (mac: string) => mac.toLowerCase().replace(/[-:]/g, "");
+    const normalizedTarget = normalize(gatewayMac);
+    const match = devices.find((d) => d.mac && normalize(d.mac) === normalizedTarget);
+    if (!match) {
+      console.log(`tryLinkRmsDevice: geen RMS device gevonden voor MAC ${gatewayMac} (${boxId})`);
+      return;
+    }
+    const db = getFirestore();
+    await db.collection("boxes").doc(boxId).set(
+      { hardware: { rmsDeviceId: match.id } },
+      { merge: true }
+    );
+    console.log(`tryLinkRmsDevice: rmsDeviceId ${match.id} gekoppeld aan ${boxId}`);
+  } catch (err) {
+    console.error(`tryLinkRmsDevice: fout bij koppelen voor ${boxId}:`, err);
+  }
+}
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -101,7 +132,8 @@ router.post("/device/bootstrap/claim", async (req, res) => {
       });
     }
 
-    if (status !== "awaiting_first_boot") {
+    const claimableStatuses = ["awaiting_first_boot", "awaiting_sd_preparation", "draft"];
+    if (!claimableStatuses.includes(status)) {
       return res.status(409).json({
         error: "BOOTSTRAP_CLAIM_NOT_ALLOWED",
         message: "Device claim is in deze provisioningstatus niet toegelaten"
@@ -153,6 +185,22 @@ router.post("/device/bootstrap/claim", async (req, res) => {
         boxId,
         customerId,
         siteId,
+        updatedAt: claimedAt
+      },
+      { merge: true }
+    );
+
+    const customerBoxAccessRef = db
+      .collection("customerBoxAccess")
+      .doc(`${customerId}__${boxId}`);
+
+    batch.set(
+      customerBoxAccessRef,
+      {
+        active: true,
+        boxId,
+        customerId,
+        addedBy: "system",
         updatedAt: claimedAt
       },
       { merge: true }
@@ -285,6 +333,9 @@ router.post("/device/heartbeat", async (req, res) => {
               : {}),
             lastHeartbeatIso: heartbeatAt
           },
+          ...(typeof body.gatewayMac === "string" && body.gatewayMac.trim()
+            ? { gatewayMac: body.gatewayMac.trim() }
+            : {}),
           updatedAt: heartbeatAt
         },
         { merge: true }
@@ -318,9 +369,29 @@ router.post("/device/heartbeat", async (req, res) => {
               : {}),
             lastHeartbeatIso: heartbeatAt
           },
+          ...(typeof body.gatewayMac === "string" && body.gatewayMac.trim()
+            ? { gatewayMac: body.gatewayMac.trim() }
+            : {}),
           updatedAt: heartbeatAt
         },
         { merge: true }
+      );
+    }
+
+    const existingRmsDeviceId = boxDoc.data()?.rmsDeviceId;
+    const gatewayMac =
+      typeof body.gatewayMac === "string" && body.gatewayMac.trim()
+        ? body.gatewayMac.trim()
+        : typeof softwarePayload?.gatewayMac === "string" && softwarePayload.gatewayMac.trim()
+        ? softwarePayload.gatewayMac.trim()
+        : "";
+    const existingGatewayMac = boxDoc.data()?.gatewayMac as string | undefined;
+    const macChanged = gatewayMac && existingGatewayMac && gatewayMac !== existingGatewayMac;
+    const noRmsLink = !existingRmsDeviceId;
+
+    if (gatewayMac && (noRmsLink || macChanged)) {
+      tryLinkRmsDevice(boxId, gatewayMac).catch((err) =>
+        console.error("tryLinkRmsDevice fire-and-forget fout:", err)
       );
     }
 
