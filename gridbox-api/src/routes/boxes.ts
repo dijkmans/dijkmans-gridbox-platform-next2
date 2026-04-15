@@ -652,6 +652,47 @@ router.delete("/portal/boxes/:id/shares/:shareId", async (req, res) => {
   }
 });
 
+router.get("/portal/boxes/:id/smslogs", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+    if (!hasAccess) {
+      return res.status(403).json({ error: "FORBIDDEN", message: "Je hebt geen toegang tot deze box" });
+    }
+
+    const db = getFirestore();
+    const snap = await db.collection("smsLogs")
+      .where("boxId", "==", boxId)
+      .orderBy("timestamp", "desc")
+      .limit(50)
+      .get();
+
+    const logs: any[] = snap.docs.map(d => ({
+      id: d.id,
+      ...(d.data() as Record<string, any>),
+      timestamp: (d.data().timestamp as any)?.toDate?.()?.toISOString() ?? null
+    }));
+
+    const byPhone: Record<string, any[]> = {};
+    for (const log of logs) {
+      if (!log.phoneNumber) continue;
+      if (!byPhone[log.phoneNumber]) byPhone[log.phoneNumber] = [];
+      byPhone[log.phoneNumber].push(log);
+    }
+
+    return res.json({ logs, byPhone });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen toegang" });
+    console.error("FOUT in GET /portal/boxes/:id/smslogs", error);
+    return res.status(500).json({ error: "SMSLOGS_FETCH_FAILED", message: "Kon smsLogs niet ophalen" });
+  }
+});
+
 router.get("/portal/boxes/:id/commands/latest", async (req, res) => {
   try {
     const portalUser = await requirePortalUser(req.header("Authorization") || undefined);

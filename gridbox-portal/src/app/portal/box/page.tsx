@@ -18,6 +18,7 @@ function PageContentRouter() {
   const [refreshKey, setRefreshKey] = useState(Date.now());
   const [toast, setToast] = useState({ visible: false, msg: "" });
   const [sharesOpen, setSharesOpen] = useState(searchParams.get("tab") === "toegang");
+  const [smsLogs, setSmsLogs] = useState<Record<string, any[]>>({});
   const [sharePhone, setSharePhone] = useState("+32");
   const [shareLabel, setShareLabel] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -43,6 +44,12 @@ function PageContentRouter() {
       if (resShares.ok) {
         const d = await resShares.json();
         setShares(d.items || []);
+      }
+
+      const resLogs = await fetch(apiUrl(`/portal/boxes/${boxId}/smslogs`), { headers, cache: "no-store" });
+      if (resLogs.ok) {
+        const d = await resLogs.json();
+        setSmsLogs(d.byPhone || {});
       }
     } catch (e) {
       console.error("[Dashboard Load Error]", e);
@@ -250,6 +257,32 @@ function PageContentRouter() {
                   <div className="flex flex-col gap-0.5">
                     <span className="text-base font-semibold text-slate-900">{s.id}</span>
                     <span className="text-sm text-slate-500">{s.label || "Geen label"}</span>
+                    {/* SMS activiteit per nummer */}
+                    {(() => {
+                      const logs = smsLogs[s.id] || [];
+                      if (logs.length === 0) return null;
+                      return (
+                        <div className="mt-2 space-y-1">
+                          {logs.slice(0, 5).map((log: any, i: number) => (
+                            <div key={i} className="flex items-start gap-2 text-xs text-slate-500">
+                              <span className={`font-semibold shrink-0 ${
+                                log.richting === 'uitgaand' ? 'text-blue-600' : 'text-emerald-600'
+                              }`}>
+                                {log.richting === 'uitgaand' ? '→' : '←'}
+                              </span>
+                              <span className="flex-1 text-slate-600">&ldquo;{log.text}&rdquo;</span>
+                              <span className="shrink-0 text-slate-400">
+                                {log.timestamp
+                                  ? new Date(log.timestamp).toLocaleString('nl-BE', {
+                                      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                                    })
+                                  : ''}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="flex items-center gap-3">
                     <span className={`rounded-full px-3 py-1 text-sm font-semibold ${
