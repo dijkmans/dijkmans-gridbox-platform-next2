@@ -246,13 +246,13 @@ function PageContentRouter() {
               {shares.length === 0 ? (
                 <p className="text-sm text-slate-500">Geen actieve shares voor deze kluis.</p>
               ) : shares.map(s => (
-                <div key={s.id} className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div key={s.id} className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-semibold text-slate-900">{s.id}</span>
-                    <span className="text-xs text-slate-500">{s.label || "Geen label"}</span>
+                    <span className="text-base font-semibold text-slate-900">{s.id}</span>
+                    <span className="text-sm text-slate-500">{s.label || "Geen label"}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    <span className={`rounded-full px-3 py-1 text-sm font-semibold ${
                       s.active
                         ? "bg-emerald-50 border border-emerald-300 text-emerald-800"
                         : "bg-amber-50 border border-amber-200 text-amber-800"
@@ -274,7 +274,7 @@ function PageContentRouter() {
                     <button
                       onClick={() => handleDeleteShare(s.id)}
                       title="Toegang intrekken"
-                      className="rounded-xl bg-red-50 border border-red-200 text-red-700 w-10 h-10 flex items-center justify-center hover:bg-red-100 transition-colors"
+                      className="rounded-xl bg-red-50 border border-red-200 text-red-700 p-2 flex items-center justify-center hover:bg-red-100 transition-colors"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
