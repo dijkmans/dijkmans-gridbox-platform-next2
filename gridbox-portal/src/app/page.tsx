@@ -324,9 +324,9 @@ export default function Home() {
             {/* Logo + titel + sync badge */}
             <div className="flex items-center gap-5">
               {gridboxLogoUrl ? (
-                <img src={gridboxLogoUrl} alt="Gridbox" className="h-12 w-auto object-contain" />
+                <img src={gridboxLogoUrl} alt="Gridbox" className="w-16 h-16 object-contain shrink-0" />
               ) : (
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-900 text-white text-sm font-bold shrink-0">
+                <div className="flex w-16 h-16 items-center justify-center rounded-xl bg-slate-900 text-white text-sm font-bold shrink-0">
                   GB
                 </div>
               )}
@@ -531,13 +531,12 @@ export default function Home() {
         ))}
 
         {/* Footer */}
-        <p className="text-center text-xs text-slate-400">✓ hallo ik ben juist</p>
-        <footer className="py-6 text-center text-xs text-slate-400">
+        <footer className="mt-4 py-8 text-center">
           <div className="inline-flex items-center justify-center gap-2 flex-wrap">
             {footerLogoUrl && (
-              <img src={footerLogoUrl} alt="Gridbox footer" className="h-4 w-auto object-contain opacity-60" />
+              <img src={footerLogoUrl} alt="Gridbox footer" className="w-8 h-8 object-contain opacity-60" />
             )}
-            <span>{footerText}</span>
+            <span className="text-sm font-semibold text-slate-500">{footerText}</span>
           </div>
         </footer>
 
