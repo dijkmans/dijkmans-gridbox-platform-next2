@@ -53,25 +53,22 @@ export default function SmartToggleButton({
     }
   }
 
-  const buttonText = isOpen ? `CLOSE ${"\u{1F512}"}` : `OPEN ${"\u{1F513}"}`;
+  const buttonText = isOpen ? "Sluiten" : "Openen";
+  const buttonClass = isOpen
+    ? "rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-semibold px-4 py-3"
+    : "rounded-xl bg-emerald-700 text-white text-sm font-semibold px-4 py-3";
 
   return (
     <button
       onClick={handleToggle}
       disabled={isProcessing || !canInteract}
       className={[
-        "relative flex items-center justify-center h-[46px] w-full overflow-hidden rounded-xl",
-        "border-none text-sm font-black whitespace-nowrap",
-        "bg-emerald-100 transition-opacity",
-        isOpen ? "shadow-none" : "shadow-[0_8px_18px_-4px_rgba(16,185,129,0.45)]",
-        isProcessing ? "opacity-60" : "",
-        !canInteract ? "cursor-not-allowed" : "cursor-pointer"
+        "w-full flex items-center justify-center transition-opacity",
+        buttonClass,
+        isProcessing || !canInteract ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
       ].join(" ")}
     >
-      <div className={`smart-btn-shutter${isOpen ? " smart-btn-shutter-open" : ""}`} />
-      <span className={`smart-btn-text ${isOpen ? "text-emerald-800" : "text-white"}`}>
-        {buttonText}
-      </span>
+      {buttonText}
     </button>
   );
 }

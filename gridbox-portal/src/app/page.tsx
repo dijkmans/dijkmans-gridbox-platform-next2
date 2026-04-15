@@ -314,27 +314,27 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 p-6 lg:p-8">
-      <div className="mx-auto max-w-6xl space-y-4">
+    <main className="min-h-screen bg-slate-50 px-4 py-4 lg:px-8 lg:py-6">
+      <div className="space-y-4">
 
         {/* Header card */}
-        <section className="bg-white border border-slate-200 rounded-3xl shadow-sm px-6 py-6">
+        <section className="bg-white border border-slate-200 rounded-3xl shadow-sm px-8 py-6">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
 
             {/* Logo + titel + sync badge */}
             <div className="flex items-center gap-5">
               {gridboxLogoUrl ? (
-                <img src={gridboxLogoUrl} alt="Gridbox" className="h-10 w-auto object-contain" />
+                <img src={gridboxLogoUrl} alt="Gridbox" className="h-12 w-auto object-contain" />
               ) : (
-                <div className="flex h-10 w-24 items-center justify-center rounded-xl bg-slate-900 text-white text-sm font-bold shrink-0">
-                  GRIDBOX
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-900 text-white text-sm font-bold shrink-0">
+                  GB
                 </div>
               )}
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-1">
                   Beheerdashboard
                 </p>
-                <h1 className="text-2xl font-bold text-slate-900 leading-tight">
+                <h1 className="text-3xl font-bold text-slate-900 leading-tight">
                   Gridbox Dashboard
                 </h1>
                 <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 px-3 py-1 text-xs font-semibold">
@@ -396,12 +396,12 @@ export default function Home() {
         {/* Filter balk */}
         <section className="bg-white border border-slate-200 rounded-3xl shadow-sm px-6 py-4">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mr-1">
+            <span className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 mr-1">
               Locatie
             </span>
             <button
               onClick={() => setSelectedSiteId("all")}
-              className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+              className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
                 selectedSiteId === "all"
                   ? "bg-slate-900 text-white"
                   : "border border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
@@ -413,7 +413,7 @@ export default function Home() {
               <button
                 key={option.siteId}
                 onClick={() => setSelectedSiteId(option.siteId)}
-                className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+                className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
                   selectedSiteId === option.siteId
                     ? "bg-slate-900 text-white"
                     : "border border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
@@ -443,7 +443,7 @@ export default function Home() {
         {/* Sitegroepen */}
         {visibleGroups.map((group) => (
           <section key={group.siteId} className="space-y-3">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-3 px-1">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 mb-3 px-1">
               {group.siteName}
             </h2>
 
@@ -451,14 +451,14 @@ export default function Home() {
               {group.boxes.map((box) => (
                 <article
                   key={box.id}
-                  className="bg-white border border-slate-200 rounded-3xl shadow-sm px-6 py-6 flex flex-wrap items-start justify-between gap-6"
+                  className="bg-white border border-slate-200 rounded-3xl shadow-sm p-6 lg:p-8 flex flex-wrap items-start justify-between gap-6"
                 >
                   {/* Linker kolom: box-info + acties */}
                   <div className="flex flex-col gap-4 flex-1 min-w-[280px]">
 
                     {/* Naam + status */}
                     <div className="flex items-center gap-3 flex-wrap">
-                      <h3 className="text-xl font-bold text-slate-900">
+                      <h3 className="text-2xl font-bold text-slate-900">
                         {box.id.toUpperCase()}
                       </h3>
                       <span className={getStatusClasses(box.status)}>
@@ -468,7 +468,7 @@ export default function Home() {
 
                     {/* Beschrijving + meta */}
                     <div>
-                      <div className="text-sm font-semibold text-slate-700">
+                      <div className="text-base font-semibold text-slate-700">
                         {box.displayName}
                       </div>
                       <div className="text-sm text-slate-400 mt-0.5">
@@ -490,13 +490,13 @@ export default function Home() {
                       </div>
                       <Link
                         href={`/portal/box?id=${encodeURIComponent(box.id)}`}
-                        className="inline-flex items-center justify-center rounded-xl bg-slate-900 text-white px-4 py-3 text-sm font-semibold hover:bg-slate-800 transition-colors no-underline"
+                        className="inline-flex items-center justify-center rounded-xl bg-slate-900 text-white px-5 py-3 text-base font-semibold hover:bg-slate-800 transition-colors no-underline"
                       >
                         Meer / Cockpit
                       </Link>
                       <Link
                         href={`/portal/box?id=${encodeURIComponent(box.id)}&tab=toegang`}
-                        className="inline-flex items-center justify-center rounded-xl bg-slate-900 text-white px-4 py-3 text-sm font-semibold hover:bg-slate-800 transition-colors no-underline"
+                        className="inline-flex items-center justify-center rounded-xl bg-slate-900 text-white px-5 py-3 text-base font-semibold hover:bg-slate-800 transition-colors no-underline"
                       >
                         Toegang beheren
                       </Link>
@@ -513,14 +513,14 @@ export default function Home() {
                         {box.shareSummary.phoneNumbers.map((num) => (
                           <span
                             key={num}
-                            className="rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold px-3 py-1"
+                            className="rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-sm font-semibold px-3 py-1"
                           >
                             {num}
                           </span>
                         ))}
                       </div>
                     )}
-                    <p className="text-xs text-slate-400 mt-2">
+                    <p className="text-sm text-slate-400 mt-2">
                       {box.shareSummary?.totalActive || 0} nummers gekoppeld
                     </p>
                   </div>

@@ -141,14 +141,24 @@ function PageContentRouter() {
 
         {/* Header */}
         <header className="bg-white border border-slate-200 rounded-3xl shadow-sm px-6 py-5">
-          <h1 className="text-3xl font-bold text-slate-900 leading-tight">{box?.displayName}</h1>
-          <div className="mt-2 flex flex-wrap gap-4 text-sm text-slate-600 font-semibold">
-            <span className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full ${box?.status === "online" ? "bg-emerald-500" : "bg-red-500"}`} />
-              {box?.status?.toUpperCase() || "ONBEKEND"}
-            </span>
-            <span>📍 {box?.siteName}</span>
-            <span>🆔 {boxId}</span>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900 leading-tight">{box?.displayName}</h1>
+              <div className="mt-2 flex flex-wrap gap-4 text-sm text-slate-600 font-semibold">
+                <span className="flex items-center gap-2">
+                  <span className={`w-2.5 h-2.5 rounded-full ${box?.status === "online" ? "bg-emerald-500" : "bg-red-500"}`} />
+                  {box?.status?.toUpperCase() || "ONBEKEND"}
+                </span>
+                <span>📍 {box?.siteName}</span>
+                <span>🆔 {boxId}</span>
+              </div>
+            </div>
+            <Link
+              href="/"
+              className="shrink-0 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-semibold px-4 py-2 hover:bg-slate-50 transition-colors no-underline"
+            >
+              ← Overzicht
+            </Link>
           </div>
         </header>
 
@@ -294,12 +304,6 @@ function PageContentRouter() {
           </div>
         </section>
 
-        {/* Footer */}
-        <footer className="pt-2 pb-4 border-t border-slate-200">
-          <Link href="/" className="text-sm text-slate-500 font-semibold hover:text-slate-900 transition-colors no-underline">
-            ← Terug naar overzicht
-          </Link>
-        </footer>
 
       </div>
 
