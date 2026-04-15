@@ -74,6 +74,16 @@ exports.onShareStatusChanged = onDocumentWritten({
             console.error('Fout bij versturen via Bird API:', errorData);
         } else {
             console.log(`Succesvol SMS verstuurd naar ${phoneNumber}`);
+
+            await db.collection('smsLogs').add({
+                phoneNumber,
+                text: body,
+                richting: 'uitgaand',
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                boxId,
+                trigger: 'share-invitation',
+                templateName: 'invitation'
+            });
         }
         
         // Log als tekst-string (ISO formaat) zodat de frontend het snapt

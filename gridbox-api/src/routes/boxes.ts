@@ -462,11 +462,10 @@ router.post("/portal/boxes/:id/shares", async (req, res) => {
     });
 
     if (isActiveShare) {
-      await sendBirdSms(
-        normalizedPhoneNumber,
-        `Uw toegang tot Gridbox ${boxId} is geactiveerd.`,
-        { boxId, trigger: "direct-delen" }
-      );
+      console.log("Direct actieve share aangemaakt zonder extra activatie-sms", {
+        boxId,
+        phoneNumber: normalizedPhoneNumber
+      });
     }
 
     return res.json({
@@ -552,12 +551,12 @@ router.put("/portal/boxes/:id/shares/:shareId/activate", async (req, res) => {
       activatedBy: portalUser.email || "courier-portal"
     });
 
-    // --- SMS-TRIGGER: Stuur SMS naar het geactiveerde nummer ---
-    await sendBirdSms(
-      shareId,
-      `Uw toegang tot Gridbox ${boxId} is geactiveerd.`,
-      { boxId, trigger: "share-activate" }
-    );
+    // Geen extra activatie-sms hier.
+    // De gewenste uitnodigings-sms loopt via onShareStatusChanged en smsTemplates/invitation.
+    console.log("Share geactiveerd zonder extra activatie-sms", {
+      boxId,
+      shareId
+    });
 
     return res.json({
       ok: true,
