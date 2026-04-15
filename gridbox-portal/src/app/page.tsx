@@ -536,6 +536,7 @@ export default function Home() {
         ))}
 
         {/* Footer */}
+        <p className="text-center text-xs text-slate-400">✓ hallo ik ben juist</p>
         <footer className="pt-2 pb-4 text-center text-sm text-slate-500 font-semibold">
           <div className="inline-flex items-center justify-center gap-2 flex-wrap">
             {footerLogoUrl && (
