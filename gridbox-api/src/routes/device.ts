@@ -164,11 +164,6 @@ router.post("/device/bootstrap/claim", async (req, res) => {
     const apiBaseUrl = `${req.protocol}://${host}`;
     const claimedAt = nowIso();
 
-    const templateSnap = await db.collection("boxes").doc("gbox-005").get();
-    const templateData = (templateSnap.exists ? templateSnap.data() : {}) as Record<string, unknown>;
-    const templateHardware = templateData.hardware ?? {};
-    const templateSoftware = templateData.software ?? {};
-
     const boxRef = db.collection("boxes").doc(boxId);
     const batch = db.batch();
 
@@ -191,8 +186,6 @@ router.post("/device/bootstrap/claim", async (req, res) => {
         boxId,
         customerId,
         siteId,
-        hardware: templateHardware,
-        software: templateSoftware,
         updatedAt: claimedAt
       },
       { merge: true }

@@ -725,7 +725,19 @@ def ensure_legacy_mirror_if_enabled(customer_id, site_id):
 
 def bootstrap_if_needed():
     if isinstance(runtime_config, dict) and runtime_config:
-        log("INFO: new bootstrap flow active, skipping legacy Firestore bootstrap")
+        log("INFO: new bootstrap flow active, checking hardware/software fields")
+        existing_doc = box_doc_ref.get()
+        existing_data = existing_doc.to_dict() if existing_doc.exists else {}
+        init_payload = {}
+        if "hardware" not in existing_data:
+            init_payload["hardware"] = build_hardware_defaults_from_box_config()
+        if "software" not in existing_data:
+            init_payload["software"] = build_software_defaults_from_box_config()
+        if init_payload:
+            init_payload["updatedAt"] = now_iso()
+            init_payload["updatedBy"] = f"gridbox-service-{VERSION}"
+            box_doc_ref.set(init_payload, merge=True)
+            log(f"Hardware/software defaults geschreven voor boxes/{DOCUMENT_ID}")
         refresh_cached_config()
         load_box_state_from_firestore()
         return
