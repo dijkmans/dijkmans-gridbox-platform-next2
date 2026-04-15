@@ -379,7 +379,7 @@ router.post("/device/heartbeat", async (req, res) => {
       );
     }
 
-    const existingRmsDeviceId = boxDoc.data()?.rmsDeviceId;
+    const existingRmsDeviceId = (boxDoc.data()?.hardware as Record<string, unknown> | undefined)?.rmsDeviceId;
     const gatewayMac =
       typeof body.gatewayMac === "string" && body.gatewayMac.trim()
         ? body.gatewayMac.trim()

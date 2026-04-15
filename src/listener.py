@@ -1023,6 +1023,9 @@ def try_backend_heartbeat(version_raspberry, software_update):
     if provisioning_id:
         payload["provisioningId"] = provisioning_id
 
+    gateway_ip = get_gateway_ip()
+    if gateway_ip:
+        ping_gateway(gateway_ip)
     gateway_mac = get_gateway_mac()
     if gateway_mac:
         payload["gatewayMac"] = gateway_mac
