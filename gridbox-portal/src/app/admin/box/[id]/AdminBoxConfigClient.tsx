@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/firebase";
 import { apiUrl } from "@/lib/api";
@@ -85,9 +85,9 @@ function formatDate(val: string | null | undefined): string {
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function AdminBoxConfigClient() {
-  const params = useParams();
+  const searchParams = useSearchParams();
   const router = useRouter();
-  const boxId = typeof params.id === "string" ? params.id : Array.isArray(params.id) ? params.id[0] : "";
+  const boxId = searchParams.get("id") ?? "";
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

@@ -1190,7 +1190,7 @@ export default function AdminPage() {
                                 <td className="py-4">
                                   <div className="flex gap-2">
                                     <Link
-                                      href={`/admin/box/${encodeURIComponent(box.id)}`}
+                                      href={`/admin/box/_?id=${encodeURIComponent(box.id)}`}
                                       className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
                                       title="Box bewerken"
                                     >
