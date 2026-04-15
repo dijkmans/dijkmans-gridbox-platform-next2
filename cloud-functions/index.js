@@ -1,4 +1,4 @@
-﻿const { onDocumentWritten } = require('firebase-functions/v2/firestore');
+const { onDocumentWritten } = require('firebase-functions/v2/firestore');
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
 
@@ -90,73 +90,9 @@ exports.onShareStatusChanged = onDocumentWritten({
 });
 
 // 2. INKOMENDE SMS HANDLER
-exports.smsHandler = onRequest({ region: 'europe-west1' }, async (req, res) => {
-    try {
-        const payload = req.body?.payload;
-        if (!payload) return res.status(200).send('OK');
-
-        const messageText = payload.lastMessage?.preview?.text || "";
-        const originator = payload.lastMessage?.sender?.contact?.identifierValue || "Onbekend";
-        const msg = messageText.toUpperCase();
-
-        const boxNrMatch = msg.match(/\d+/); 
-        
-        if (boxNrMatch) {
-            const boxNr = boxNrMatch[0];
-            const shortBoxNr = parseInt(boxNr, 10).toString();
-            const boxId = 'gbox-' + boxNr.padStart(3, '0');
-            
-            let action = 'UNKNOWN';
-            if (msg.includes('OPEN')) action = 'OPEN';
-            else if (msg.includes('CLOSE')) action = 'CLOSE';
-
-            // Log als tekst-string (ISO formaat) zodat de frontend het snapt
-            await db.collection('boxes').doc(boxId).collection('commands').add({
-                command: action,
-                source: `SMS van ${originator} ("${messageText}")`,
-                status: action === 'UNKNOWN' ? 'completed' : 'pending',
-                createdAt: new Date().toISOString()
-            });
-
-            let templateName = 'confirm_open';
-            if (action === 'CLOSE') templateName = 'confirm_close';
-            if (action === 'UNKNOWN') templateName = 'unknown_command';
-
-            const templateSnap = await db.collection('smsTemplates').doc(templateName).get();
-            let replyBody = `Actie geregistreerd voor Gridbox ${shortBoxNr}.`; 
-            
-            if (templateSnap.exists && templateSnap.data().body) {
-                replyBody = templateSnap.data().body
-                    .replace(/\[boxId\]/g, boxNr)
-                    .replace(/\[boxNr\]/g, boxNr)
-                    .replace(/\[shortBoxNr\]/g, shortBoxNr);
-            }
-
-            // Bird API integratie (Inline, zonder onnodige helpers, exact zoals origineel)
-            const WORKSPACE_ID = '145d3c27-76ac-4d6a-9e10-1f7dff2f6bcb';
-            const CHANNEL_ID = 'a703f755-7154-532a-89a0-70103633682e';
-            const API_KEY = 'bRoknKEna83EdGVd7wF2VF6ZpAKcP1IXWh4A';
-
-            const apiPayload = {
-                receiver: { contacts: [{ identifierValue: originator }] },
-                body: { type: 'text', text: { text: replyBody } }
-            };
-
-            await fetch(`https://api.bird.com/workspaces/${WORKSPACE_ID}/channels/${CHANNEL_ID}/messages`, {
-                method: 'POST',
-                headers: { 
-                    'Authorization': `AccessKey ${API_KEY}`, 
-                    'Content-Type': 'application/json', 
-                    'Accept': 'application/json' 
-                },
-                body: JSON.stringify(apiPayload)
-            });
-        }
-        res.status(200).send('OK');
-    } catch (error) {
-        console.error("Fout in smsHandler:", error);
-        res.status(500).send('Error');
-    }
+exports.smsHandler = onRequest({ region: 'europe-west1' }, async (_req, res) => {
+    console.warn('smsHandler is deprecated. Use gridbox-api /webhooks/bird/inbound instead.');
+    return res.status(410).send('smsHandler deprecated - use gridbox-api webhook');
 });
 
 // 3. OVERIGE FUNCTIES
