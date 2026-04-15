@@ -455,7 +455,8 @@ router.post("/invites/send-phone-code", async (req: Request, res: Response) => {
 
     await sendBirdSms(
       phoneNumber,
-      `Je verificatiecode voor Gridbox is ${code}. Deze code is ${PHONE_CODE_TTL_MINUTES} minuten geldig.`
+      `Je verificatiecode voor Gridbox is ${code}. Deze code is ${PHONE_CODE_TTL_MINUTES} minuten geldig.`,
+      { trigger: "invite-verificatie" }
     );
 
     await inviteDoc.ref.update({

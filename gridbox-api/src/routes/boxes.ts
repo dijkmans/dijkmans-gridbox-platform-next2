@@ -12,6 +12,7 @@ import { getMembershipByEmail } from "../repositories/membershipRepository";
 import { getSiteById, listSites } from "../repositories/siteRepository";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
+import { sendBirdSms } from "../services/birdSms";
 
 const router = Router();
 
@@ -543,10 +544,12 @@ router.put("/portal/boxes/:id/shares/:shareId/activate", async (req, res) => {
       activatedBy: portalUser.email || "courier-portal"
     });
 
-    // --- DE SMS-TRIGGER (Toekomstige stap) ---
-    // Voorlopig simuleren we de trigger met een console.log.
-    // Dit is de plek waar je de daadwerkelijke SMS-service zou aanroepen.
-    console.log(`[SMS TRIGGER] Share activated and SMS sent to +${shareId} for Gridbox ${boxId}.`);
+    // --- SMS-TRIGGER: Stuur SMS naar het geactiveerde nummer ---
+    await sendBirdSms(
+      shareId,
+      `Uw toegang tot Gridbox ${boxId} is geactiveerd.`,
+      { boxId, trigger: "share-activate" }
+    );
 
     return res.json({
       ok: true,

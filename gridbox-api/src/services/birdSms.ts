@@ -1,4 +1,5 @@
-﻿import { env } from "../config/env";
+import { env } from "../config/env";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
 function requireBirdConfig() {
   if (!env.birdApiKey || !env.birdWorkspaceId || !env.birdChannelId) {
@@ -6,7 +7,11 @@ function requireBirdConfig() {
   }
 }
 
-export async function sendBirdSms(phoneNumber: string, text: string): Promise<void> {
+export async function sendBirdSms(
+  phoneNumber: string,
+  text: string,
+  logContext?: { boxId?: string; trigger?: string }
+): Promise<void> {
   requireBirdConfig();
 
   const payload = {
@@ -42,4 +47,14 @@ export async function sendBirdSms(phoneNumber: string, text: string): Promise<vo
     const errorText = await response.text();
     throw new Error(`BIRD_SMS_FAILED: ${errorText}`);
   }
+
+  const db = getFirestore();
+  await db.collection("smsLogs").add({
+    phoneNumber,
+    text,
+    richting: "uitgaand",
+    timestamp: FieldValue.serverTimestamp(),
+    boxId: logContext?.boxId ?? null,
+    trigger: logContext?.trigger ?? "onbekend",
+  });
 }
