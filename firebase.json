@@ -16,13 +16,18 @@
     ],
     "cleanUrls": true,
     "trailingSlash": false,
+    "redirects": [
+      { "source": "/portal/box/_next/:path*",         "destination": "/_next/:path*", "type": 301 },
+      { "source": "/portal/box-events/_next/:path*",  "destination": "/_next/:path*", "type": 301 },
+      { "source": "/portal/box-picture/_next/:path*", "destination": "/_next/:path*", "type": 301 }
+    ],
     "rewrites": [
+      { "source": "/portal/box/__next.portal.box.__PAGE__.txt",             "destination": "/portal/box/__next._full.txt" },
+      { "source": "/portal/box-events/__next.portal.box-events.__PAGE__.txt", "destination": "/portal/box-events/__next._full.txt" },
+      { "source": "/portal/box-picture/__next.portal.box-picture.__PAGE__.txt", "destination": "/portal/box-picture/__next._full.txt" },
       { "source": "/portal/box",         "destination": "/portal/box.html" },
-      { "source": "/portal/box/",        "destination": "/portal/box.html" },
       { "source": "/portal/box-events",  "destination": "/portal/box-events.html" },
-      { "source": "/portal/box-events/", "destination": "/portal/box-events.html" },
-      { "source": "/portal/box-picture", "destination": "/portal/box-picture.html" },
-      { "source": "/portal/box-picture/","destination": "/portal/box-picture.html" }
+      { "source": "/portal/box-picture", "destination": "/portal/box-picture.html" }
     ]
   }
 }
