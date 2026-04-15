@@ -423,8 +423,14 @@ router.get("/admin/boxes/:boxId", async (req, res) => {
       hardware: data.hardware ?? null,
       gatewayIp: typeof data.gatewayIp === "string" ? data.gatewayIp : null,
       gatewayMac: typeof data.gatewayMac === "string" ? data.gatewayMac : null,
-      scriptVersion: typeof data.scriptVersion === "string" ? data.scriptVersion : null,
-      lastProvisionedAt: data.lastProvisionedAt || null
+      scriptVersion: typeof data.scriptVersion === "string"
+        ? data.scriptVersion
+        : typeof data.software?.currentVersion === "string"
+          ? data.software.currentVersion
+          : null,
+      lastProvisionedAt: data.lastProvisionedAt
+        || data.state?.lastHeartbeatAt
+        || null
     };
 
     console.log("ADMIN GET BOX", { boxId, user: context.portalUser.email });

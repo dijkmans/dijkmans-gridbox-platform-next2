@@ -529,8 +529,8 @@ export default function AdminBoxConfigClient() {
         <SectionCard title="Netwerk & info">
           <KVRow label="Gateway IP" value={box?.gatewayIp} />
           <KVRow label="Gateway MAC" value={box?.gatewayMac} />
-          <KVRow label="Script versie" value={box?.scriptVersion} />
-          <KVRow label="Laatste provisioning" value={formatDate(box?.lastProvisionedAt)} />
+          <KVRow label="Software versie" value={box?.scriptVersion} />
+          <KVRow label="Laatste heartbeat" value={formatDate(box?.lastProvisionedAt)} />
           <KVRow label="Laatste update" value={formatDate(box?.updatedAt)} />
         </SectionCard>
 
