@@ -1,0 +1,347 @@
+{
+    "gbox-001": {
+        "info": {
+            "site": "Geel ",
+            "customer": "Powergrid"
+        },
+        "hardware": {
+            "camera": {
+                "snapshotIntervalSeconds": 5,
+                "enabled": true,
+                "username": "admin",
+                "snapshotUrl": "http://192.168.10.100/cgi-bin/snapshot.cgi",
+                "postCloseSnapshotDurationSeconds": 30,
+                "password": "victoria1"
+            },
+            "lighting": {
+                "lightOffDelaySeconds": 60,
+                "onWhenOpen": true
+            },
+            "autoClose": {
+                "delaySeconds": 30,
+                "enabled": true
+            }
+        },
+        "software": {
+            "lastHeartbeat": 492569.93,
+            "targetVersion": "1.0.27",
+            "updateStatus": "IDLE",
+            "currentVersion": "1.0.30",
+            "latestAvailable": "1.0.27",
+            "gitCommit": "bcc875a"
+        },
+        "status": "CLOSE"
+    },
+    "gbox-002": {
+        "activeHigh": true,
+        "active": true,
+        "hardwareUpdatedAt": "2025-12-24 00:44:19.182000+00:00",
+        "Portal": {
+            "Site": "Hoboken",
+            "BoxNumber": 1,
+            "Customer": "Umicore"
+        },
+        "state": {
+            "state": "closing",
+            "requestedBy": "+32460235151",
+            "since": "2025-12-24 01:19:03.595000+00:00",
+            "source": "portal",
+            "requestedAt": "2025-12-24 01:19:03.595000+00:00"
+        },
+        "description": "Gridbox simulator",
+        "site": {
+            "visibility": "private",
+            "name": "Winkelomheide"
+        },
+        "box": {
+            "access24h": true,
+            "number": 1,
+            "desired": "open",
+            "type ": "gridbox",
+            "desiredAt": "2026-01-01 23:49:14.115000+00:00",
+            "desiredBy": "portal"
+        },
+        "shutterMoveMs": 20000,
+        "desired": "close",
+        "desiredAt": "2025-12-26 02:07:12.038000+00:00",
+        "relayPulseMs": 350,
+        "updatedAt": "2025-12-17T21:23:54.206Z",
+        "ui": {
+            "hidden": false,
+            "order ": 1
+        },
+        "hardware": {
+            "shutterMoveMs": 270000,
+            "relayPulseMs": 350,
+            "pins": {
+                "closePin": 27,
+                "lightPin": 22,
+                "openPin": 17
+            },
+            "camera": {
+                "mode": "snapshots",
+                "trigger": [
+                    "open",
+                    "close"
+                ],
+                "enabled": false,
+                "cooldownMs": 15000,
+                "snapshotIntervalMs": 700,
+                "snapshotCount": 3
+            },
+            "configVersion": 1,
+            "lighting": {
+                "maxOnWhenOpenMs": 900000,
+                "enabled": true,
+                "onWhenOpen": true,
+                "afterCloseMs": 30000,
+                "onDuringMotion": true
+            },
+            "activeHigh": true
+        },
+        "location": {
+            "geo": "GeoPoint(latitude=51.1677, longitude=4.3352)",
+            "city": "Geel",
+            "number ": "111",
+            "postalCode": "2440",
+            "street ": "Winkelomseheide",
+            "country": "BE"
+        },
+        "status": {
+            "updatedAt": 1766092410389,
+            "online": true,
+            "door": "closed",
+            "timestamp": "2025-12-15T21:47:50.321Z",
+            "simulated": true,
+            "state": "closed",
+            "desired": "closed",
+            "lock": "locked",
+            "desiredAt": "2025-12-24 01:19:03.595000+00:00",
+            "lastError": null
+        },
+        "lifecycle": {
+            "closedAt": "2025-12-17T21:12:24.468Z",
+            "state": "open",
+            "openedAt": "2025-12-17T21:23:54.206Z",
+            "openedBy": "+32460235151",
+            "closedBy": "+32460235151",
+            "source": "sms"
+        },
+        "organisation": {
+            "type ": "retail",
+            "partner": true,
+            "name": "Powergrid"
+        },
+        "desiredBy": "portal"
+    },
+    "gbox-003": {
+        "activeHigh": true,
+        "active": true,
+        "hardwareUpdatedAt": "2025-12-24 00:44:19.182000+00:00",
+        "Portal": {
+            "Site": "Geel",
+            "BoxNumber": 1,
+            "Customer": "Powergrid"
+        },
+        "description": "Gridbox simulator",
+        "shutterMoveMs": 20000,
+        "site": {
+            "visibility": "private",
+            "name": "Winkelomheide"
+        },
+        "box": {
+            "access24h": true,
+            "number": 1,
+            "desired": "open",
+            "type ": "gridbox",
+            "desiredAt": "2026-01-26 21:35:01.321000+00:00",
+            "desiredBy": "legacy-open"
+        },
+        "state": {
+            "state": "closing",
+            "requestedBy": "+32460235151",
+            "since": "2025-12-24 01:19:03.595000+00:00",
+            "source": "portal",
+            "requestedAt": "2025-12-24 01:19:03.595000+00:00"
+        },
+        "desired": "close",
+        "desiredAt": "2025-12-26 08:28:11.823000+00:00",
+        "relayPulseMs": 350,
+        "updatedAt": "2025-12-17T21:23:54.206Z",
+        "ui": {
+            "hidden": false,
+            "order ": 1
+        },
+        "hardware": {
+            "relayPulseMs": 350,
+            "configVersion": 1,
+            "pins": {
+                "lightPin": 22,
+                "closePin": 27,
+                "openPin": 17
+            },
+            "camera": {
+                "mode": "snapshots",
+                "cooldownMs": 15000,
+                "enabled": false,
+                "trigger": [
+                    "open",
+                    "close"
+                ],
+                "snapshotIntervalMs": 700,
+                "snapshotCount": 3
+            },
+            "shutterMoveMs": 270000,
+            "lighting": {
+                "maxOnWhenOpenMs": 900000,
+                "enabled": true,
+                "onWhenOpen": true,
+                "afterCloseMs": 30000,
+                "onDuringMotion": true
+            },
+            "activeHigh": true
+        },
+        "location": {
+            "geo": "GeoPoint(latitude=51.1677, longitude=4.3352)",
+            "number ": "111",
+            "street ": "Winkelomseheide",
+            "postalCode": "2440",
+            "city": "Geel",
+            "country": "BE"
+        },
+        "status": {
+            "updatedAt": 1766092410389,
+            "online": true,
+            "door": "closed",
+            "timestamp": "2025-12-15T21:47:50.321Z",
+            "simulated": true,
+            "state": "closed",
+            "desired": "closed",
+            "lock": "locked",
+            "desiredAt": "2025-12-24 01:19:03.595000+00:00",
+            "lastError": null
+        },
+        "lifecycle": {
+            "openedAt": "2025-12-17T21:23:54.206Z",
+            "closedAt": "2025-12-17T21:12:24.468Z",
+            "state": "open",
+            "openedBy": "+32460235151",
+            "closedBy": "+32460235151",
+            "source": "sms"
+        },
+        "organisation": {
+            "type ": "retail",
+            "partner": true,
+            "name": "Powergrid"
+        },
+        "desiredBy": "portal"
+    },
+    "gbox-004": {
+        "info": {
+            "site": "Geel ",
+            "customer": "Powergrid"
+        },
+        "hardware": {
+            "camera": {
+                "snapshotIntervalSeconds": 5,
+                "enabled": true,
+                "username": "admin",
+                "snapshotUrl": "http://192.168.10.100/cgi-bin/snapshot.cgi",
+                "postCloseSnapshotDurationSeconds": 30,
+                "password": "victoria1"
+            },
+            "lighting": {
+                "lightOffDelaySeconds": 60,
+                "onWhenOpen": true
+            },
+            "autoClose": {
+                "delaySeconds": 30,
+                "enabled": true
+            }
+        },
+        "software": {
+            "lastHeartbeatIso": "2026-03-11T13:41:20.053374+00:00",
+            "lastHeartbeat": 492547.79,
+            "piModel": "Windows-simulatie",
+            "updateStatus": "IDLE",
+            "currentVersion": "1.0.31",
+            "lastHeartbeatUnix": 1773236480,
+            "targetVersion": "1.0.27",
+            "pythonVersion": "3.13.0",
+            "latestAvailable": "1.0.27",
+            "gitCommit": "bcc875a",
+            "platform": "Windows-11-10.0.26200-SP0"
+        }
+    },
+    "gbox-005": {
+        "provisioning": {
+            "scriptVersion": "v1.0.47",
+            "lastProvisionedAt": "2026-03-14T20:51:36.719329+01:00",
+            "initializedAt": "2026-03-14T08:05:01.553383+01:00",
+            "lastProvisionedBy": "gridbox-service-v1.0.47",
+            "initialized": true,
+            "initializedBy": "gridbox-service-v1.0.46"
+        },
+        "siteId": "powergrid-geel",
+        "updatedAt": "2026-03-16T18:36:17.466412+01:00",
+        "customerId": "powergrid",
+        "hardware": {
+            "camera": {
+                "snapshotIntervalSeconds": 5,
+                "username": "admin",
+                "snapshotUrl": "http://192.168.10.100/cgi-bin/snapshot.cgi",
+                "enabled": true,
+                "postCloseSnapshotDurationSeconds": 30,
+                "password": "victoria1"
+            },
+            "lighting": {
+                "lightOffDelaySeconds": 60,
+                "onWhenOpen": true
+            },
+            "autoClose": {
+                "delaySeconds": 30,
+                "enabled": true
+            },
+            "shutter": {
+                "closeDurationSeconds": 30,
+                "openDurationSeconds": 30
+            }
+        },
+        "updatedBy": "gridbox-service-v1.0.47",
+        "boxId": "gbox-005",
+        "state": {
+            "lastActionAt": "2026-03-16T18:21:49.715172+01:00",
+            "boxIsOpen": false,
+            "lastActionSource": "Web Dashboard"
+        },
+        "status": "online",
+        "software": {
+            "restartDelaySeconds": 2,
+            "pipInstallOnDeploy": true,
+            "targetVersion": "v1.0.47",
+            "lastUpdateAttemptAt": "2026-03-14T20:43:54.759104+01:00",
+            "deploymentMode": "firestore",
+            "gitCommit": "865b45a",
+            "lastHeartbeatUnix": 1773682577,
+            "platform": "Linux-6.12.47+rpt-rpi-v8-aarch64-with-glibc2.41",
+            "piModel": "Raspberry Pi 4 Model B Rev 1.5",
+            "updateStatus": "ON_TARGET",
+            "latestGithub": "v4.3",
+            "githubTagPattern": "v*",
+            "serviceName": "gridbox-listener.service",
+            "softwareUpdateRequested": false,
+            "gitCommitLocal": "45756cc",
+            "deploymentStatus": "ON_TARGET",
+            "pythonVersion": "3.13.5",
+            "status": "new_install",
+            "lastHeartbeatIso": "2026-03-16T18:36:17.466412+01:00",
+            "versionRaspberry": "v1.0.47",
+            "lastError": null
+        }
+    },
+    "pi-test-001": {
+        "name": "Raspberry Pi Test Unit",
+        "status": "online",
+        "last_seen": "2026-03-16 16:02:04.725028+00:00"
+    }
+}

@@ -1,0 +1,59 @@
+{
+  "sitesCount": 1,
+  "boxesCount": 6,
+  "sites": [
+    {
+      "id": "powergrid-geel",
+      "customerId": "powergrid",
+      "name": "Winkel Geel",
+      "address": "Winkelomseheide 111",
+      "city": "Geel",
+      "postalCode": "2440",
+      "country": "BE"
+    }
+  ],
+  "boxes": [
+    {
+      "id": "gbox-001",
+      "boxId": null,
+      "siteId": null,
+      "customerId": null,
+      "updatedAt": null
+    },
+    {
+      "id": "gbox-002",
+      "boxId": null,
+      "siteId": null,
+      "customerId": null,
+      "updatedAt": "2025-12-17T21:23:54.206Z"
+    },
+    {
+      "id": "gbox-003",
+      "boxId": null,
+      "siteId": null,
+      "customerId": null,
+      "updatedAt": "2025-12-17T21:23:54.206Z"
+    },
+    {
+      "id": "gbox-004",
+      "boxId": null,
+      "siteId": null,
+      "customerId": null,
+      "updatedAt": null
+    },
+    {
+      "id": "gbox-005",
+      "boxId": "gbox-005",
+      "siteId": "powergrid-geel",
+      "customerId": "powergrid",
+      "updatedAt": "2026-03-19T04:42:41.737057+01:00"
+    },
+    {
+      "id": "pi-test-001",
+      "boxId": null,
+      "siteId": null,
+      "customerId": null,
+      "updatedAt": null
+    }
+  ]
+}

@@ -1,0 +1,805 @@
+import { Router } from "express";
+import { requirePortalUser, verifyBearerToken } from "../auth/verifyBearerToken";
+import { mockEventsByBoxId } from "../data/mockData";
+import { mapFirestoreBoxToPortalBoxDetail } from "../mappers/boxDetailMapper";
+import { mapFirestoreBoxToPortalBox } from "../mappers/boxMapper";
+import { getBoxById, listBoxes } from "../repositories/boxRepository";
+import { addBoxCommand, getBoxCommandById, getLatestBoxCommand, listBoxCommands } from "../repositories/commandRepository";
+import { hasCustomerBoxAccess, listBoxIdsForCustomer } from "../repositories/customerBoxAccessRepository";
+import { getCustomerById } from "../repositories/customerRepository";
+import { getMembershipByEmail } from "../repositories/membershipRepository";
+import { getSiteById, listSites } from "../repositories/siteRepository";
+import { getFirestore } from "firebase-admin/firestore";
+
+const router = Router();
+
+const ACTIVE_PORTAL_BOX_IDS = ["gbox-004", "gbox-005"];
+const ALLOWED_OPEN_EMAILS = ["gridboxbv@gmail.com", "piet.dijkmans@gmail.com"];
+
+function applyPortalOverrides(box: any) {
+  if (box.id === "gbox-005") {
+    return {
+      ...box,
+      displayName: "Gridbox Geel (actief)",
+      status: "online",
+      connectivitySummary: "Online en operationeel"
+    };
+  }
+
+  if (box.id === "gbox-004") {
+    return {
+      ...box,
+      displayName: "Gridbox Geel (oud model)",
+      status: "offline",
+      canOpen: false,
+      connectivitySummary: "Niet actief",
+      hardwareSummary: "Legacy box",
+      availableActions: {
+        ...(box.availableActions || {}),
+        open: false
+      }
+    };
+  }
+
+  return box;
+}
+
+function getStatusCode(error: unknown): number {
+  if (typeof error === "object" && error !== null && "statusCode" in error) {
+    const value = (error as any).statusCode;
+    if (typeof value === "number") {
+      return value;
+    }
+  }
+
+  return 500;
+}
+
+async function requireCustomerContext(email?: string) {
+  if (!email) {
+    const error = new Error("FORBIDDEN");
+    (error as any).statusCode = 403;
+    throw error;
+  }
+
+  const membership = await getMembershipByEmail(email);
+
+  if (!membership || !membership.customerId) {
+    const error = new Error("FORBIDDEN");
+    (error as any).statusCode = 403;
+    throw error;
+  }
+
+  const customer = await getCustomerById(membership.customerId);
+
+  if (!customer || customer.active !== true) {
+    const error = new Error("CUSTOMER_INACTIVE");
+    (error as any).statusCode = 403;
+    throw error;
+  }
+
+  return {
+    membership,
+    customer
+  };
+}
+
+router.get("/portal/boxes", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+
+    console.log("PORTAL BOX LIST REQUEST", {
+      user: portalUser,
+      customerId: context.membership.customerId
+    });
+
+    const [boxDocs, siteDocs, allowedBoxIds] = await Promise.all([
+      listBoxes(),
+      listSites(),
+      listBoxIdsForCustomer(context.membership.customerId!)
+    ]);
+
+    const allowedSet = new Set(allowedBoxIds);
+
+    const filteredBoxDocs = boxDocs.filter(
+      (doc) => allowedSet.has(doc.id)
+    );
+
+    const items = filteredBoxDocs
+      .map((doc) => mapFirestoreBoxToPortalBox(doc, siteDocs))
+      .map(applyPortalOverrides);
+
+    return res.json({
+      items,
+      count: items.length,
+      mode: "firestore"
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot het portaal"
+      });
+    }
+
+    console.error("FOUT in /portal/boxes", error);
+
+    return res.status(500).json({
+      error: "BOX_LIST_FAILED",
+      message: "Kon boxen niet ophalen"
+    });
+  }
+});
+
+router.get("/portal/boxes/:id", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+
+    console.log("PORTAL BOX DETAIL REQUEST", {
+      boxId,
+      user: portalUser,
+      customerId: context.membership.customerId
+    });
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    const boxDoc = await getBoxById(boxId);
+
+    if (!boxDoc) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    const rawSiteId =
+      typeof boxDoc.data.siteId === "string" && boxDoc.data.siteId.trim().length > 0
+        ? boxDoc.data.siteId.trim()
+        : null;
+
+    const siteDoc = rawSiteId ? await getSiteById(rawSiteId) : null;
+
+    const detail = applyPortalOverrides(
+      mapFirestoreBoxToPortalBoxDetail(boxDoc, siteDoc || undefined)
+    );
+
+    return res.json({
+      ...detail,
+      mode: "firestore"
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in /portal/boxes/:id", error);
+
+    return res.status(500).json({
+      error: "BOX_DETAIL_FAILED",
+      message: "Kon boxdetail niet ophalen"
+    });
+  }
+});
+
+router.get("/portal/boxes/:id/shares", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+
+    console.log("PORTAL BOX SHARES REQUEST", {
+      boxId,
+      user: portalUser,
+      customerId: context.membership.customerId
+    });
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    const boxDoc = await getBoxById(boxId);
+
+    if (!boxDoc) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    const db = getFirestore();
+    const snapshot = await db.collection("boxes").doc(boxId).collection("shares").get();
+
+    const items = snapshot.docs
+      .map((doc) => {
+        const data = doc.data() as Record<string, any>;
+        const shareId = doc.id;
+
+        let typeGuess: "phone" | "uid" | "unknown" = "unknown";
+
+        if (/^\+\d{8,20}$/.test(shareId)) {
+          typeGuess = "phone";
+        } else if (/^[A-Za-z0-9_-]{20,}$/.test(shareId)) {
+          typeGuess = "uid";
+        }
+
+        const active = data.active === true || data.status === "active";
+
+        return {
+          id: shareId,
+          typeGuess,
+          active,
+          label: typeof data.name === "string" ? data.name : null,
+          email: typeof data.email === "string" ? data.email : null,
+          role: typeof data.role === "string" ? data.role : null,
+          addedBy: typeof data.addedBy === "string" ? data.addedBy : null,
+          createdAt: typeof data.createdAt === "string" ? data.createdAt : null
+        };
+      })
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+
+    return res.json({
+      boxId,
+      items,
+      count: items.length
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in /portal/boxes/:id/shares", error);
+
+    return res.status(500).json({
+      error: "BOX_SHARES_FAILED",
+      message: "Kon shares niet ophalen"
+    });
+  }
+});
+router.get("/portal/boxes/:id/commands/latest", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+
+    console.log("PORTAL BOX LATEST COMMAND REQUEST", {
+      boxId,
+      user: portalUser,
+      customerId: context.membership.customerId
+    });
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    const latest = await getLatestBoxCommand(boxId);
+
+    if (!latest) {
+      return res.status(404).json({
+        error: "COMMAND_NOT_FOUND",
+        message: "Geen command gevonden"
+      });
+    }
+
+    return res.json({
+      id: latest.id,
+      ...latest.data
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in /portal/boxes/:id/commands/latest", error);
+
+    return res.status(500).json({
+      error: "LATEST_COMMAND_FAILED",
+      message: "Kon laatste command niet ophalen"
+    });
+  }
+});
+
+router.get("/portal/boxes/:id/commands/:commandId", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+    const commandId = req.params.commandId;
+
+    console.log("PORTAL BOX COMMAND REQUEST", {
+      boxId,
+      commandId,
+      user: portalUser,
+      customerId: context.membership.customerId
+    });
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    const command = await getBoxCommandById(boxId, commandId);
+
+    if (!command) {
+      return res.status(404).json({
+        error: "COMMAND_NOT_FOUND",
+        message: "Command niet gevonden"
+      });
+    }
+
+    return res.json({
+      id: command.id,
+      ...command.data
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in /portal/boxes/:id/commands/:commandId", error);
+
+    return res.status(500).json({
+      error: "COMMAND_FETCH_FAILED",
+      message: "Kon command niet ophalen"
+    });
+  }
+});
+
+router.get("/portal/boxes/:id/events", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+
+    console.log("PORTAL BOX EVENTS REQUEST", {
+      boxId,
+      user: portalUser,
+      customerId: context.membership.customerId
+    });
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    const [commands, mockEvents] = await Promise.all([
+      listBoxCommands(boxId, 20),
+      Promise.resolve(mockEventsByBoxId[boxId] || [])
+    ]);
+
+    const commandItems = commands.map((item) => {
+      const command = typeof item.data.command === "string" ? item.data.command : "UNKNOWN";
+      const status = typeof item.data.status === "string" ? item.data.status : "unknown";
+      const source = typeof item.data.source === "string" ? item.data.source : "Onbekende bron";
+      const timestamp = typeof item.data.createdAt === "string" ? item.data.createdAt : new Date().toISOString();
+
+      return {
+        id: `cmd-${item.id}`,
+        type: `command_${command.toLowerCase()}`,
+        timestamp,
+        label: `${command} via ${source} (${status})`,
+        severity: status === "failed" ? "error" : "info"
+      };
+    });
+
+    const items = [...commandItems, ...mockEvents].sort((a, b) =>
+      String(b.timestamp || "").localeCompare(String(a.timestamp || ""))
+    );
+
+    return res.json({
+      items,
+      count: items.length,
+      mode: "mixed"
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in /portal/boxes/:id/events", error);
+
+    return res.status(500).json({
+      error: "EVENTS_FAILED",
+      message: "Kon events niet ophalen"
+    });
+  }
+});
+
+router.post("/portal/boxes/:id/open", async (req, res) => {
+  try {
+    const boxId = req.params.id;
+    const portalUser = await verifyBearerToken(req.header("Authorization") || undefined);
+
+    console.log("PORTAL OPEN REQUEST", {
+      boxId,
+      user: portalUser || null
+    });
+
+    if (!portalUser) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    const context = await requireCustomerContext(portalUser.email);
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    if (!portalUser.email || !ALLOWED_OPEN_EMAILS.includes(portalUser.email)) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang om deze box te openen"
+      });
+    }
+
+    if (!ACTIVE_PORTAL_BOX_IDS.includes(boxId)) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    if (boxId === "gbox-004") {
+      return res.status(403).json({
+        error: "OPEN_NOT_ALLOWED",
+        message: "Open-actie niet toegelaten"
+      });
+    }
+
+    const boxDoc = await getBoxById(boxId);
+
+    if (!boxDoc) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    const commandId = await addBoxCommand(boxId, "OPEN", "Web Dashboard");
+
+    return res.json({
+      ok: true,
+      boxId,
+      commandId,
+      action: "OPEN",
+      acceptedAt: new Date().toISOString(),
+      mode: "firestore",
+      requestedBy: portalUser.email,
+      customerId: context.membership.customerId
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in POST /portal/boxes/:id/open", error);
+
+    return res.status(500).json({
+      error: "OPEN_COMMAND_FAILED",
+      message: "Kon open-commando niet opslaan"
+    });
+  }
+});
+
+
+router.post("/portal/boxes/:id/close", async (req, res) => {
+  try {
+    const boxId = req.params.id;
+    const portalUser = await verifyBearerToken(req.header("Authorization") || undefined);
+
+    console.log("PORTAL CLOSE REQUEST", {
+      boxId,
+      user: portalUser || null
+    });
+
+    if (!portalUser) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    const context = await requireCustomerContext(portalUser.email);
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    if (!portalUser.email || !ALLOWED_OPEN_EMAILS.includes(portalUser.email)) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang om deze box te sluiten"
+      });
+    }
+
+    if (!ACTIVE_PORTAL_BOX_IDS.includes(boxId)) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    if (boxId === "gbox-004") {
+      return res.status(403).json({
+        error: "CLOSE_NOT_ALLOWED",
+        message: "Close-actie niet toegelaten"
+      });
+    }
+
+    const boxDoc = await getBoxById(boxId);
+
+    if (!boxDoc) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    const commandId = await addBoxCommand(boxId, "CLOSE", "Web Dashboard");
+
+    return res.json({
+      ok: true,
+      boxId,
+      commandId,
+      action: "CLOSE",
+      acceptedAt: new Date().toISOString(),
+      mode: "firestore",
+      requestedBy: portalUser.email,
+      customerId: context.membership.customerId
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in POST /portal/boxes/:id/close", error);
+
+    return res.status(500).json({
+      error: "CLOSE_COMMAND_FAILED",
+      message: "Kon close-commando niet opslaan"
+    });
+  }
+});
+
+
+router.get("/portal/boxes/:id/picture", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+
+    console.log("PORTAL BOX PICTURE REQUEST", {
+      boxId,
+      user: portalUser,
+      customerId: context.membership.customerId
+    });
+
+    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    const boxDoc = await getBoxById(boxId);
+
+    if (!boxDoc) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box niet gevonden"
+      });
+    }
+
+    const camera = boxDoc.data.hardware?.camera;
+
+    if (!camera || camera.enabled !== true) {
+      return res.status(404).json({
+        error: "CAMERA_NOT_AVAILABLE",
+        message: "Camera niet beschikbaar"
+      });
+    }
+
+    const snapshotUrl = camera.snapshotUrl;
+    const username = camera.username;
+    const password = camera.password;
+
+    if (typeof snapshotUrl !== "string" || snapshotUrl.trim().length === 0) {
+      return res.status(404).json({
+        error: "SNAPSHOT_URL_MISSING",
+        message: "Snapshot URL ontbreekt"
+      });
+    }
+
+    if (typeof username !== "string" || typeof password !== "string") {
+      return res.status(500).json({
+        error: "CAMERA_CREDENTIALS_MISSING",
+        message: "Camera credentials ontbreken"
+      });
+    }
+
+    const auth = Buffer.from(`${username}:${password}`).toString("base64");
+
+    const snapshotRes = await fetch(snapshotUrl, {
+      headers: {
+        Authorization: `Basic ${auth}`
+      }
+    });
+
+    if (!snapshotRes.ok) {
+      return res.status(502).json({
+        error: "SNAPSHOT_FETCH_FAILED",
+        message: `Snapshot ophalen mislukt (${snapshotRes.status})`
+      });
+    }
+
+    const contentType = snapshotRes.headers.get("content-type") || "image/jpeg";
+    const arrayBuffer = await snapshotRes.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(200).send(buffer);
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Niet aangemeld"
+      });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Je hebt geen toegang tot deze box"
+      });
+    }
+
+    console.error("FOUT in GET /portal/boxes/:id/picture", error);
+
+    return res.status(500).json({
+      error: "PICTURE_FETCH_FAILED",
+      message: "Kon picture niet ophalen"
+    });
+  }
+});
+
+export default router;
+
+

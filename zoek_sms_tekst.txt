@@ -1,0 +1,1 @@
+﻿C:\Users\piet\Projects\dijkmans-gridbox-platform-next2\cloud-functions\index.js:41: body = `Beste ${name}, je hebt toegang tot Gridbox ${boxId}. \n\nStuur 'Open ${boxNr}' naar +32480214031 om de box te openen.`;

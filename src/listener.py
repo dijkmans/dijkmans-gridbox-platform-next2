@@ -3,10 +3,12 @@ import os
 import platform
 import re
 import shlex
+import shutil
 import subprocess
 import threading
 import time
 from datetime import datetime
+from io import BytesIO
 from zoneinfo import ZoneInfo
 
 import requests
@@ -15,12 +17,13 @@ from google.cloud import storage
 from google.cloud.firestore import GeoPoint
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.oauth2 import service_account
+from PIL import Image, ImageChops, ImageStat
 
 from db_manager import get_db
 
 # =========================================================
-# GRIDBOX SERVICE - MASTER v1.0.47
-# Één script:
+# GRIDBOX SERVICE - MASTER v1.0.51
+# ÃƒÆ’Ã¢â‚¬Â°ÃƒÆ’Ã‚Â©n script:
 # - bootstrap bij opstart
 # - runtime voor commands / knop / camera / heartbeat
 # - GEEN auto-update
@@ -28,18 +31,22 @@ from db_manager import get_db
 #     software.targetVersion
 #     software.softwareUpdateRequested = true
 #
-# NIEUW in v1.0.47: 
-# - Directe test-snapshot bij opstart om JWT fouten te vangen.
+# LOKALE UITBREIDINGEN:
+# - snapshots krijgen metadata-index in Firestore
+# - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.47"
+VERSION = "v1.0.60"
 KEY_PATH = "service-account.json"
+BOOTSTRAP_PATH = "box_bootstrap.json"
+RUNTIME_CONFIG_PATH = "runtime_config.json"
 BUCKET_NAME = "gridbox-platform.firebasestorage.app"
 TIMEZONE = ZoneInfo("Europe/Brussels")
 
 HEARTBEAT_INTERVAL_SECONDS = 300
 SOFTWARE_POLL_INTERVAL_SECONDS = 15
 GITHUB_TAG_CACHE_TTL_SECONDS = 900
+GITHUB_TAG_ERROR_RETRY_SECONDS = 60  # kortere TTL bij fout
 
 # I2C & GPIO Config
 I2C_BUS = 1
@@ -52,10 +59,16 @@ CLOSE_BUTTON_PIN = 8             # GPIO 8 (Pin 24)
 cached_config = {}
 box_is_open = False
 snapshot_thread_running = False
+last_snapshot_small = None
+last_snapshot_id = None
+current_session_id = None
+session_started_at = None
+last_saved_snapshot_at = None
 
 state_lock = threading.Lock()
 command_lock = threading.Lock()
 software_update_lock = threading.Lock()
+snapshot_lock = threading.Lock()
 
 light_off_timer = None
 shutter_motor_timer = None
@@ -81,6 +94,11 @@ if platform.system() != "Windows":
             BUTTON_FACTORY = None
     except Exception:
         GPIO_AVAILABLE = False
+
+try:
+    RESAMPLE_LANCZOS = Image.Resampling.LANCZOS
+except AttributeError:
+    RESAMPLE_LANCZOS = Image.LANCZOS
 
 
 # =========================================================
@@ -171,6 +189,92 @@ def load_box_config():
     except Exception as e:
         raise RuntimeError(f"Config fout: {e}")
 
+
+def load_bootstrap_config():
+    if not os.path.exists(BOOTSTRAP_PATH):
+        return None
+
+    try:
+        with open(BOOTSTRAP_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        log(f"âš ï¸ Bootstrapbestand kon niet gelezen worden: {e}")
+        return None
+
+def save_runtime_config(runtime_config):
+    try:
+        with open(RUNTIME_CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(runtime_config, f, indent=2, ensure_ascii=False)
+        log(f"ðŸ’¾ Runtimeconfig opgeslagen in {RUNTIME_CONFIG_PATH}")
+    except Exception as e:
+        log(f"âš ï¸ Runtimeconfig kon niet opgeslagen worden: {e}")
+
+def load_runtime_config():
+    if not os.path.exists(RUNTIME_CONFIG_PATH):
+        return None
+
+    try:
+        with open(RUNTIME_CONFIG_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        log(f"⚠️ Runtimeconfig kon niet gelezen worden: {e}")
+        return None
+def try_backend_bootstrap_claim():
+    bootstrap = load_bootstrap_config()
+    if not isinstance(bootstrap, dict):
+        return False
+
+    api_base_url = str(bootstrap.get("apiBaseUrl") or "").strip().rstrip("/")
+    provisioning_id = str(bootstrap.get("provisioningId") or "").strip()
+    bootstrap_token = str(bootstrap.get("bootstrapToken") or "").strip()
+    bootstrap_box_id = str(bootstrap.get("boxId") or DOCUMENT_ID or "").strip()
+
+    if not api_base_url or not provisioning_id or not bootstrap_token or not bootstrap_box_id:
+        log("âš ï¸ Bootstrapbestand mist verplichte velden voor backend-claim")
+        return False
+
+    claim_url = f"{api_base_url}/device/bootstrap/claim"
+    payload = {
+        "provisioningId": provisioning_id,
+        "boxId": bootstrap_box_id,
+        "bootstrapToken": bootstrap_token,
+        "deviceName": DOCUMENT_ID
+    }
+
+    try:
+        response = requests.post(claim_url, json=payload, timeout=20)
+        if response.status_code != 200:
+            log(f"âš ï¸ Backend bootstrap-claim geweigerd: {response.status_code} | {response.text}")
+            if 400 <= response.status_code < 500:
+                return None  # permanente afwijzing - niet opnieuw proberen
+            return False  # tijdelijk (5xx, netwerk) - mag opnieuw proberen
+
+        body = response.json() if response.content else {}
+        item = body.get("item", {}) if isinstance(body, dict) else {}
+        runtime_config = item.get("runtimeConfig") if isinstance(item, dict) else None
+
+        if not isinstance(runtime_config, dict) or not runtime_config:
+            log("âš ï¸ Backend bootstrap-claim gaf geen bruikbare runtimeConfig terug")
+            return False
+
+        runtime_config["provisioningId"] = provisioning_id
+        runtime_config["claimedAt"] = item.get("claimedAt")
+        runtime_config["status"] = item.get("status")
+
+        save_runtime_config(runtime_config)
+        log(f"âœ… Backend bootstrap-claim geslaagd voor {bootstrap_box_id}")
+
+        try:
+            os.remove(BOOTSTRAP_PATH)
+            log(f"🗑️ box_bootstrap.json verwijderd na geslaagde claim")
+        except Exception as remove_error:
+            log(f"⚠️ Kon box_bootstrap.json niet verwijderen: {remove_error}")
+
+        return True
+
+    except Exception as e:
+        log(f"âš ï¸ Backend bootstrap-claim fout: {e}")
+        return False
 def deep_merge_missing(existing, defaults):
     if isinstance(existing, dict) and isinstance(defaults, dict):
         result = dict(existing)
@@ -188,7 +292,7 @@ def refresh_cached_config():
         doc = box_doc_ref.get()
         cached_config = doc.to_dict() if doc.exists else {}
     except Exception as e:
-        log(f"⚠️ cached_config kon niet vernieuwd worden: {e}")
+        log(f"ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â cached_config kon niet vernieuwd worden: {e}")
 
 def build_location_payload(location_cfg):
     payload = {
@@ -247,7 +351,8 @@ def get_latest_github_tag(force=False):
     global github_tag_cache
 
     now_ts = time.time()
-    if not force and (now_ts - github_tag_cache["fetched_at"] < GITHUB_TAG_CACHE_TTL_SECONDS):
+    ttl = GITHUB_TAG_ERROR_RETRY_SECONDS if github_tag_cache["value"] == "error" else GITHUB_TAG_CACHE_TTL_SECONDS
+    if not force and (now_ts - github_tag_cache["fetched_at"] < ttl):
         return github_tag_cache["value"]
 
     pattern = get_github_tag_pattern()
@@ -268,7 +373,7 @@ def get_latest_github_tag(force=False):
         return latest
 
     except Exception as e:
-        log(f"⚠️ GitHub tag uitlezen mislukt: {e}")
+        log(f"ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â GitHub tag uitlezen mislukt: {e}")
         github_tag_cache = {
             "value": "error",
             "fetched_at": now_ts
@@ -285,30 +390,73 @@ def get_repo_commit():
         return "unknown"
 
 def ensure_target_tag_exists(tag_name):
-    run_cmd_checked(["git", "fetch", "--tags", "origin"], cwd=REPO_ROOT, timeout=20)
+    # Probeer tags te fetchen, maar gooi geen exception als dit mislukt.
+    # Als de tag lokaal al bestaat (vorige fetch), kan de update toch doorgaan.
+    try:
+        run_cmd_checked(["git", "fetch", "--tags", "origin"], cwd=REPO_ROOT, timeout=20)
+    except Exception as e:
+        log(f"WARN: git fetch --tags mislukt ({e}) — controleer of tag {tag_name} lokaal beschikbaar is")
 
     result = run_cmd(
         ["git", "rev-parse", "-q", "--verify", f"refs/tags/{tag_name}"],
         cwd=REPO_ROOT
     )
+    if result.returncode != 0:
+        log(f"WARN: ensure_target_tag_exists: tag '{tag_name}' niet gevonden (lokaal noch remote)")
     return result.returncode == 0
 
 def ensure_repo_clean_for_checkout():
-    result = run_cmd(
+    # Stap 1: check dirty tracked files
+    status_result = run_cmd(
         ["git", "status", "--porcelain", "--untracked-files=no"],
         cwd=REPO_ROOT
     )
-    if result.returncode != 0:
+    if status_result.returncode != 0:
         raise RuntimeError("Kon git status niet uitlezen.")
 
-    dirty_lines = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
+    dirty_lines = [line.strip() for line in (status_result.stdout or "").splitlines() if line.strip()]
     if dirty_lines:
-        preview = "; ".join(dirty_lines[:5])
+        log(f"INFO: {len(dirty_lines)} gewijzigde bestanden gevonden - voer git reset --hard uit:")
+        for line in dirty_lines:
+            log(f"  {line}")
+
+        reset_result = run_cmd(["git", "reset", "--hard", "HEAD"], cwd=REPO_ROOT)
+        if reset_result.returncode != 0:
+            raise RuntimeError(
+                f"git reset --hard mislukt (exit {reset_result.returncode}): "
+                f"{(reset_result.stderr or '').strip()}"
+            )
+        log("INFO: git reset --hard geslaagd")
+
+    # Stap 2: verwijder __pycache__ directories zodat Python bytecode de repo niet dirty maakt
+    # Dit is nodig omdat bij oude git-commits .pyc bestanden getrackt waren (nu verwijderd uit git)
+    for dirpath, dirnames, _ in os.walk(REPO_ROOT):
+        if "__pycache__" in dirnames:
+            cache_path = os.path.join(dirpath, "__pycache__")
+            shutil.rmtree(cache_path, ignore_errors=True)
+            dirnames.remove("__pycache__")
+            log(f"INFO: {cache_path} verwijderd")
+
+    # Stap 3: verifieer dat repo schoon is
+    # Verwijderde getrackte .pyc bestanden (D-status) zijn acceptabel — git checkout verwijdert ze sowieso
+    verify = run_cmd(
+        ["git", "status", "--porcelain", "--untracked-files=no"],
+        cwd=REPO_ROOT
+    )
+    remaining = [l.strip() for l in (verify.stdout or "").splitlines() if l.strip()]
+
+    non_pyc_dirty = [
+        l for l in remaining
+        if not (l.startswith("D ") and ("__pycache__" in l or l.endswith(".pyc")))
+    ]
+
+    if non_pyc_dirty:
         raise RuntimeError(
-            "Repo bevat lokale wijzigingen. Checkout naar andere tag is niet veilig. "
-            f"Eerste regels: {preview}"
+            f"Repo is niet schoon voor checkout: {'; '.join(non_pyc_dirty[:5])}"
         )
 
+    if remaining:
+        log(f"INFO: {len(remaining)} verwijderde pyc-bestanden genegeerd (checkout ruimt ze op)")
 def checkout_target_version(tag_name):
     run_cmd_checked(["git", "checkout", "--detach", tag_name], cwd=REPO_ROOT, timeout=30)
 
@@ -323,7 +471,7 @@ def maybe_install_requirements():
 
     python_exec = sw_cfg.get("pythonExecutable", "python3")
     run_cmd_checked(
-        [python_exec, "-m", "pip", "install", "-r", requirements_path],
+        [python_exec, "-m", "pip", "install", "--break-system-packages", "-r", requirements_path],
         cwd=REPO_ROOT,
         timeout=600
     )
@@ -392,7 +540,7 @@ def mark_update_failed(message, target_version=None):
         "lastError": message,
         "lastUpdateAttemptAt": now_iso()
     })
-    log(f"❌ Software update mislukt: {message}")
+    log(f"ÃƒÂ¢Ã‚ÂÃ…â€™ Software update mislukt: {message}")
 
 
 # =========================================================
@@ -423,7 +571,8 @@ def build_hardware_defaults_from_box_config():
         "camera": {
             "enabled": camera_cfg.get("enabled", True),
             "snapshotIntervalSeconds": camera_cfg.get("snapshotIntervalSeconds", 5),
-            "postCloseSnapshotDurationSeconds": camera_cfg.get("postCloseSnapshotDurationSeconds", 30)
+            "postCloseSnapshotDurationSeconds": camera_cfg.get("postCloseSnapshotDurationSeconds", 30),
+            "changeDetectionThreshold": camera_cfg.get("changeDetectionThreshold", 6.0)
         }
     }
 
@@ -473,7 +622,7 @@ def ensure_customer_exists():
         payload["createdBy"] = f"gridbox-service-{VERSION}"
 
     ref.set(payload, merge=True)
-    log(f"🏢 Customer verzekerd: customers/{customer_id}")
+    log(f"ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â¢ Customer verzekerd: customers/{customer_id}")
     return customer_id
 
 def ensure_site_exists(customer_id):
@@ -505,7 +654,7 @@ def ensure_site_exists(customer_id):
         payload["createdBy"] = f"gridbox-service-{VERSION}"
 
     ref.set(payload, merge=True)
-    log(f"📍 Site verzekerd: sites/{site_id}")
+    log(f"ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â Site verzekerd: sites/{site_id}")
     return site_id
 
 def ensure_bootstrap_admin_user():
@@ -540,7 +689,7 @@ def ensure_bootstrap_admin_user():
         payload["createdBy"] = f"gridbox-service-{VERSION}"
 
     ref.set(payload, merge=True)
-    log(f"👤 Bootstrap admin verzekerd: boxes/{DOCUMENT_ID}/authorizedUsers/{user_id}")
+    log(f"ÃƒÂ°Ã…Â¸Ã¢â‚¬ËœÃ‚Â¤ Bootstrap admin verzekerd: boxes/{DOCUMENT_ID}/authorizedUsers/{user_id}")
 
 def ensure_legacy_mirror_if_enabled(customer_id, site_id):
     compatibility_cfg = box_config.get("compatibility", {})
@@ -556,7 +705,7 @@ def ensure_legacy_mirror_if_enabled(customer_id, site_id):
             "mirroredAt": now_iso(),
             "mirroredBy": f"gridbox-service-{VERSION}"
         }, merge=True)
-        log(f"🪞 Legacy customer mirror gezet onder box: {customer_id}")
+        log(f"ÃƒÂ°Ã…Â¸Ã‚ÂªÃ…Â¾ Legacy customer mirror gezet onder box: {customer_id}")
 
     if site_id and has_site_config():
         site_cfg = box_config.get("site", {})
@@ -572,9 +721,26 @@ def ensure_legacy_mirror_if_enabled(customer_id, site_id):
             site_payload["location"] = build_location_payload(site_cfg["location"])
 
         box_doc_ref.collection("sites").document(site_id).set(site_payload, merge=True)
-        log(f"🪞 Legacy site mirror gezet onder box: {site_id}")
+        log(f"ÃƒÂ°Ã…Â¸Ã‚ÂªÃ…Â¾ Legacy site mirror gezet onder box: {site_id}")
 
 def bootstrap_if_needed():
+    if isinstance(runtime_config, dict) and runtime_config:
+        log("INFO: new bootstrap flow active, checking hardware/software fields")
+        existing_doc = box_doc_ref.get()
+        existing_data = existing_doc.to_dict() if existing_doc.exists else {}
+        init_payload = {}
+        if "hardware" not in existing_data:
+            init_payload["hardware"] = build_hardware_defaults_from_box_config()
+        if "software" not in existing_data:
+            init_payload["software"] = build_software_defaults_from_box_config()
+        if init_payload:
+            init_payload["updatedAt"] = now_iso()
+            init_payload["updatedBy"] = f"gridbox-service-{VERSION}"
+            box_doc_ref.set(init_payload, merge=True)
+            log(f"Hardware/software defaults geschreven voor boxes/{DOCUMENT_ID}")
+        refresh_cached_config()
+        load_box_state_from_firestore()
+        return
     customer_id = ensure_customer_exists()
     site_id = ensure_site_exists(customer_id) if has_site_config() else None
 
@@ -632,7 +798,7 @@ def bootstrap_if_needed():
     final_payload["updatedBy"] = f"gridbox-service-{VERSION}"
 
     box_doc_ref.set(final_payload, merge=True)
-    log(f"🧱 Bootstrap gecontroleerd voor boxes/{DOCUMENT_ID}")
+    log(f"ÃƒÂ°Ã…Â¸Ã‚Â§Ã‚Â± Bootstrap gecontroleerd voor boxes/{DOCUMENT_ID}")
 
     ensure_bootstrap_admin_user()
     ensure_legacy_mirror_if_enabled(customer_id, site_id)
@@ -660,7 +826,7 @@ def update_box_state(is_open, action_source):
             }
         }, merge=True)
     except Exception as e:
-        log(f"⚠️ Kon state niet opslaan: {e}")
+        log(f"ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Kon state niet opslaan: {e}")
 
 def load_box_state_from_firestore():
     global box_is_open
@@ -669,14 +835,215 @@ def load_box_state_from_firestore():
         data = doc.to_dict() if doc.exists else {}
         with state_lock:
             box_is_open = bool(data.get("state", {}).get("boxIsOpen", False))
-        log(f"📦 Herstelde box_is_open = {box_is_open}")
+        log(f"ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â¦ Herstelde box_is_open = {box_is_open}")
     except Exception as e:
-        log(f"⚠️ Kon box state niet laden: {e}")
+        log(f"ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Kon box state niet laden: {e}")
 
 
 # =========================================================
 # HEARTBEAT + SOFTWARE STATUS
 # =========================================================
+
+def get_gateway_ip():
+    """Geeft het IPv4-adres van de default gateway terug, of None."""
+    if platform.system() == "Windows":
+        return None
+    try:
+        result = subprocess.run(
+            ["ip", "-4", "route", "show", "default"],
+            capture_output=True, text=True, timeout=5
+        )
+        # Zoek specifiek naar een IPv4-adres na 'default via'
+        match = re.search(r"default via (\d+\.\d+\.\d+\.\d+)", result.stdout)
+        if match:
+            return match.group(1)
+        log(f"WARN: get_gateway_ip: geen IPv4 gateway gevonden in: {result.stdout.strip()!r}")
+        return None
+    except Exception as e:
+        log(f"WARN: get_gateway_ip: fout: {e}")
+        return None
+
+
+def ping_gateway(gateway_ip: str) -> bool:
+    """Ping de gateway 1x om de ARP-cache te vullen. Geeft True terug als bereikbaar."""
+    try:
+        result = subprocess.run(
+            ["ping", "-c", "1", "-W", "2", gateway_ip],
+            capture_output=True, timeout=6
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def get_mac_from_proc_arp(gateway_ip: str) -> str | None:
+    """Leest het MAC-adres van een IP uit /proc/net/arp (meest betrouwbaar op Linux)."""
+    try:
+        with open("/proc/net/arp", "r") as f:
+            for line in f:
+                parts = line.split()
+                # Formaat: IP HW_type Flags HW_addr Mask Device
+                if len(parts) >= 4 and parts[0] == gateway_ip:
+                    mac = parts[3]
+                    if re.match(r"^[0-9a-f]{2}(:[0-9a-f]{2}){5}$", mac, re.IGNORECASE):
+                        return mac.lower()
+    except Exception:
+        pass
+    return None
+
+
+def get_gateway_mac():
+    """Detecteert het MAC-adres van de default gateway via 'ip route' en 'arp'."""
+    gateway_ip = get_gateway_ip()
+    if not gateway_ip:
+        return None
+    try:
+        arp_result = subprocess.run(
+            ["arp", "-n", gateway_ip],
+            capture_output=True, text=True, timeout=5
+        )
+        mac_match = re.search(r"([0-9a-f]{2}(?::[0-9a-f]{2}){5})", arp_result.stdout, re.IGNORECASE)
+        if not mac_match:
+            return None
+        return mac_match.group(1).lower()
+    except Exception as e:
+        log(f"WARN: get_gateway_mac fout: {e}")
+        return None
+
+
+def get_gateway_serial():
+    """Vraagt het serienummer op van de lokale Teltonika-router via GET /api/v1/system/board.
+    Geeft None terug als de router niet bereikbaar is of geen serienummer retourneert.
+    Logt elk faalpad zodat problemen zichtbaar zijn in de service-output.
+    """
+    gateway_ip = get_gateway_ip()
+    if not gateway_ip:
+        log("WARN: get_gateway_serial: gateway IP niet detecteerbaar via 'ip route'")
+        return None
+    try:
+        resp = requests.get(
+            f"http://{gateway_ip}/api/v1/system/board",
+            timeout=3
+        )
+        if not resp.ok:
+            log(f"WARN: get_gateway_serial: router API op {gateway_ip} antwoordde HTTP {resp.status_code}")
+            return None
+        data = resp.json()
+        board = data.get("board", {})
+        serial = board.get("serial") or board.get("sn") or board.get("serial_number")
+        if serial and isinstance(serial, str):
+            log(f"INFO: get_gateway_serial: serienummer gevonden: {serial.strip()}")
+            return serial.strip()
+        log(f"WARN: get_gateway_serial: geen serial-veld in router response. Beschikbare velden: {list(board.keys())}")
+        return None
+    except requests.exceptions.ConnectionError as e:
+        log(f"WARN: get_gateway_serial: router API niet bereikbaar op {gateway_ip} — {e}")
+        return None
+    except requests.exceptions.Timeout:
+        log(f"WARN: get_gateway_serial: timeout bij verbinding met {gateway_ip}")
+        return None
+    except Exception as e:
+        log(f"WARN: get_gateway_serial: onverwachte fout: {type(e).__name__}: {e}")
+        return None
+
+
+def get_gateway_mac_fallback():
+    """Detecteert het MAC-adres van de default gateway.
+    Volgorde: ping (vult ARP-cache) → /proc/net/arp → arp -n → ip neigh show
+    Geeft het MAC-adres als lowercase string terug, of None bij mislukking.
+    """
+    gateway_ip = get_gateway_ip()
+    if not gateway_ip:
+        log("WARN: get_gateway_mac_fallback: geen gateway IP beschikbaar")
+        return None
+
+    # Ping de gateway om de ARP-cache te vullen vóór de lookups
+    reachable = ping_gateway(gateway_ip)
+    if not reachable:
+        log(f"WARN: get_gateway_mac_fallback: gateway {gateway_ip} niet bereikbaar via ping")
+
+    # 1. /proc/net/arp — meest betrouwbaar, altijd aanwezig op Linux
+    mac = get_mac_from_proc_arp(gateway_ip)
+    if mac:
+        log(f"INFO: get_gateway_mac_fallback: MAC via /proc/net/arp: {mac} (gateway={gateway_ip})")
+        return mac
+    log(f"WARN: get_gateway_mac_fallback: geen entry voor {gateway_ip} in /proc/net/arp")
+
+    # 2. arp -n
+    try:
+        arp_result = subprocess.run(
+            ["arp", "-n", gateway_ip],
+            capture_output=True, text=True, timeout=5
+        )
+        mac_match = re.search(r"([0-9a-f]{2}(?::[0-9a-f]{2}){5})", arp_result.stdout, re.IGNORECASE)
+        if mac_match:
+            mac = mac_match.group(1).lower()
+            log(f"INFO: get_gateway_mac_fallback: MAC via arp -n: {mac}")
+            return mac
+        log(f"WARN: get_gateway_mac_fallback: arp -n gaf geen MAC voor {gateway_ip}: {arp_result.stdout.strip()!r}")
+    except Exception as e:
+        log(f"WARN: get_gateway_mac_fallback: arp -n fout: {e}")
+
+    # 3. ip neigh show
+    try:
+        neigh_result = subprocess.run(
+            ["ip", "neigh", "show", gateway_ip],
+            capture_output=True, text=True, timeout=5
+        )
+        mac_match = re.search(r"([0-9a-f]{2}(?::[0-9a-f]{2}){5})", neigh_result.stdout, re.IGNORECASE)
+        if mac_match:
+            mac = mac_match.group(1).lower()
+            log(f"INFO: get_gateway_mac_fallback: MAC via ip neigh: {mac}")
+            return mac
+        log(f"WARN: get_gateway_mac_fallback: ip neigh gaf geen MAC voor {gateway_ip}: {neigh_result.stdout.strip()!r}")
+    except Exception as e:
+        log(f"WARN: get_gateway_mac_fallback: ip neigh fout: {e}")
+
+    return None
+
+
+def try_backend_heartbeat(version_raspberry, software_update):
+    if not isinstance(runtime_config, dict) or not runtime_config:
+        return False
+
+    api_base_url = str(runtime_config.get("apiBaseUrl") or "").strip().rstrip("/")
+    provisioning_id = str(runtime_config.get("provisioningId") or "").strip()
+
+    if not api_base_url:
+        return False
+
+    heartbeat_url = f"{api_base_url}/device/heartbeat"
+    payload = {
+        "boxId": DOCUMENT_ID,
+        "deviceName": DOCUMENT_ID,
+        "softwareVersion": version_raspberry,
+        "software": software_update
+    }
+
+    if provisioning_id:
+        payload["provisioningId"] = provisioning_id
+
+    gateway_mac = get_gateway_mac()
+    if gateway_mac:
+        payload["gatewayMac"] = gateway_mac
+
+    try:
+        response = requests.post(heartbeat_url, json=payload, timeout=20)
+        if response.status_code != 200:
+            log(f"WARN: backend heartbeat rejected: {response.status_code} | {response.text}")
+            return False
+
+        body = response.json() if response.content else {}
+        item = body.get("item", {}) if isinstance(body, dict) else {}
+        if isinstance(item, dict):
+            if item.get("provisioningStatus"):
+                runtime_config["status"] = item.get("provisioningStatus")
+            if item.get("heartbeatAt"):
+                runtime_config["lastHeartbeatAt"] = item.get("heartbeatAt")
+        return True
+    except Exception as e:
+        log(f"WARN: backend heartbeat error: {e}")
+        return False
 
 def update_pi_status():
     global cached_config
@@ -689,6 +1056,12 @@ def update_pi_status():
         latest_github = get_latest_github_tag()
         version_raspberry = get_running_version()
         target_version = sw_cfg.get("targetVersion", VERSION)
+
+        # Als git fetch faalt, val terug op targetVersion zodat de heartbeat
+        # leesbaar blijft en softwareUpdateRequested: true gewoon verwerkt wordt.
+        if latest_github == "error":
+            latest_github = target_version or VERSION
+            log(f"WARN: GitHub tag fetch mislukt — latestGithub valt terug op targetVersion: {latest_github}")
         deployment_mode = sw_cfg.get("deploymentMode", "firestore")
         software_update_requested = bool(sw_cfg.get("softwareUpdateRequested", False))
 
@@ -724,6 +1097,11 @@ def update_pi_status():
             "lastError": last_error
         }
 
+        backend_heartbeat_ok = try_backend_heartbeat(version_raspberry, software_update)
+
+        if not backend_heartbeat_ok:
+            log("WARN: backend heartbeat failed, keeping direct Firestore sync only")
+
         box_doc_ref.set({
             "software": software_update,
             "status": "online",
@@ -731,15 +1109,36 @@ def update_pi_status():
             "updatedBy": f"gridbox-service-{VERSION}"
         }, merge=True)
 
+        # Gateway detectie — schrijf altijd gatewayIp zodat detectie zichtbaar is in Firestore
+        gateway_ip = get_gateway_ip()
+        hw_update: dict = {"hardware.gatewayIp": gateway_ip or "unknown"}
+
+        if gateway_ip:
+            gateway_serial = get_gateway_serial()
+            if gateway_serial:
+                hw_update["hardware.gatewaySerial"] = gateway_serial
+                log(f"INFO: gateway serial: {gateway_serial}")
+            else:
+                log(f"WARN: gateway serial niet beschikbaar voor {gateway_ip}")
+
+            gateway_mac = get_gateway_mac_fallback()
+            if gateway_mac:
+                hw_update["hardware.gatewayMac"] = gateway_mac
+                log(f"INFO: gateway MAC: {gateway_mac}")
+            else:
+                log(f"WARN: gateway MAC niet beschikbaar voor {gateway_ip}")
+
+        box_doc_ref.update(hw_update)
+
         refresh_cached_config()
         log(
-            f"⚙️ Heartbeat OK | latestGithub={latest_github} | "
+            f"ÃƒÂ¢Ã…Â¡Ã¢â€žÂ¢ÃƒÂ¯Ã‚Â¸Ã‚Â Heartbeat OK | latestGithub={latest_github} | "
             f"versionRaspberry={version_raspberry} | targetVersion={target_version} | "
             f"deploymentStatus={deployment_status} | updateStatus={update_status}"
         )
 
     except Exception as e:
-        log(f"⚠️ Sync fout: {e}")
+        log(f"ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Sync fout: {e}")
 
 
 # =========================================================
@@ -776,10 +1175,10 @@ def maybe_process_software_request():
                 "lastError": None,
                 "lastUpdateAttemptAt": now_iso()
             })
-            log("ℹ️ softwareUpdateRequested was true, maar box draait al op targetVersion.")
+            log("ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¹ÃƒÂ¯Ã‚Â¸Ã‚Â softwareUpdateRequested was true, maar box draait al op targetVersion.")
             return
 
-        log(f"🚀 Software update gevraagd naar {target_version}")
+        log(f"ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ Software update gevraagd naar {target_version}")
         software_action_in_progress = True
 
         write_software_fields({
@@ -808,7 +1207,7 @@ def maybe_process_software_request():
             "lastRestartRequestedAt": now_iso()
         })
 
-        log(f"🔁 Restart ingepland naar versie {target_version}")
+        log(f"ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â Restart ingepland naar versie {target_version}")
         schedule_service_restart()
 
         time.sleep(1)
@@ -823,11 +1222,136 @@ def maybe_process_software_request():
 
 
 # =========================================================
+# CAMERA HELPERS
+# =========================================================
+
+def get_camera_config():
+    return cached_config.get("hardware", {}).get("camera", {})
+
+def get_snapshot_collection_ref():
+    return box_doc_ref.collection("snapshots")
+
+def get_snapshot_change_threshold():
+    cam_cfg = get_camera_config()
+    try:
+        return float(cam_cfg.get("changeDetectionThreshold", 6.0))
+    except Exception:
+        return 6.0
+
+def build_small_snapshot(image):
+    return image.convert("L").resize((64, 64), RESAMPLE_LANCZOS)
+
+def analyze_snapshot_change(image):
+    current_small = build_small_snapshot(image)
+    threshold = get_snapshot_change_threshold()
+
+    with snapshot_lock:
+        previous_small = last_snapshot_small
+        previous_id = last_snapshot_id
+
+    if previous_small is None:
+        return current_small, False, 0.0, previous_id, threshold
+
+    diff = ImageChops.difference(current_small, previous_small)
+    stat = ImageStat.Stat(diff)
+    score = float(stat.mean[0]) if stat.mean else 0.0
+    score = round(score, 4)
+    change_detected = score >= threshold
+
+    return current_small, change_detected, score, previous_id, threshold
+
+def remember_snapshot_reference(small_image, snapshot_id):
+    global last_snapshot_small, last_snapshot_id
+
+    with snapshot_lock:
+        last_snapshot_small = small_image
+        last_snapshot_id = snapshot_id
+
+def build_session_id():
+    return f"session_{int(time.time() * 1000)}"
+
+def start_snapshot_session():
+    global current_session_id, session_started_at, last_saved_snapshot_at, last_snapshot_small, last_snapshot_id
+
+    started_at = now_iso()
+    session_id = build_session_id()
+
+    with snapshot_lock:
+        current_session_id = session_id
+        session_started_at = started_at
+        last_saved_snapshot_at = None
+        last_snapshot_small = None
+        last_snapshot_id = None
+
+    log(f"Snapshot sessie gestart: {session_id}")
+    return session_id
+
+def end_snapshot_session():
+    global current_session_id, session_started_at
+
+    with snapshot_lock:
+        session_id = current_session_id
+        started_at = session_started_at
+        current_session_id = None
+        session_started_at = None
+
+    if session_id:
+        log(f"Snapshot sessie beÃƒÂ«indigd: {session_id}")
+
+    return session_id, started_at
+
+def get_snapshot_cooldown_seconds():
+    cam_cfg = get_camera_config()
+    try:
+        return float(cam_cfg.get("saveCooldownSeconds", 10))
+    except Exception:
+        return 10.0
+
+def get_force_save_threshold_multiplier():
+    cam_cfg = get_camera_config()
+    try:
+        return float(cam_cfg.get("forceSaveThresholdMultiplier", 2.0))
+    except Exception:
+        return 2.0
+
+def should_store_snapshot(phase, change_detected, change_score, threshold):
+    global last_saved_snapshot_at
+
+    forced_phases = {"startup_test", "open_start", "open_end"}
+    if phase in forced_phases:
+        return True, "forced_phase"
+
+    now_ts = time.time()
+    cooldown_seconds = get_snapshot_cooldown_seconds()
+    force_multiplier = get_force_save_threshold_multiplier()
+    force_threshold = float(threshold) * float(force_multiplier)
+
+    with snapshot_lock:
+        previous_saved_at = last_saved_snapshot_at
+
+    cooldown_ok = previous_saved_at is None or (now_ts - previous_saved_at) >= cooldown_seconds
+    force_save = float(change_score) >= force_threshold
+
+    if not change_detected and not force_save:
+        return False, "below_threshold"
+
+    if cooldown_ok:
+        return True, "change_detected"
+
+    if force_save:
+        return True, "force_save"
+
+    return False, "cooldown_active"
+
+
+# =========================================================
 # CAMERA
 # =========================================================
 
-def take_snapshot():
-    cam_cfg = cached_config.get("hardware", {}).get("camera", {})
+def take_snapshot(phase="manual", sequence_number=None):
+    global last_saved_snapshot_at
+
+    cam_cfg = get_camera_config()
     if not cam_cfg.get("enabled", False):
         return
 
@@ -841,38 +1365,135 @@ def take_snapshot():
             auth = HTTPBasicAuth(cam_cfg.get("username"), cam_cfg.get("password"))
 
         resp = requests.get(url, auth=auth, timeout=10)
-        if resp.status_code == 200:
-            filename = f"snapshot_{int(time.time())}.jpg"
-            bucket = storage_client.bucket(BUCKET_NAME)
-            blob = bucket.blob(f"snapshots/{DOCUMENT_ID}/{filename}")
-            blob.upload_from_string(resp.content, content_type="image/jpeg")
-            log("📸 Snapshot geüpload.")
-        else:
-            log(f"❌ Camera gaf status {resp.status_code}")
+        if resp.status_code != 200:
+            log(f"Camera gaf status {resp.status_code}")
+            return
+
+        content_type = resp.headers.get("Content-Type", "image/jpeg")
+        captured_at = now_iso()
+
+        image = Image.open(BytesIO(resp.content))
+        image.load()
+
+        width, height = image.size
+        small_image, change_detected, change_score, previous_snapshot_id, threshold = analyze_snapshot_change(image)
+
+        capture_reason = phase
+        if phase not in {"startup_test", "open_start", "open_end"}:
+            capture_reason = "change_detected"
+
+        should_store, store_reason = should_store_snapshot(
+            phase=phase,
+            change_detected=change_detected,
+            change_score=change_score,
+            threshold=threshold
+        )
+
+        if not should_store:
+            log(
+                f"Snapshot overgeslagen | fase={phase} | seq={sequence_number} | "
+                f"score={change_score} | reden={store_reason}"
+            )
+            return
+
+        timestamp_ms = int(time.time() * 1000)
+        filename = f"snapshot_{timestamp_ms}.jpg"
+        snapshot_id = safe_doc_id(filename.rsplit(".", 1)[0])
+
+        with snapshot_lock:
+            session_id = current_session_id
+            session_started = session_started_at
+
+        storage_path = f"snapshots/{DOCUMENT_ID}/{filename}"
+        bucket = storage_client.bucket(BUCKET_NAME)
+        blob = bucket.blob(storage_path)
+        blob.upload_from_string(resp.content, content_type=content_type)
+
+        with state_lock:
+            current_box_open = bool(box_is_open)
+
+        snapshot_payload = {
+            "snapshotId": snapshot_id,
+            "boxId": DOCUMENT_ID,
+            "sessionId": session_id,
+            "sessionStartedAt": session_started,
+            "filename": filename,
+            "storagePath": storage_path,
+            "bucket": BUCKET_NAME,
+            "capturedAt": captured_at,
+            "phase": phase,
+            "captureReason": capture_reason,
+            "storeReason": store_reason,
+            "sequenceNumber": int(sequence_number) if sequence_number is not None else None,
+            "changeDetected": bool(change_detected),
+            "changeScore": float(change_score),
+            "changeThreshold": float(threshold),
+            "previousSnapshotId": previous_snapshot_id,
+            "contentType": content_type,
+            "sizeBytes": int(len(resp.content)),
+            "width": int(width),
+            "height": int(height),
+            "boxWasOpen": current_box_open,
+            "source": "listener-camera",
+            "createdAt": captured_at,
+            "updatedAt": captured_at
+        }
+
+        snapshot_payload = {k: v for k, v in snapshot_payload.items() if v is not None}
+
+        try:
+            get_snapshot_collection_ref().document(snapshot_id).set(snapshot_payload, merge=True)
+            indexed_text = "indexed"
+        except Exception as metadata_error:
+            indexed_text = "storage-only"
+            log(f"Snapshot metadata opslaan mislukt: {metadata_error}")
+
+        remember_snapshot_reference(small_image, snapshot_id)
+
+        with snapshot_lock:
+            last_saved_snapshot_at = time.time()
+
+        log(
+            f"Snapshot opgeslagen | fase={phase} | reason={capture_reason} | seq={sequence_number} | "
+            f"score={change_score} | storeReason={store_reason} | {indexed_text}"
+        )
+
     except Exception as e:
-        log(f"❌ Camera fout: {e}")
+        log(f"Camera fout: {e}")
 
 def snapshot_loop():
     global snapshot_thread_running
 
     try:
-        cam = cached_config.get("hardware", {}).get("camera", {})
+        cam = get_camera_config()
         interval = float(cam.get("snapshotIntervalSeconds", 5))
         duration = float(cam.get("postCloseSnapshotDurationSeconds", 30))
 
+        sequence_number = 0
+        post_close_until = None
+
         while True:
             with state_lock:
-                if not box_is_open:
-                    break
-            take_snapshot()
-            time.sleep(interval)
+                currently_open = bool(box_is_open)
 
-        end_time = time.time() + duration
-        while time.time() < end_time:
-            take_snapshot()
+            if currently_open:
+                phase = "open"
+                post_close_until = None
+            else:
+                if post_close_until is None:
+                    post_close_until = time.time() + duration
+
+                if time.time() >= post_close_until:
+                    break
+
+                phase = "post-close"
+
+            sequence_number += 1
+            take_snapshot(phase=phase, sequence_number=sequence_number)
             time.sleep(interval)
 
     finally:
+        end_snapshot_session()
         with state_lock:
             snapshot_thread_running = False
 
@@ -894,7 +1515,7 @@ def ensure_snapshot_thread():
 def stop_shutter_motors():
     shutter_open.off()
     shutter_close.off()
-    log("🛑 Motor stroom uitgeschakeld")
+    log("ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂºÃ¢â‚¬Ëœ Motor stroom uitgeschakeld")
 
 def mark_command(doc_ref, status, extra=None):
     if not doc_ref:
@@ -918,7 +1539,7 @@ def mark_command(doc_ref, status, extra=None):
     try:
         doc_ref.set(payload, merge=True)
     except Exception as e:
-        log(f"⚠️ Command status opslaan mislukt: {e}")
+        log(f"ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Command status opslaan mislukt: {e}")
 
 def handle_command(doc_ref, data):
     global shutter_motor_timer, light_off_timer
@@ -936,7 +1557,10 @@ def handle_command(doc_ref, data):
             lighting_cfg = hw_cfg.get("lighting", {})
 
             if cmd == "OPEN":
-                log(f"🔓 OPEN commando ontvangen (Bron: {source})")
+                log(f"OPEN commando ontvangen (Bron: {source})")
+
+                with state_lock:
+                    was_open_before = bool(box_is_open)
 
                 shutter_close.off()
                 time.sleep(0.1)
@@ -945,7 +1569,14 @@ def handle_command(doc_ref, data):
                 if lighting_cfg.get("onWhenOpen", True):
                     light.on()
 
+                if not was_open_before:
+                    start_snapshot_session()
+
                 update_box_state(True, source)
+
+                if not was_open_before:
+                    take_snapshot(phase="open_start", sequence_number=0)
+
                 ensure_snapshot_thread()
 
                 duration = float(shutter_cfg.get("openDurationSeconds", 30))
@@ -955,11 +1586,17 @@ def handle_command(doc_ref, data):
                 cancel_timer(light_off_timer)
 
             elif cmd == "CLOSE":
-                log(f"🔒 CLOSE commando ontvangen (Bron: {source})")
+                log(f"CLOSE commando ontvangen (Bron: {source})")
+
+                with state_lock:
+                    was_open_before = bool(box_is_open)
 
                 shutter_open.off()
                 time.sleep(0.1)
                 shutter_close.on()
+
+                if was_open_before:
+                    take_snapshot(phase="open_end", sequence_number=999999)
 
                 update_box_state(False, source)
 
@@ -971,6 +1608,33 @@ def handle_command(doc_ref, data):
                 cancel_timer(light_off_timer)
                 light_off_timer = start_daemon_timer(light_delay, lambda: light.off())
 
+            elif cmd == "RESET_AND_UPDATE":
+                log(f"RESET_AND_UPDATE commando ontvangen (Bron: {source})")
+
+                # Stap 1: repo schoonmaken zodat checkout mogelijk wordt
+                reset_result = run_cmd(["git", "reset", "--hard", "HEAD"], cwd=REPO_ROOT)
+                if reset_result.returncode != 0:
+                    raise RuntimeError(
+                        f"git reset --hard mislukt (exit {reset_result.returncode}): "
+                        f"{(reset_result.stderr or '').strip()}"
+                    )
+                log("INFO: git reset --hard geslaagd — repo is schoon")
+
+                # Stap 2: meest recente tags ophalen van remote
+                fetch_result = run_cmd(["git", "fetch", "--tags", "origin"], cwd=REPO_ROOT)
+                if fetch_result.returncode != 0:
+                    log(f"WARN: git fetch --tags mislukt: {(fetch_result.stderr or '').strip()}")
+                else:
+                    log("INFO: git fetch --tags geslaagd")
+
+                # Stap 3: Firestore resetten — software poll pikt update op bij volgende cyclus
+                write_software_fields({
+                    "softwareUpdateRequested": True,
+                    "lastError": None,
+                    "updateStatus": "PENDING",
+                })
+                log("INFO: Firestore velden gereset — software poll start update bij volgende cyclus")
+
             else:
                 raise ValueError(f"Onbekend commando: {cmd}")
 
@@ -978,7 +1642,7 @@ def handle_command(doc_ref, data):
                 mark_command(doc_ref, "completed")
 
         except Exception as e:
-            log(f"❌ Commando fout: {e}")
+            log(f"ÃƒÂ¢Ã‚ÂÃ…â€™ Commando fout: {e}")
             if doc_ref:
                 mark_command(doc_ref, "failed", {"error": str(e)})
 
@@ -999,9 +1663,28 @@ def on_commands_snapshot(snapshot, changes, read_time):
 # =========================================================
 
 try:
-    box_config, DOCUMENT_ID = load_box_config()
+    runtime_config = load_runtime_config() or {}
+    bootstrap_config = load_bootstrap_config() or {}
+
+    try:
+        box_config, DOCUMENT_ID = load_box_config()
+    except Exception:
+        box_config = runtime_config or bootstrap_config or {}
+        DOCUMENT_ID = (
+            box_config.get("deviceId")
+            or box_config.get("boxId")
+            or bootstrap_config.get("boxId")
+        )
+
     if not DOCUMENT_ID:
-        raise RuntimeError("deviceId ontbreekt in box_config.json")
+        raise RuntimeError("deviceId of boxId ontbreekt in lokale config")
+
+    if bootstrap_config and not runtime_config:
+        try_backend_bootstrap_claim()
+        runtime_config = load_runtime_config() or runtime_config
+
+    if isinstance(runtime_config, dict) and runtime_config:
+        box_config = deep_merge_missing(box_config, runtime_config)
 
     REPO_ROOT = get_repo_root()
 
@@ -1026,14 +1709,15 @@ light.off()
 try:
     bootstrap_if_needed()
     update_pi_status()
-    
-    # --- NIEUW: STARTUP TEST SNAPSHOT ---
-    log("📸 Startup test snapshot uitvoeren...")
-    threading.Thread(target=take_snapshot, daemon=True).start()
-    # ------------------------------------
+
+    log("ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â¸ Startup test snapshot uitvoeren...")
+    threading.Thread(
+        target=lambda: take_snapshot(phase="startup-test", sequence_number=0),
+        daemon=True
+    ).start()
 
 except Exception as e:
-    log(f"❌ Bootstrap/init fout: {e}")
+    log(f"ÃƒÂ¢Ã‚ÂÃ…â€™ Bootstrap/init fout: {e}")
 
 query = box_doc_ref.collection("commands").where(filter=FieldFilter("status", "==", "pending"))
 query_watch = query.on_snapshot(on_commands_snapshot)
@@ -1047,16 +1731,16 @@ def handle_physical_button():
     with state_lock:
         target = "CLOSE" if box_is_open else "OPEN"
 
-    log(f"🔘 Fysieke knop ingedrukt. Actie: {target}")
+    log(f"ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‹Å“ Fysieke knop ingedrukt. Actie: {target}")
     handle_command(None, {"command": target, "source": "Fysieke Knop"})
 
 if platform.system() != "Windows" and GPIO_AVAILABLE:
     try:
         btn = Button(CLOSE_BUTTON_PIN, pin_factory=BUTTON_FACTORY, pull_up=True, bounce_time=0.2)
         btn.when_pressed = handle_physical_button
-        log(f"🔘 Slimme toggle-schakelaar actief op GPIO {CLOSE_BUTTON_PIN}")
+        log(f"ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‹Å“ Slimme toggle-schakelaar actief op GPIO {CLOSE_BUTTON_PIN}")
     except Exception as e:
-        log(f"⚠️ Schakelaar fout: {e}")
+        log(f"ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Schakelaar fout: {e}")
 
 
 # =========================================================
@@ -1065,6 +1749,7 @@ if platform.system() != "Windows" and GPIO_AVAILABLE:
 
 next_heartbeat_at = 0
 next_software_poll_at = 0
+_claim_permanently_rejected = False
 
 try:
     while True:
@@ -1077,16 +1762,29 @@ try:
             )
 
         if now_ts >= next_heartbeat_at:
+            if bootstrap_config and not runtime_config and not _claim_permanently_rejected:
+                _claim_result = try_backend_bootstrap_claim()
+                if _claim_result is True:
+                    runtime_config = load_runtime_config() or runtime_config
+                    if isinstance(runtime_config, dict) and runtime_config:
+                        box_config = deep_merge_missing(box_config, runtime_config)
+                elif _claim_result is None:
+                    _claim_permanently_rejected = True
             update_pi_status()
             next_heartbeat_at = now_ts + HEARTBEAT_INTERVAL_SECONDS
 
         time.sleep(1)
 
 except Exception:
-    log("🛑 Stop.")
+    log("ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂºÃ¢â‚¬Ëœ Stop.")
 
 finally:
     cancel_timer(light_off_timer)
     cancel_timer(shutter_motor_timer)
     stop_shutter_motors()
     light.off()
+
+
+
+
+
