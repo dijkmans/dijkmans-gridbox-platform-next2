@@ -17,7 +17,7 @@ function PageContentRouter() {
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(Date.now());
   const [toast, setToast] = useState({ visible: false, msg: "" });
-  const [sharesOpen, setSharesOpen] = useState(false);
+  const [sharesOpen, setSharesOpen] = useState(searchParams.get("tab") === "toegang");
   const [sharePhone, setSharePhone] = useState("+32");
   const [shareLabel, setShareLabel] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -70,6 +70,12 @@ function PageContentRouter() {
     const q = query(collection(db, "boxes", boxId, "snapshots"), orderBy("capturedAt", "desc"), limit(1));
     return onSnapshot(q, () => setRefreshKey(Date.now()));
   }, [boxId]);
+
+  useEffect(() => {
+    if (searchParams.get("tab") === "toegang") {
+      document.getElementById("toegang")?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [searchParams]);
 
   const handleCreateShare = async (isPending: boolean) => {
     if (!sharePhone.trim() || sharePhone === "+32") { notify("Vul a.u.b. een gsm-nummer in."); return; }
@@ -185,7 +191,7 @@ function PageContentRouter() {
 
         {/* Logistieke Workflow paneel */}
         {sharesOpen && (
-          <section className="bg-white border border-slate-200 rounded-3xl shadow-sm p-6 lg:p-8 space-y-6">
+          <section id="toegang" className="bg-white border border-slate-200 rounded-3xl shadow-sm p-6 lg:p-8 space-y-6">
             <div>
               <h2 className="text-xl font-bold text-slate-900">Logistieke Workflow</h2>
               <p className="text-sm text-slate-600 mt-1">Zet een nummer klaar voor de chauffeur, of deel direct de toegang.</p>

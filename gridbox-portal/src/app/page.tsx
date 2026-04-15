@@ -494,6 +494,12 @@ export default function Home() {
                       >
                         Meer / Cockpit
                       </Link>
+                      <Link
+                        href={`/portal/box?id=${encodeURIComponent(box.id)}&tab=toegang`}
+                        className="inline-flex items-center justify-center rounded-xl bg-slate-900 text-white px-4 py-3 text-sm font-semibold hover:bg-slate-800 transition-colors no-underline"
+                      >
+                        Toegang beheren
+                      </Link>
                     </div>
                   </div>
 
