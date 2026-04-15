@@ -127,7 +127,10 @@ export default function AdminBoxConfigClient() {
   // ── Load ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!boxId) return;
+    if (!boxId) {
+      setLoading(false);
+      return;
+    }
     let active = true;
     const unsubscribe = auth.onAuthStateChanged(async () => {
       if (active) await loadData();
