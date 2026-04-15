@@ -461,6 +461,14 @@ router.post("/portal/boxes/:id/shares", async (req, res) => {
       addedBy: portalUser.email || "portal-user"
     });
 
+    if (isActiveShare) {
+      await sendBirdSms(
+        normalizedPhoneNumber,
+        `Uw toegang tot Gridbox ${boxId} is geactiveerd.`,
+        { boxId, trigger: "direct-delen" }
+      );
+    }
+
     return res.json({
       ok: true,
       boxId,
