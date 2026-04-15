@@ -263,7 +263,7 @@ function PageContentRouter() {
                       if (logs.length === 0) return null;
                       return (
                         <div className="mt-2 space-y-1">
-                          {logs.slice(0, 5).map((log: any, i: number) => (
+                          {logs.slice(0, 5).reverse().map((log: any, i: number) => (
                             <div key={i} className="flex items-start gap-2 text-xs text-slate-500">
                               <span className={`font-semibold shrink-0 ${
                                 log.richting === 'uitgaand' ? 'text-blue-600' : 'text-emerald-600'
