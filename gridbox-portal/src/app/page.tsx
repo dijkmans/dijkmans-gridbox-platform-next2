@@ -51,10 +51,10 @@ function getStatusLabel(status: PortalBox["status"]) {
 }
 
 function getStatusClasses(status: PortalBox["status"]) {
-  if (status === "online") return "bg-emerald-50 border border-emerald-300 text-emerald-800";
-  if (status === "offline") return "bg-red-50 border border-red-200 text-red-800";
-  if (status === "warning") return "bg-amber-50 border border-amber-200 text-amber-800";
-  return "bg-slate-100 border border-slate-300 text-slate-600";
+  if (status === "online") return "rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-semibold px-3 py-1";
+  if (status === "offline") return "rounded-full bg-red-50 border border-red-200 text-red-800 text-xs font-semibold px-3 py-1";
+  if (status === "warning") return "rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold px-3 py-1";
+  return "rounded-full bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold px-3 py-1";
 }
 
 function formatTimeAgo(value?: string) {
@@ -69,19 +69,11 @@ function formatTimeAgo(value?: string) {
   const diffMs = Date.now() - date.getTime();
   const diffMinutes = Math.max(0, Math.floor(diffMs / 60000));
 
-  if (diffMinutes < 1) {
-    return "zojuist";
-  }
-
-  if (diffMinutes < 60) {
-    return `${diffMinutes} min geleden`;
-  }
+  if (diffMinutes < 1) return "zojuist";
+  if (diffMinutes < 60) return `${diffMinutes} min geleden`;
 
   const diffHours = Math.floor(diffMinutes / 60);
-
-  if (diffHours < 24) {
-    return `${diffHours} uur geleden`;
-  }
+  if (diffHours < 24) return `${diffHours} uur geleden`;
 
   const diffDays = Math.floor(diffHours / 24);
   return `${diffDays} dagen geleden`;
@@ -107,15 +99,11 @@ function formatLastAction(box: PortalBox) {
 
 async function fetchProtectedAssetUrl(token: string, path: string): Promise<string | null> {
   const res = await fetch(apiUrl(path), {
-    headers: {
-      Authorization: `Bearer ${token}`
-    },
-    cache: "no-store"
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
   });
 
-  if (!res.ok) {
-    return null;
-  }
+  if (!res.ok) return null;
 
   const blob = await res.blob();
   return URL.createObjectURL(blob);
@@ -137,7 +125,6 @@ export default function Home() {
     const unsubscribe = auth.onAuthStateChanged((nextUser) => {
       setUser(nextUser);
     });
-
     return () => unsubscribe();
   }, []);
 
@@ -157,10 +144,8 @@ export default function Home() {
       const token = await auth.currentUser.getIdToken();
 
       const res = await fetch(apiUrl("/portal/boxes"), {
-        headers: {
-          Authorization: `Bearer ${token}`
-        },
-        cache: "no-store"
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
       });
 
       const data = await res.json();
@@ -203,7 +188,7 @@ export default function Home() {
         const [gridboxUrl, customerUrl, footerUrl] = await Promise.all([
           fetchProtectedAssetUrl(token, "/portal/assets/gridbox-logo"),
           fetchProtectedAssetUrl(token, "/portal/assets/customer-logo"),
-          fetchProtectedAssetUrl(token, "/portal/assets/gridbox-footer-logo")
+          fetchProtectedAssetUrl(token, "/portal/assets/gridbox-footer-logo"),
         ]);
 
         const uniqueUrls = Array.from(
@@ -221,7 +206,6 @@ export default function Home() {
         setFooterLogoUrl(footerUrl || gridboxUrl);
       } catch {
         if (!active) return;
-
         setGridboxLogoUrl(null);
         setCustomerLogoUrl(null);
         setFooterLogoUrl(null);
@@ -257,11 +241,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!toast) return;
-
-    const timeoutId = window.setTimeout(() => {
-      setToast("");
-    }, 3500);
-
+    const timeoutId = window.setTimeout(() => setToast(""), 3500);
     return () => window.clearTimeout(timeoutId);
   }, [toast]);
 
@@ -282,7 +262,7 @@ export default function Home() {
         grouped.set(key, {
           siteId: key,
           siteName: box.siteName || "Onbekende site",
-          boxes: [box]
+          boxes: [box],
         });
       });
 
@@ -292,25 +272,18 @@ export default function Home() {
   const filterOptions = useMemo(() => {
     return siteGroups.map((group) => ({
       siteId: group.siteId,
-      siteName: group.siteName
+      siteName: group.siteName,
     }));
   }, [siteGroups]);
 
   useEffect(() => {
     if (selectedSiteId === "all") return;
-
     const stillExists = filterOptions.some((option) => option.siteId === selectedSiteId);
-
-    if (!stillExists) {
-      setSelectedSiteId("all");
-    }
+    if (!stillExists) setSelectedSiteId("all");
   }, [filterOptions, selectedSiteId]);
 
   const visibleGroups = useMemo(() => {
-    if (selectedSiteId === "all") {
-      return siteGroups;
-    }
-
+    if (selectedSiteId === "all") return siteGroups;
     return siteGroups.filter((group) => group.siteId === selectedSiteId);
   }, [selectedSiteId, siteGroups]);
 
@@ -341,68 +314,82 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 p-5 lg:p-7">
+    <main className="min-h-screen bg-slate-50 p-6 lg:p-8">
       <div className="mx-auto max-w-6xl space-y-4">
 
-        {/* Header */}
-        <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_260px]">
+        {/* Header card */}
+        <section className="bg-white border border-slate-200 rounded-3xl shadow-sm px-6 py-6">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
 
-          {/* Dashboard titel + logo + sync badge */}
-          <div className="bg-white border border-slate-200 rounded-3xl shadow-sm px-6 py-5 flex items-center gap-5">
-            {gridboxLogoUrl ? (
-              <img src={gridboxLogoUrl} alt="Gridbox" className="h-10 w-auto object-contain" />
-            ) : (
-              <div className="flex h-10 w-24 items-center justify-center rounded-xl bg-slate-900 text-white text-sm font-bold">
-                GRIDBOX
-              </div>
-            )}
-            <div>
-              <div className="text-2xl font-bold text-slate-900 leading-tight">Gridbox Dashboard</div>
-              <div className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 px-3 py-1 text-xs font-semibold">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />
-                Live auto-sync actief
-              </div>
-            </div>
-          </div>
-
-          {/* Gebruikersblok */}
-          <div className="bg-white border border-slate-200 rounded-3xl shadow-sm px-6 py-5">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-3">
-              Aangemeld als
-            </div>
-            {user ? (
-              <div className="flex flex-col gap-3">
-                <div>
-                  <div className="text-sm font-bold text-slate-900 leading-snug">{user.displayName || "Onbekende gebruiker"}</div>
-                  <div className="text-sm text-slate-600 break-all mt-0.5">{user.email || "Geen e-mail"}</div>
+            {/* Logo + titel + sync badge */}
+            <div className="flex items-center gap-5">
+              {gridboxLogoUrl ? (
+                <img src={gridboxLogoUrl} alt="Gridbox" className="h-10 w-auto object-contain" />
+              ) : (
+                <div className="flex h-10 w-24 items-center justify-center rounded-xl bg-slate-900 text-white text-sm font-bold shrink-0">
+                  GRIDBOX
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                  {customerLogoUrl ? (
-                    <img src={customerLogoUrl} alt="Klantlogo" className="h-9 w-auto object-contain" />
-                  ) : (
-                    <div className="h-9 w-16 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-xs font-semibold text-slate-500">
-                      KLANT
+              )}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-1">
+                  Beheerdashboard
+                </p>
+                <h1 className="text-2xl font-bold text-slate-900 leading-tight">
+                  Gridbox Dashboard
+                </h1>
+                <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 px-3 py-1 text-xs font-semibold">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                  Live auto-sync actief
+                </div>
+              </div>
+            </div>
+
+            {/* Gebruikersblok */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 lg:min-w-[240px]">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400 mb-3">
+                Aangemeld als
+              </p>
+              {user ? (
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <div className="text-sm font-bold text-slate-900 leading-snug">
+                      {user.displayName || "Onbekende gebruiker"}
                     </div>
-                  )}
+                    <div className="text-sm text-slate-500 break-all mt-0.5">
+                      {user.email || "Geen e-mail"}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    {customerLogoUrl ? (
+                      <img src={customerLogoUrl} alt="Klantlogo" className="h-8 w-auto object-contain" />
+                    ) : (
+                      <div className="h-8 w-14 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-xs font-semibold text-slate-500">
+                        KLANT
+                      </div>
+                    )}
+                    <button
+                      onClick={handleLogout}
+                      className="rounded-xl bg-slate-900 text-white px-4 py-2 text-sm font-semibold hover:bg-slate-800 transition-colors"
+                    >
+                      Afmelden
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <div className="text-sm text-slate-500">
+                    Meld je aan om je Gridboxen te bekijken.
+                  </div>
                   <button
-                    onClick={handleLogout}
+                    onClick={handleLogin}
                     className="rounded-xl bg-slate-900 text-white px-4 py-2 text-sm font-semibold hover:bg-slate-800 transition-colors"
                   >
-                    Afmelden
+                    Aanmelden met Google
                   </button>
                 </div>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                <div className="text-sm text-slate-600">Meld je aan om je Gridboxen te bekijken.</div>
-                <button
-                  onClick={handleLogin}
-                  className="rounded-xl bg-slate-900 text-white px-4 py-3 text-sm font-semibold hover:bg-slate-800 transition-colors"
-                >
-                  Aanmelden met Google
-                </button>
-              </div>
-            )}
+              )}
+            </div>
+
           </div>
         </section>
 
@@ -435,7 +422,7 @@ export default function Home() {
                 {option.siteName}
               </button>
             ))}
-            <span className="ml-auto text-sm text-slate-500 font-semibold">
+            <span className="ml-auto text-sm text-slate-500">
               {visibleBoxCount} van {totalBoxCount} Gridboxen
             </span>
           </div>
@@ -443,7 +430,7 @@ export default function Home() {
 
         {/* Laadindicator / foutmelding */}
         {loading && boxes.length === 0 && (
-          <div className="bg-white border border-slate-200 rounded-3xl shadow-sm px-6 py-4 text-sm text-slate-600">
+          <div className="bg-white border border-slate-200 rounded-3xl shadow-sm px-6 py-4 text-sm text-slate-500">
             Boxen laden...
           </div>
         )}
@@ -456,7 +443,7 @@ export default function Home() {
         {/* Sitegroepen */}
         {visibleGroups.map((group) => (
           <section key={group.siteId} className="space-y-3">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 px-1">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-3 px-1">
               {group.siteName}
             </h2>
 
@@ -464,25 +451,27 @@ export default function Home() {
               {group.boxes.map((box) => (
                 <article
                   key={box.id}
-                  className="bg-white border border-slate-200 rounded-3xl shadow-sm p-6 flex flex-wrap items-start justify-between gap-6"
+                  className="bg-white border border-slate-200 rounded-3xl shadow-sm px-6 py-6 flex flex-wrap items-start justify-between gap-6"
                 >
-                  {/* Linker kolom: info + knoppen */}
+                  {/* Linker kolom: box-info + acties */}
                   <div className="flex flex-col gap-4 flex-1 min-w-[280px]">
 
-                    {/* Titel + status badge */}
+                    {/* Naam + status */}
                     <div className="flex items-center gap-3 flex-wrap">
                       <h3 className="text-xl font-bold text-slate-900">
                         {box.id.toUpperCase()}
                       </h3>
-                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClasses(box.status)}`}>
+                      <span className={getStatusClasses(box.status)}>
                         {getStatusLabel(box.status)}
                       </span>
                     </div>
 
-                    {/* Naam + laatste actie */}
+                    {/* Beschrijving + meta */}
                     <div>
-                      <div className="text-sm font-semibold text-slate-900">{box.displayName}</div>
-                      <div className="text-sm text-slate-600 mt-0.5">
+                      <div className="text-sm font-semibold text-slate-700">
+                        {box.displayName}
+                      </div>
+                      <div className="text-sm text-slate-400 mt-0.5">
                         Laatste actie: {formatLastAction(box)}
                       </div>
                     </div>
@@ -501,33 +490,33 @@ export default function Home() {
                       </div>
                       <Link
                         href={`/portal/box?id=${encodeURIComponent(box.id)}`}
-                        className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-900 px-4 py-2 text-sm font-semibold hover:bg-slate-50 transition-colors no-underline"
+                        className="inline-flex items-center justify-center rounded-xl bg-slate-900 text-white px-4 py-3 text-sm font-semibold hover:bg-slate-800 transition-colors no-underline"
                       >
                         Meer / Cockpit
                       </Link>
                     </div>
                   </div>
 
-                  {/* Rechter kolom: GSM-nummers */}
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 flex-shrink-0 min-w-[260px]">
-                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-3">
+                  {/* Rechter kolom: GSM-paneel */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 shrink-0 min-w-[240px]">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-3">
                       Gedeelde gsm-nummers
-                    </div>
-                    {box.shareSummary && box.shareSummary.phoneNumbers.length > 0 ? (
+                    </p>
+                    {box.shareSummary && box.shareSummary.phoneNumbers.length > 0 && (
                       <div className="flex flex-wrap gap-2 mb-3">
                         {box.shareSummary.phoneNumbers.map((num) => (
                           <span
                             key={num}
-                            className="rounded-full bg-blue-50 border border-blue-200 text-blue-700 px-4 py-1 text-sm font-semibold flex items-center gap-1.5"
+                            className="rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold px-3 py-1"
                           >
-                            <span>📱</span> {num}
+                            {num}
                           </span>
                         ))}
                       </div>
-                    ) : null}
-                    <div className="text-sm text-slate-600 font-semibold">
+                    )}
+                    <p className="text-xs text-slate-400 mt-2">
                       {box.shareSummary?.totalActive || 0} nummers gekoppeld
-                    </div>
+                    </p>
                   </div>
                 </article>
               ))}
@@ -537,10 +526,10 @@ export default function Home() {
 
         {/* Footer */}
         <p className="text-center text-xs text-slate-400">✓ hallo ik ben juist</p>
-        <footer className="pt-2 pb-4 text-center text-sm text-slate-500 font-semibold">
+        <footer className="py-6 text-center text-xs text-slate-400">
           <div className="inline-flex items-center justify-center gap-2 flex-wrap">
             {footerLogoUrl && (
-              <img src={footerLogoUrl} alt="Gridbox footer" className="h-5 w-auto object-contain" />
+              <img src={footerLogoUrl} alt="Gridbox footer" className="h-4 w-auto object-contain opacity-60" />
             )}
             <span>{footerText}</span>
           </div>
