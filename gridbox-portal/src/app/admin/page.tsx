@@ -22,7 +22,12 @@ import {
   fetchAdminProvisionings,
   fetchAdminPath,
   postAdminJson,
-  deleteAdminPath
+  deleteAdminPath,
+  deleteAdminProvisioning,
+  updateAdminBox,
+  fetchAdminBoxCamera,
+  fetchAdminNextCameraIp,
+  putAdminBoxCamera
 } from "@/components/admin/adminApi";
 import type {
   ActiveSection,
@@ -34,7 +39,8 @@ import type {
   AdminSiteItem,
   AdminRoleItem,
   AdminProvisioningItem,
-  AdminProvisioningStatus
+  AdminProvisioningStatus,
+  AdminCameraData
 } from "@/components/admin/types";
 import {
   getBoxLabel,
@@ -43,8 +49,6 @@ import {
 } from "@/components/admin/helpers";
 import {
   navigationItems,
-  provisioningSteps,
-  provisioningStepContent,
   getPendingInvites,
   getCustomerSummaries,
   getSiteSummaries,
@@ -71,7 +75,6 @@ export default function AdminPage() {
   const [successMessage, setSuccessMessage] = useState("");
 
   const [activeSection, setActiveSection] = useState<ActiveSection>("dashboard");
-  const [selectedProvisioningStep, setSelectedProvisioningStep] = useState(0);
 
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
 
@@ -91,11 +94,24 @@ export default function AdminPage() {
   const [provisioningBoxId, setProvisioningBoxId] = useState("");
   const [provisioningItem, setProvisioningItem] = useState<AdminProvisioningItem | null>(null);
   const [provisioningItems, setProvisioningItems] = useState<AdminProvisioningItem[]>([]);
-  const [provisioningLookupId, setProvisioningLookupId] = useState("");
   const [provisioningBusy, setProvisioningBusy] = useState(false);
+  const [provisioningFinalized, setProvisioningFinalized] = useState(false);
   const [bootstrapDownloadItem, setBootstrapDownloadItem] = useState<Record<string, string> | null>(null);
 
   const sortedBoxes = [...boxes].sort((a, b) => getBoxLabel(a).localeCompare(getBoxLabel(b)));
+
+  const [editingBoxId, setEditingBoxId] = useState<string | null>(null);
+  const [editBoxCustomerId, setEditBoxCustomerId] = useState("");
+  const [editBoxSiteId, setEditBoxSiteId] = useState("");
+
+  const [expandedCameraBoxId, setExpandedCameraBoxId] = useState<string | null>(null);
+  const [boxCameras, setBoxCameras] = useState<Record<string, AdminCameraData | null>>({});
+  const [camerasBusy, setCamerasBusy] = useState(false);
+  const [cameraSaveSuccess, setCameraSaveSuccess] = useState<Record<string, string>>({});
+  const [newCameraMac, setNewCameraMac] = useState("");
+  const [newCameraIp, setNewCameraIp] = useState("");
+  const [newCameraUsername, setNewCameraUsername] = useState("");
+  const [newCameraPassword, setNewCameraPassword] = useState("");
 
   async function loadAdminData(clearFeedback = false) {
     try {
@@ -391,6 +407,153 @@ export default function AdminPage() {
     await loadAdminData(false);
   }
 
+  async function handleDeleteProvisioning(provisioningId: string, boxId: string | null) {
+    const user = auth.currentUser;
+    if (!user) {
+      setErrorMessage("Niet aangemeld");
+      return;
+    }
+
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const token = await user.getIdToken();
+      const res = await deleteAdminProvisioning(provisioningId, { token });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMessage(data.message || data.error || "Verwijderen mislukt");
+        return;
+      }
+
+      setSuccessMessage(`Provisioning ${provisioningId}${boxId ? ` en box ${boxId}` : ""} verwijderd`);
+      await loadAdminData(false);
+    } catch {
+      setErrorMessage("Netwerkfout bij verwijderen provisioning");
+    }
+  }
+
+  async function handleUpdateBox(boxId: string) {
+    const user = auth.currentUser;
+    if (!user) {
+      setErrorMessage("Niet aangemeld");
+      return;
+    }
+
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const token = await user.getIdToken();
+      const res = await updateAdminBox(boxId, { customerId: editBoxCustomerId, siteId: editBoxSiteId }, { token });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMessage(data.message || data.error || "Bijwerken mislukt");
+        return;
+      }
+
+      setEditingBoxId(null);
+      setSuccessMessage(`Box ${boxId} bijgewerkt`);
+      await loadAdminData(false);
+    } catch {
+      setErrorMessage("Netwerkfout bij bijwerken box");
+    }
+  }
+
+  async function handleExpandCameras(boxId: string) {
+    if (expandedCameraBoxId === boxId) {
+      setExpandedCameraBoxId(null);
+      return;
+    }
+
+    const user = auth.currentUser;
+    if (!user) return;
+
+    setExpandedCameraBoxId(boxId);
+    setCamerasBusy(true);
+    setErrorMessage("");
+
+    try {
+      const token = await user.getIdToken();
+      const [cameraRes, nextIpRes] = await Promise.all([
+        fetchAdminBoxCamera(boxId, { token }),
+        fetchAdminNextCameraIp({ token })
+      ]);
+
+      const cameraData = await cameraRes.json();
+      const existing: AdminCameraData | null = cameraRes.ok ? (cameraData.item ?? null) : null;
+      setBoxCameras((prev) => ({ ...prev, [boxId]: existing }));
+
+      if (existing?.mac) setNewCameraMac(existing.mac);
+      if (existing?.ip) {
+        setNewCameraIp(existing.ip);
+      } else {
+        const nextIpData = nextIpRes.ok ? await nextIpRes.json() : null;
+        if (nextIpData?.ip) setNewCameraIp(nextIpData.ip);
+      }
+      if (existing?.username) setNewCameraUsername(existing.username);
+    } catch {
+      setErrorMessage("Netwerkfout bij ophalen camera");
+    } finally {
+      setCamerasBusy(false);
+    }
+  }
+
+  async function openCameraSnapshot(boxId: string) {
+    const user = auth.currentUser;
+    if (!user) return;
+    const token = await user.getIdToken();
+    const res = await fetch(
+      (await import("@/lib/api")).apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/camera/snapshot`),
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) { setErrorMessage("Snapshot ophalen mislukt"); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+  }
+
+  async function handleSaveCamera(boxId: string) {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    setErrorMessage("");
+    setCamerasBusy(true);
+
+    try {
+      const token = await user.getIdToken();
+      const res = await putAdminBoxCamera(
+        boxId,
+        {
+          mac: newCameraMac.trim(),
+          ip: newCameraIp.trim(),
+          username: newCameraUsername.trim() || undefined,
+          password: newCameraPassword.trim() || undefined
+        },
+        { token }
+      );
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMessage(data.message || data.error || "Camera opslaan mislukt");
+        return;
+      }
+
+      setBoxCameras((prev) => ({ ...prev, [boxId]: data.item ?? null }));
+      setNewCameraPassword("");
+      setCameraSaveSuccess((prev) => ({
+        ...prev,
+        [boxId]: `Camera opgeslagen. Maak ook een static DHCP lease aan op de router voor MAC ${newCameraMac.trim()} → IP ${newCameraIp.trim()}`
+      }));
+    } catch {
+      setErrorMessage("Netwerkfout bij opslaan camera");
+    } finally {
+      setCamerasBusy(false);
+    }
+  }
+
   function normalizeProvisioningItem(input: unknown): AdminProvisioningItem | null {
     if (!input || typeof input !== "object") {
       return null;
@@ -456,7 +619,6 @@ export default function AdminPage() {
       }
 
       setProvisioningItem(nextProvisioningItem);
-      setProvisioningLookupId(nextProvisioningItem.id);
       return nextProvisioningItem;
     } catch (error) {
       setErrorMessage("Netwerkfout bij ophalen provisioning");
@@ -514,9 +676,6 @@ export default function AdminPage() {
         const existingProvisioningId =
           typeof data.provisioningId === "string" ? data.provisioningId : typeof data.provisioning?.id === "string" ? data.provisioning.id : "";
 
-        if (existingProvisioningId) {
-          setProvisioningLookupId(existingProvisioningId);
-        }
         return;
       }
 
@@ -529,9 +688,7 @@ export default function AdminPage() {
       }
 
       setProvisioningItem(nextProvisioningItem);
-      setProvisioningLookupId(nextProvisioningItem.id);
       setProvisioningBoxId(boxId);
-      setSelectedProvisioningStep(1);
       setSuccessMessage("Provisioningrecord aangemaakt");
       await loadAdminData(false);
     } catch (error) {
@@ -541,11 +698,11 @@ export default function AdminPage() {
     }
   }
 
-  async function handlePrepareBootstrapDownload() {
-    const provisioningId = provisioningItem?.id?.trim() || provisioningLookupId.trim();
+  async function handleDownloadSdScript() {
+    const provisioningId = provisioningItem?.id?.trim() || "";
 
     if (!provisioningId) {
-      setErrorMessage("Geen provisioning geselecteerd voor bootstrap-download");
+      setErrorMessage("Geen provisioning geselecteerd voor SD-script");
       return;
     }
 
@@ -561,23 +718,22 @@ export default function AdminPage() {
 
     try {
       const token = await user.getIdToken();
-      const res = await postAdminJson(
-        `/admin/provisioning/${encodeURIComponent(provisioningId)}/bootstrap-download`,
-        {
-          token,
-          body: {}
-        }
-      );
-      const data = await res.json();
 
-      if (!res.ok) {
-        setErrorMessage(data.message || data.error || "Kon bootstrap-download niet voorbereiden");
+      // Step 1: prepare bootstrap-download
+      const prepRes = await postAdminJson(
+        `/admin/provisioning/${encodeURIComponent(provisioningId)}/bootstrap-download`,
+        { token, body: {} }
+      );
+      const prepData = await prepRes.json();
+
+      if (!prepRes.ok) {
+        setErrorMessage(prepData.message || prepData.error || "Kon bootstrap-download niet voorbereiden");
         return;
       }
 
       const nextBootstrapItem =
-        data.item && typeof data.item === "object"
-          ? (data.item as Record<string, string>)
+        prepData.item && typeof prepData.item === "object"
+          ? (prepData.item as Record<string, string>)
           : null;
 
       if (!nextBootstrapItem?.provisioningId || !nextBootstrapItem?.bootstrapToken) {
@@ -586,36 +742,9 @@ export default function AdminPage() {
       }
 
       setBootstrapDownloadItem(nextBootstrapItem);
-      setSuccessMessage("Bootstrap-download voorbereid");
-      await fetchProvisioningById(provisioningId);
-    } catch (error) {
-      setErrorMessage("Netwerkfout bij voorbereiden bootstrap-download");
-    } finally {
-      setProvisioningBusy(false);
-    }
-  }
 
-  async function handleGenerateScript() {
-    const provisioningId = provisioningItem?.id?.trim() || provisioningLookupId.trim();
-
-    if (!provisioningId) {
-      setErrorMessage("Geen provisioning geselecteerd voor script-generatie");
-      return;
-    }
-
-    const user = auth.currentUser;
-    if (!user) {
-      setErrorMessage("Niet aangemeld");
-      return;
-    }
-
-    setProvisioningBusy(true);
-    setErrorMessage("");
-    setSuccessMessage("");
-
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch(
+      // Step 2: generate and download script
+      const scriptRes = await fetch(
         (await import("@/lib/api")).apiUrl(
           `/admin/provisioning/${encodeURIComponent(provisioningId)}/generate-script`
         ),
@@ -625,18 +754,18 @@ export default function AdminPage() {
         }
       );
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setErrorMessage((data as any).message || "Script genereren mislukt");
+      if (!scriptRes.ok) {
+        const scriptData = await scriptRes.json().catch(() => ({}));
+        setErrorMessage((scriptData as any).message || "Script genereren mislukt");
         return;
       }
 
-      const blob = await res.blob();
+      const blob = await scriptRes.blob();
       const boxId = provisioningItem?.boxId || provisioningId;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `gridbox-sd-${boxId}.ps1`;
+      a.download = `gridbox-sd-${boxId}.bat`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -645,14 +774,14 @@ export default function AdminPage() {
       setSuccessMessage("SD-script gedownload");
       await fetchProvisioningById(provisioningId);
     } catch (error) {
-      setErrorMessage("Netwerkfout bij genereren script");
+      setErrorMessage("Netwerkfout bij genereren SD-script");
     } finally {
       setProvisioningBusy(false);
     }
   }
 
   async function handleMarkSdPrepared() {
-    const provisioningId = provisioningItem?.id?.trim() || provisioningLookupId.trim();
+    const provisioningId = provisioningItem?.id?.trim() || "";
 
     if (!provisioningId) {
       setErrorMessage("Geen provisioning geselecteerd om SD-kaart als klaar te markeren");
@@ -686,7 +815,6 @@ export default function AdminPage() {
       }
 
       await fetchProvisioningById(provisioningId);
-      setSelectedProvisioningStep(5);
       setSuccessMessage("SD-kaart als klaar gemarkeerd");
       await loadAdminData(false);
     } catch (error) {
@@ -697,8 +825,7 @@ export default function AdminPage() {
   }
 
   async function handleRefreshProvisioning() {
-    const provisioningId =
-      provisioningLookupId.trim() || provisioningItem?.id?.trim() || "";
+    const provisioningId = provisioningItem?.id?.trim() || "";
 
     const refreshedItem = await fetchProvisioningById(provisioningId);
     if (refreshedItem) {
@@ -707,7 +834,7 @@ export default function AdminPage() {
   }
 
   async function handleFinalizeProvisioning() {
-    const provisioningId = provisioningItem?.id?.trim() || provisioningLookupId.trim();
+    const provisioningId = provisioningItem?.id?.trim() || "";
 
     if (!provisioningId) {
       setErrorMessage("Geen provisioning geselecteerd om af te ronden");
@@ -741,6 +868,7 @@ export default function AdminPage() {
       }
 
       await fetchProvisioningById(provisioningId);
+      setProvisioningFinalized(true);
       setSuccessMessage("Provisioning afgerond");
       await loadAdminData(false);
     } catch (error) {
@@ -748,6 +876,17 @@ export default function AdminPage() {
     } finally {
       setProvisioningBusy(false);
     }
+  }
+
+  function handleResetProvisioning() {
+    setProvisioningItem(null);
+    setProvisioningCustomerId("");
+    setProvisioningSiteId("");
+    setProvisioningBoxId("");
+    setBootstrapDownloadItem(null);
+    setProvisioningFinalized(false);
+    setErrorMessage("");
+    setSuccessMessage("");
   }
 
   const selectedCustomer = getSelectedCustomer(customers, selectedCustomerId);
@@ -800,18 +939,8 @@ export default function AdminPage() {
       ? (provisioningItem.status as AdminProvisioningStatus)
       : null;
 
-  const provisioningStatusLabel = provisioningStatus
-    ? provisioningStatusLabels[provisioningStatus]
-    : provisioningItem?.status || "Nog geen provisioning geladen";
-
-  const canFinalizeProvisioning = provisioningStatus === "online" && !provisioningBusy;
-  const canRefreshProvisioning =
-    !provisioningBusy &&
-    (provisioningLookupId.trim().length > 0 || Boolean(provisioningItem?.id));
-  const provisioningCustomerLabel =
-    customers.find((customer) => customer.id === provisioningItem?.customerId)?.name ||
-    provisioningItem?.customerId ||
-    "-";
+  const canFinalizeProvisioning = (provisioningStatus === "online" || provisioningStatus === "ready") && !provisioningBusy;
+  const canRefreshProvisioning = !provisioningBusy && Boolean(provisioningItem?.id);
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-800">
@@ -888,9 +1017,6 @@ export default function AdminPage() {
 {activeSection === "provisioning" && (
               <section>
                 <AdminProvisioningSection
-                  selectedProvisioningStep={selectedProvisioningStep}
-                  provisioningSteps={provisioningSteps}
-                  provisioningStepContent={provisioningStepContent}
                   customers={customers}
                   siteSummaries={provisioningSiteSummaries}
                   boxes={boxes}
@@ -898,23 +1024,20 @@ export default function AdminPage() {
                   provisioningSiteId={provisioningSiteId}
                   provisioningBoxId={provisioningBoxId}
                   provisioningItem={provisioningItem}
-                  provisioningLookupId={provisioningLookupId}
                   provisioningBusy={provisioningBusy}
-                  provisioningStatusLabel={provisioningStatusLabel}
                   canRefreshProvisioning={canRefreshProvisioning}
                   canFinalizeProvisioning={canFinalizeProvisioning}
+                  provisioningFinalized={provisioningFinalized}
+                  bootstrapDownloadItem={bootstrapDownloadItem}
                   onProvisioningCustomerChange={setProvisioningCustomerId}
                   onProvisioningSiteChange={setProvisioningSiteId}
                   onProvisioningBoxIdChange={setProvisioningBoxId}
-                  onProvisioningLookupIdChange={setProvisioningLookupId}
                   onCreateProvisioning={handleCreateProvisioning}
                   onRefreshProvisioning={handleRefreshProvisioning}
                   onFinalizeProvisioning={handleFinalizeProvisioning}
-                  bootstrapDownloadItem={bootstrapDownloadItem}
-                  onPrepareBootstrapDownload={handlePrepareBootstrapDownload}
-                  onGenerateScript={handleGenerateScript}
+                  onDownloadSdScript={handleDownloadSdScript}
                   onMarkSdPrepared={handleMarkSdPrepared}
-                  onStepChange={setSelectedProvisioningStep}
+                  onResetProvisioning={handleResetProvisioning}
                 />
               </section>
             )}
@@ -997,23 +1120,187 @@ export default function AdminPage() {
                         <th className="pb-3 pr-4 font-semibold">Site</th>
                         <th className="pb-3 pr-4 font-semibold">Klant</th>
                         <th className="pb-3 pr-4 font-semibold">Laatste update</th>
+                        <th className="pb-3 font-semibold"></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {sortedBoxes.map((box) => (
-                        <tr key={box.id} className="border-b border-slate-100">
-                          <td className="py-4 pr-4 font-semibold text-slate-900">
-                            {box.boxId || box.id}
-                          </td>
-                          <td className="py-4 pr-4 text-slate-600">{box.siteId || "-"}</td>
-                          <td className="py-4 pr-4 text-slate-600">{box.customerId || "-"}</td>
-                          <td className="py-4 pr-4 text-slate-600">{formatDate(box.updatedAt)}</td>
-                        </tr>
-                      ))}
+                      {sortedBoxes.map((box) => {
+                        const isEditing = editingBoxId === box.id;
+                        return (
+                          <>
+                          <tr key={box.id} className="border-b border-slate-100">
+                            <td className="py-4 pr-4 font-semibold text-slate-900">
+                              {box.boxId || box.id}
+                            </td>
+                            {isEditing ? (
+                              <>
+                                <td className="py-3 pr-4">
+                                  <select
+                                    value={editBoxSiteId}
+                                    onChange={(e) => setEditBoxSiteId(e.target.value)}
+                                    className="rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-900"
+                                  >
+                                    <option value="">-- kies site --</option>
+                                    {sites.map((s) => (
+                                      <option key={s.id} value={s.id}>{s.id}</option>
+                                    ))}
+                                  </select>
+                                </td>
+                                <td className="py-3 pr-4">
+                                  <select
+                                    value={editBoxCustomerId}
+                                    onChange={(e) => setEditBoxCustomerId(e.target.value)}
+                                    className="rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-900"
+                                  >
+                                    <option value="">-- kies klant --</option>
+                                    {customers.map((c) => (
+                                      <option key={c.id} value={c.id}>{c.name || c.id}</option>
+                                    ))}
+                                  </select>
+                                </td>
+                                <td className="py-3 pr-4 text-slate-600">{formatDate(box.updatedAt)}</td>
+                                <td className="py-3">
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateBox(box.boxId || box.id)}
+                                      disabled={!editBoxCustomerId || !editBoxSiteId}
+                                      className="rounded-lg border border-green-200 bg-green-50 px-2 py-1 text-xs font-semibold text-green-700 transition hover:bg-green-100 disabled:opacity-40"
+                                    >
+                                      Opslaan
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingBoxId(null)}
+                                      className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
+                                    >
+                                      Annuleer
+                                    </button>
+                                  </div>
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="py-4 pr-4 text-slate-600">{box.siteId || "-"}</td>
+                                <td className="py-4 pr-4 text-slate-600">
+                                  {customers.find((c) => c.id === box.customerId)?.name || box.customerId || "-"}
+                                </td>
+                                <td className="py-4 pr-4 text-slate-600">{formatDate(box.updatedAt)}</td>
+                                <td className="py-4">
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingBoxId(box.id);
+                                        setEditBoxCustomerId(box.customerId || "");
+                                        setEditBoxSiteId(box.siteId || "");
+                                      }}
+                                      className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
+                                      title="Box bewerken"
+                                    >
+                                      ✏️
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleExpandCameras(box.boxId || box.id)}
+                                      className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
+                                      title="Camera's beheren"
+                                    >
+                                      📷
+                                    </button>
+                                  </div>
+                                </td>
+                              </>
+                            )}
+                          </tr>
+                          {expandedCameraBoxId === (box.boxId || box.id) && (
+                            <tr key={`${box.id}-camera`}>
+                              <td colSpan={5} className="bg-slate-50 px-4 pb-4 pt-2">
+                                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                  <h4 className="mb-3 text-sm font-semibold text-slate-700">Camera voor {box.boxId || box.id}</h4>
+
+                                  {camerasBusy ? (
+                                    <p className="text-xs text-slate-500">Laden...</p>
+                                  ) : (
+                                    <>
+                                      {cameraSaveSuccess[box.boxId || box.id] && (
+                                        <div className="mb-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-800">
+                                          ✅ {cameraSaveSuccess[box.boxId || box.id]}
+                                        </div>
+                                      )}
+
+                                      <div className="flex flex-wrap items-end gap-2">
+                                        <div className="flex flex-col gap-1">
+                                          <label className="text-xs font-semibold text-slate-500">MAC</label>
+                                          <input
+                                            type="text"
+                                            value={newCameraMac}
+                                            onChange={(e) => setNewCameraMac(e.target.value)}
+                                            placeholder="aa:bb:cc:dd:ee:ff"
+                                            className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-900 w-40"
+                                          />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                          <label className="text-xs font-semibold text-slate-500">IP</label>
+                                          <input
+                                            type="text"
+                                            value={newCameraIp}
+                                            onChange={(e) => setNewCameraIp(e.target.value)}
+                                            placeholder="192.168.10.100"
+                                            className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-900 w-36"
+                                          />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                          <label className="text-xs font-semibold text-slate-500">Gebruiker</label>
+                                          <input
+                                            type="text"
+                                            value={newCameraUsername}
+                                            onChange={(e) => setNewCameraUsername(e.target.value)}
+                                            placeholder="admin"
+                                            className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-900 w-28"
+                                          />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                          <label className="text-xs font-semibold text-slate-500">Wachtwoord</label>
+                                          <input
+                                            type="password"
+                                            value={newCameraPassword}
+                                            onChange={(e) => setNewCameraPassword(e.target.value)}
+                                            placeholder="••••••"
+                                            className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-900 w-28"
+                                          />
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSaveCamera(box.boxId || box.id)}
+                                          disabled={!newCameraMac || !newCameraIp || camerasBusy}
+                                          className="rounded-lg border border-green-200 bg-green-50 px-3 py-1 text-xs font-semibold text-green-700 hover:bg-green-100 disabled:opacity-40"
+                                        >
+                                          Opslaan
+                                        </button>
+                                        {boxCameras[box.boxId || box.id]?.ip && (
+                                          <button
+                                            type="button"
+                                            onClick={() => openCameraSnapshot(box.boxId || box.id)}
+                                            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                                          >
+                                            📷 Bekijk snapshot
+                                          </button>
+                                        )}
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          </>
+                        );
+                      })}
 
                       {sortedBoxes.length === 0 && (
                         <tr>
-                          <td colSpan={4} className="py-6 text-slate-500">
+                          <td colSpan={5} className="py-6 text-slate-500">
                             Nog geen boxen gevonden.
                           </td>
                         </tr>
@@ -1076,6 +1363,7 @@ export default function AdminPage() {
                 customers={customers}
                 provisioningStatusLabels={provisioningStatusLabels}
                 formatDate={formatDate}
+                onDeleteProvisioning={handleDeleteProvisioning}
               />
             )}
           </div>

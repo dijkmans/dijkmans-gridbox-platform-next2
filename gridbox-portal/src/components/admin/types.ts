@@ -60,6 +60,14 @@ export type AdminBoxItem = {
   updatedAt?: string | null;
 };
 
+export type AdminCameraData = {
+  mac?: string | null;
+  ip?: string | null;
+  snapshotUrl?: string | null;
+  username?: string | null;
+  updatedAt?: string | null;
+};
+
 export type AdminSiteItem = {
   id: string;
   customerId?: string | null;

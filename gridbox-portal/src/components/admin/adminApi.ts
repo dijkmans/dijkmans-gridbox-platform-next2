@@ -70,3 +70,35 @@ export async function deleteAdminPath(path: string, { token }: DeleteOptions) {
     }
   });
 }
+
+export async function deleteAdminProvisioning(provisioningId: string, { token }: DeleteOptions) {
+  return deleteAdminPath(`/admin/provisioning/${encodeURIComponent(provisioningId)}`, { token });
+}
+
+export async function updateAdminBox(boxId: string, body: { customerId: string; siteId: string }, { token }: { token: string }) {
+  return fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}`), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body)
+  });
+}
+
+export async function fetchAdminBoxCamera(boxId: string, { token }: FetchOptions) {
+  return fetchAdminPath(`/admin/boxes/${encodeURIComponent(boxId)}/camera`, { token });
+}
+
+export async function fetchAdminNextCameraIp({ token }: FetchOptions) {
+  return fetchAdminPath("/admin/boxes/next-camera-ip", { token });
+}
+
+export async function putAdminBoxCamera(
+  boxId: string,
+  body: { mac: string; ip: string; username?: string; password?: string },
+  { token }: { token: string }
+) {
+  return fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/camera`), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body)
+  });
+}

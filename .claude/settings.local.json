@@ -6,7 +6,12 @@
       "Bash(gcloud logging read:*)",
       "Bash(curl -s -H \"Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJqdGkiOiI2YWJmY2UzNGUzNGMzYmM5ZjdhYTkwOWI0NDM0OGI1NWI0NTc5MTRmYzJkMWQ0OTM3ZTQ4ZTZlNjI5ZTFiNzFlZDI1ZjU0MTcxZDY2YzQ5YyIsInN1YiI6IjE2MTEzOCIsImlzcyI6Imh0dHBzOi8vYWNjb3VudC5ybXMudGVsdG9uaWthLW5ldHdvcmtzLmNvbSIsImlhdCI6MTc3NTQwNTgxNywibmJmIjoxNzc1NDA1ODE3LCJleHAiOjE3NzgwMjU1OTksImNsaWVudF9pZCI6IjkxMjNlYTY2LTJmMWQtNDM5Yy1iMWMyLTMxMWFjMDEwYWFhZCIsImZpcnN0X3BhcnR5IjpmYWxzZX0.N7znm5BlnvU5iRCXe2lgsRNewmYiqfLffjJxey8J-DklvblDHsxfT7DTVjXmrTAIv3qEZGvB-EhAXV7d2yfT5ixE-6467kXBO_oGJxF7CGouE0Y92waBsgXsC3aryHv-UzT1GfpnzlbaigSFT-yrzNjU3SO4xEA2fz2HNxvr7sIJV1UxcbpFlzBPFMU6menW2Qkg7jH5eIzt5EheQO0qidFz2PZwmA7i2HhCg_hqiYjKW4gC0Eha5qgSCjOB5W_XN82WzGWNmBn5v6GCrG07BvioB2uZsaKenIhHLn-z9pFYNqliqFDHlOqBLDU98CKMNGdKrPzV0B3Yu0bhwhcrig\" \"https://rms.teltonika-networks.com/api/devices\")",
       "Bash(curl:*)",
-      "Bash(python3 -m json.tool)"
+      "Bash(python3 -m json.tool)",
+      "Bash(gsutil ls:*)",
+      "Bash(gsutil iam:*)",
+      "Bash(npm install:*)",
+      "Bash(gcloud run deploy gridbox-api:*)",
+      "Bash(gcloud run services describe:*)"
     ]
   }
 }

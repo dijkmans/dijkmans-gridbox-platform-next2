@@ -79,6 +79,7 @@ async function fetchAllRmsDevices(): Promise<Record<number, Record<string, unkno
 function extractRmsSummary(rms: Record<string, unknown>) {
   return {
     rmsStatus: rms.status === 1 ? "online" : "offline",
+    rmsName: rms.name ?? null,
     connectionState: rms.connection_state ?? null,
     connectionType: rms.connection_type ?? null,
     operator: rms.operator ?? null,
