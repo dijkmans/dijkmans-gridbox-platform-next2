@@ -128,7 +128,14 @@ export default function AdminBoxConfigClient() {
 
   useEffect(() => {
     if (!boxId) return;
-    loadData();
+    let active = true;
+    const unsubscribe = auth.onAuthStateChanged(async () => {
+      if (active) await loadData();
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boxId]);
 
@@ -137,13 +144,12 @@ export default function AdminBoxConfigClient() {
       setLoading(true);
       setErrorMessage("");
 
-      const user = auth.currentUser;
-      if (!user) {
-        setErrorMessage("Meld je aan om deze pagina te bekijken");
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) {
+        setErrorMessage("Niet aangemeld");
         setLoading(false);
         return;
       }
-      const token = await user.getIdToken();
 
       const [boxRes, customersRes, sitesRes] = await Promise.all([
         fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}`), {
@@ -214,12 +220,11 @@ export default function AdminBoxConfigClient() {
       setErrorMessage("");
       setSuccessMessage("");
 
-      const user = auth.currentUser;
-      if (!user) {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) {
         setErrorMessage("Niet aangemeld");
         return;
       }
-      const token = await user.getIdToken();
 
       // Persist camera ip/username/password via existing camera endpoint if changed
       if (cameraIp && box?.hardware?.camera?.mac) {
