@@ -15,6 +15,14 @@
       "*.ps1"
     ],
     "cleanUrls": true,
-    "trailingSlash": false
+    "trailingSlash": false,
+    "rewrites": [
+      { "source": "/portal/box",         "destination": "/portal/box.html" },
+      { "source": "/portal/box/",        "destination": "/portal/box.html" },
+      { "source": "/portal/box-events",  "destination": "/portal/box-events.html" },
+      { "source": "/portal/box-events/", "destination": "/portal/box-events.html" },
+      { "source": "/portal/box-picture", "destination": "/portal/box-picture.html" },
+      { "source": "/portal/box-picture/","destination": "/portal/box-picture.html" }
+    ]
   }
 }
