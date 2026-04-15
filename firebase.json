@@ -22,7 +22,7 @@
       { "source": "/portal/box-picture/_next/:path*", "destination": "/_next/:path*", "type": 301 }
     ],
     "rewrites": [
-      { "source": "/admin/box/**",           "destination": "/admin/box/_/index.html" },
+      { "source": "/admin/box/**",           "destination": "/admin/box/_.html" },
       { "source": "/portal/box/__next.portal.box.__PAGE__.txt",             "destination": "/portal/box/__next._full.txt" },
       { "source": "/portal/box-events/__next.portal.box-events.__PAGE__.txt", "destination": "/portal/box-events/__next._full.txt" },
       { "source": "/portal/box-picture/__next.portal.box-picture.__PAGE__.txt", "destination": "/portal/box-picture/__next._full.txt" },
