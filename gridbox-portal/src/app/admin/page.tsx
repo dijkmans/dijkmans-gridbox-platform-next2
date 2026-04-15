@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { auth } from "@/lib/firebase";
 import AuthPanel from "@/components/AuthPanel";
 import AdminSidebar from "@/components/admin/AdminSidebar";
@@ -1188,18 +1189,13 @@ export default function AdminPage() {
                                 <td className="py-4 pr-4 text-slate-600">{formatDate(box.updatedAt)}</td>
                                 <td className="py-4">
                                   <div className="flex gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setEditingBoxId(box.id);
-                                        setEditBoxCustomerId(box.customerId || "");
-                                        setEditBoxSiteId(box.siteId || "");
-                                      }}
+                                    <Link
+                                      href={`/admin/box/${encodeURIComponent(box.id)}`}
                                       className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
                                       title="Box bewerken"
                                     >
                                       ✏️
-                                    </button>
+                                    </Link>
                                     <button
                                       type="button"
                                       onClick={() => handleExpandCameras(box.boxId || box.id)}

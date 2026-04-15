@@ -395,6 +395,111 @@ router.get("/admin/boxes/next-camera-ip", async (req, res) => {
   }
 });
 
+router.get("/admin/boxes/:boxId", async (req, res) => {
+  try {
+    const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
+    const { boxId } = req.params;
+    const db = getFirestore();
+
+    const boxSnap = await db.collection("boxes").where("boxId", "==", boxId).limit(1).get();
+    const boxDoc = !boxSnap.empty
+      ? boxSnap.docs[0]
+      : await db.collection("boxes").doc(boxId).get();
+
+    if (!boxDoc.exists) {
+      return res.status(404).json({ error: "BOX_NOT_FOUND", message: "Box niet gevonden" });
+    }
+
+    const data = boxDoc.data() as Record<string, any>;
+
+    const item = {
+      id: boxDoc.id,
+      boxId: typeof data.boxId === "string" ? data.boxId : boxDoc.id,
+      displayName: typeof data.displayName === "string" ? data.displayName : null,
+      siteId: data.siteId || null,
+      customerId: data.customerId || null,
+      updatedAt: data.updatedAt || null,
+      autoClose: data.autoClose ?? null,
+      hardware: data.hardware ?? null,
+      gatewayIp: typeof data.gatewayIp === "string" ? data.gatewayIp : null,
+      gatewayMac: typeof data.gatewayMac === "string" ? data.gatewayMac : null,
+      scriptVersion: typeof data.scriptVersion === "string" ? data.scriptVersion : null,
+      lastProvisionedAt: data.lastProvisionedAt || null
+    };
+
+    console.log("ADMIN GET BOX", { boxId, user: context.portalUser.email });
+    return res.json({ ok: true, item });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
+    console.error("FOUT in GET /admin/boxes/:boxId", error);
+    return res.status(500).json({ error: "BOX_FETCH_FAILED", message: "Kon box niet ophalen" });
+  }
+});
+
+router.put("/admin/boxes/:boxId/config", async (req, res) => {
+  try {
+    const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
+    const { boxId } = req.params;
+    const body = req.body as Record<string, any>;
+    const db = getFirestore();
+
+    const boxSnap = await db.collection("boxes").where("boxId", "==", boxId).limit(1).get();
+    const boxDocRef = !boxSnap.empty
+      ? boxSnap.docs[0].ref
+      : (await db.collection("boxes").doc(boxId).get()).exists
+        ? db.collection("boxes").doc(boxId)
+        : null;
+
+    if (!boxDocRef) {
+      return res.status(404).json({ error: "BOX_NOT_FOUND", message: "Box niet gevonden" });
+    }
+
+    const update: Record<string, any> = {
+      updatedAt: new Date().toISOString()
+    };
+
+    if (body.autoClose !== undefined && typeof body.autoClose === "object") {
+      update["autoClose"] = body.autoClose;
+    }
+
+    if (body.hardware?.camera !== undefined && typeof body.hardware.camera === "object") {
+      const cam = body.hardware.camera as Record<string, any>;
+      if (typeof cam.enabled === "boolean") update["hardware.camera.enabled"] = cam.enabled;
+      if (typeof cam.snapshotIntervalSeconds === "number") update["hardware.camera.snapshotIntervalSeconds"] = cam.snapshotIntervalSeconds;
+      if (typeof cam.changeDetectionThreshold === "number") update["hardware.camera.changeDetectionThreshold"] = cam.changeDetectionThreshold;
+      if (typeof cam.postCloseSnapshotDurationSeconds === "number") update["hardware.camera.postCloseSnapshotDurationSeconds"] = cam.postCloseSnapshotDurationSeconds;
+    }
+
+    if (body.hardware?.lights !== undefined && typeof body.hardware.lights === "object") {
+      update["hardware.lights"] = body.hardware.lights;
+    }
+
+    if (body.hardware?.shutter !== undefined && typeof body.hardware.shutter === "object") {
+      update["hardware.shutter"] = body.hardware.shutter;
+    }
+
+    if (typeof body.displayName === "string") {
+      update["displayName"] = body.displayName.trim();
+    }
+
+    if (typeof body.siteId === "string") update["siteId"] = body.siteId;
+    if (typeof body.customerId === "string") update["customerId"] = body.customerId;
+
+    await boxDocRef.update(update);
+
+    console.log("ADMIN BOX CONFIG UPDATED", { boxId, user: context.portalUser.email });
+    return res.json({ ok: true });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
+    console.error("FOUT in PUT /admin/boxes/:boxId/config", error);
+    return res.status(500).json({ error: "BOX_CONFIG_UPDATE_FAILED", message: "Kon box config niet opslaan" });
+  }
+});
+
 router.get("/admin/boxes/:boxId/camera", async (req, res) => {
   try {
     const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
