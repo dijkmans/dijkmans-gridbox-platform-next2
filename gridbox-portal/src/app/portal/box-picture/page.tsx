@@ -1,21 +1,10 @@
-﻿"use client";
+"use client";
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/firebase";
 import { apiUrl } from "@/lib/api";
-
-const actionButtonStyle = {
-  display: "inline-block",
-  padding: "8px 12px",
-  border: "1px solid #ccc",
-  borderRadius: "6px",
-  textDecoration: "none",
-  color: "inherit",
-  background: "#fff",
-  cursor: "pointer"
-} as const;
 
 function PageContentRouter() {
   const searchParams = useSearchParams();
@@ -47,21 +36,16 @@ function PageContentRouter() {
       const token = await user.getIdToken();
 
       const res = await fetch(apiUrl(`/portal/boxes/${boxId}/picture`), {
-        headers: {
-          Authorization: `Bearer ${token}`
-        },
+        headers: { Authorization: `Bearer ${token}` },
         cache: "no-store"
       });
 
       if (!res.ok) {
         let errorText = "Kon picture niet ophalen";
-
         try {
           const data = await res.json();
           errorText = data.message || errorText;
-        } catch {
-        }
-
+        } catch {}
         setImageUrl("");
         setMessage(errorText);
         return;
@@ -71,10 +55,7 @@ function PageContentRouter() {
       const objectUrl = URL.createObjectURL(blob);
 
       setImageUrl((previous) => {
-        if (previous) {
-          URL.revokeObjectURL(previous);
-        }
-
+        if (previous) URL.revokeObjectURL(previous);
         return objectUrl;
       });
     } catch {
@@ -89,10 +70,7 @@ function PageContentRouter() {
     let active = true;
 
     const unsubscribe = auth.onAuthStateChanged(async () => {
-      if (!active) {
-        return;
-      }
-
+      if (!active) return;
       await loadPicture();
     });
 
@@ -101,51 +79,84 @@ function PageContentRouter() {
     return () => {
       active = false;
       unsubscribe();
-
       setImageUrl((previous) => {
-        if (previous) {
-          URL.revokeObjectURL(previous);
-        }
-
+        if (previous) URL.revokeObjectURL(previous);
         return "";
       });
     };
   }, [boxId]);
 
   return (
-    <main style={{ padding: "20px", fontFamily: "sans-serif" }}>
-      <h1>Box picture - {boxId || "-"}</h1>
+    <main className="min-h-screen bg-slate-50 p-5 lg:p-8">
+      <div className="mx-auto max-w-4xl space-y-5">
 
-      <div style={{ margin: "16px 0", display: "flex", gap: "12px", flexWrap: "wrap" }}>
-        <button type="button" onClick={() => void loadPicture()} style={{ padding: "8px 12px" }}>
-          Refresh
-        </button>
+        {/* Header */}
+        <header className="bg-white border border-slate-200 rounded-3xl shadow-sm px-6 py-5">
+          <h1 className="text-2xl font-bold text-slate-900">Box snapshot</h1>
+          <p className="text-sm text-slate-500 mt-1">🆔 {boxId || "—"}</p>
+        </header>
 
-        {boxId && (
-          <Link href={`/portal/box?id=${encodeURIComponent(boxId)}`} style={actionButtonStyle}>
-            TERUG NAAR BOX
-          </Link>
-        )}
-      </div>
-
-      {loading && <p>Picture laden...</p>}
-      {message && <p>{message}</p>}
-
-      {!loading && !message && imageUrl && (
-        <div style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "12px" }}>
-          <img
-            src={imageUrl}
-            alt={`Snapshot van ${boxId}`}
-            style={{ maxWidth: "100%", height: "auto", display: "block" }}
-          />
+        {/* Acties */}
+        <div className="bg-white border border-slate-200 rounded-3xl shadow-sm p-3 flex flex-wrap gap-3 items-center w-fit">
+          <button
+            type="button"
+            onClick={() => void loadPicture()}
+            className="rounded-xl border border-slate-200 bg-white text-slate-900 px-5 py-3 text-sm font-semibold hover:bg-slate-50 transition-colors"
+          >
+            🔄 Vernieuwen
+          </button>
+          {boxId && (
+            <Link
+              href={`/portal/box?id=${encodeURIComponent(boxId)}`}
+              className="rounded-xl bg-slate-900 text-white px-5 py-3 text-sm font-semibold hover:bg-slate-800 transition-colors no-underline"
+            >
+              ← Terug naar box
+            </Link>
+          )}
         </div>
-      )}
+
+        {/* Inhoud */}
+        {loading && (
+          <div className="bg-white border border-slate-200 rounded-3xl shadow-sm p-10 flex justify-center">
+            <div className="loader" />
+          </div>
+        )}
+
+        {message && (
+          <div className="bg-white border border-slate-200 rounded-3xl shadow-sm px-6 py-4 text-sm text-slate-600 font-semibold">
+            {message}
+          </div>
+        )}
+
+        {!loading && !message && imageUrl && (
+          <div className="bg-white border border-slate-200 rounded-3xl shadow-sm p-4">
+            <img
+              src={imageUrl}
+              alt={`Snapshot van ${boxId}`}
+              className="w-full h-auto rounded-2xl block"
+            />
+          </div>
+        )}
+
+        {/* Footer */}
+        <footer className="pt-2 pb-4">
+          <Link href="/" className="text-sm text-slate-500 font-semibold hover:text-slate-900 transition-colors no-underline">
+            ← Terug naar overzicht
+          </Link>
+        </footer>
+
+      </div>
     </main>
   );
 }
+
 export default function Page() {
   return (
-    <Suspense fallback={<main style={{ padding: "24px", fontFamily: "sans-serif" }}><p>Pagina laden...</p></main>}>
+    <Suspense fallback={
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <p className="text-sm text-slate-500">Pagina laden...</p>
+      </main>
+    }>
       <PageContentRouter />
     </Suspense>
   );
