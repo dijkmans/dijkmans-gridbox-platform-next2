@@ -179,9 +179,14 @@ export default function AdminBoxConfigClient() {
       ]);
 
       const b: BoxDetail = boxData.item;
+      const nextCustomers: CustomerItem[] = (customersData as { items?: CustomerItem[] }).items || [];
+      const nextSites: AdminSiteItem[] = (sitesData as { items?: AdminSiteItem[] }).items || [];
+
+      console.log("[BoxConfig] loaded box:", b.boxId, "hardware:", b.hardware, "autoClose:", b.autoClose);
+
       setBox(b);
-      setCustomers((customersData as { items?: CustomerItem[] }).items || []);
-      setSites((sitesData as { items?: AdminSiteItem[] }).items || []);
+      setCustomers(nextCustomers);
+      setSites(nextSites);
 
       // Populate form
       setAutoCloseEnabled(b.autoClose?.enabled ?? false);
@@ -196,7 +201,8 @@ export default function AdminBoxConfigClient() {
       setCameraChangeThreshold(numField(cam?.changeDetectionThreshold));
       setCameraPostCloseDuration(numField(cam?.postCloseSnapshotDurationSeconds));
 
-      const lights = b.hardware?.lights;
+      // lighting veld — ondersteun zowel hardware.lights als hardware.lighting
+      const lights = (b.hardware?.lights ?? (b.hardware as any)?.lighting) as BoxLights | null | undefined;
       setLightsOnWhenOpen(lights?.onWhenOpen ?? false);
       setLightsOffDelay(numField(lights?.lightOffDelaySeconds));
 
@@ -205,8 +211,15 @@ export default function AdminBoxConfigClient() {
       setShutterOpen(numField(shutter?.openDurationSeconds));
 
       setDisplayName(b.displayName ?? "");
+
+      // Fix 1: case-insensitieve klant matching (Firestore doc ID kan afwijken van opgeslagen waarde)
+      const matchedCustomer = nextCustomers.find(
+        (c) => c.id.toLowerCase() === (b.customerId ?? "").toLowerCase()
+      );
+      setSelectedCustomerId(matchedCustomer?.id ?? b.customerId ?? "");
+
+      // Site: exact match volstaat (site IDs zijn consistent lowercase)
       setSelectedSiteId(b.siteId ?? "");
-      setSelectedCustomerId(b.customerId ?? "");
     } catch (err) {
       console.error(err);
       setErrorMessage("Fout bij laden van boxgegevens");
