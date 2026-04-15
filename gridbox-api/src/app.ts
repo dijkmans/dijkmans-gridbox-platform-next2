@@ -7,6 +7,7 @@ import adminRoutes from "./routes/admin";
 import invitesRoutes from "./routes/invites";
 import deviceRoutes from "./routes/device";
 import operationsRoutes from "./routes/operations";
+import webhookRoutes from "./routes/webhooks";
 
 export function createApp() {
   const app = express();
@@ -23,6 +24,7 @@ export function createApp() {
   app.use(invitesRoutes);
   app.use(deviceRoutes);
   app.use(operationsRoutes);
+  app.use(webhookRoutes);
 
   app.use((_req, res) => {
     res.status(404).json({
