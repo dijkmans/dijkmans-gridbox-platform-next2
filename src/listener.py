@@ -1269,6 +1269,66 @@ def maybe_process_software_request():
 def get_camera_config():
     return cached_config.get("hardware", {}).get("camera", {})
 
+def report_camera_hardware():
+    """Detecteert het MAC-adres van de camera via ip neigh en schrijft het naar Firestore."""
+    if platform.system() == "Windows":
+        log("[camera] ip neigh niet beschikbaar op Windows — MAC-detectie overgeslagen")
+        return
+
+    cam_cfg = get_camera_config()
+
+    # Haal camera-IP op: direct veld of extraheer uit snapshotUrl (zonder credentials op te slaan)
+    camera_ip = cam_cfg.get("ip") or None
+    if not camera_ip:
+        url = cam_cfg.get("snapshotUrl") or ""
+        ip_match = re.search(r'//(?:[^@]+@)?(\d{1,3}(?:\.\d{1,3}){3})', url)
+        if ip_match:
+            camera_ip = ip_match.group(1)
+
+    if not camera_ip:
+        log("[camera] Geen camera-IP beschikbaar — MAC-detectie overgeslagen")
+        return
+
+    try:
+        result = subprocess.run(
+            ["ip", "neigh", "show", camera_ip],
+            capture_output=True, text=True, timeout=5
+        )
+        mac_match = re.search(r'([0-9a-f]{2}(?::[0-9a-f]{2}){5})', result.stdout, re.IGNORECASE)
+        if not mac_match:
+            log(f"[camera] Geen MAC gevonden voor {camera_ip} via ip neigh — output: {result.stdout.strip()!r}")
+            return
+
+        camera_mac = mac_match.group(1).lower()
+
+        # Duplicate-check: controleer of dit MAC al bij een andere box hoort
+        try:
+            dup_snap = db.collection("boxes").where("hardware.camera.mac", "==", camera_mac).limit(5).get()
+            for dup_doc in dup_snap:
+                if dup_doc.id != DOCUMENT_ID:
+                    andere_box_id = dup_doc.to_dict().get("boxId") or dup_doc.id
+                    log(f"[camera] MAC {camera_mac} is al gekoppeld aan {andere_box_id} — wegschrijven geannuleerd")
+                    return
+        except Exception as dup_err:
+            log(f"[camera] Duplicate-check fout: {dup_err} — wegschrijven toch doorgezet")
+
+        box_doc_ref.set({
+            "hardware": {
+                "camera": {
+                    "ip": camera_ip,
+                    "mac": camera_mac,
+                    "vendor": "XM",
+                    "modelPlatform": "XM H42",
+                    "lastSeenAt": now_iso()
+                }
+            }
+        }, merge=True)
+
+        log(f"[camera] MAC gevonden: {camera_mac} → weggeschreven naar Firestore")
+
+    except Exception as e:
+        log(f"[camera] MAC-detectie fout: {e}")
+
 def get_snapshot_collection_ref():
     return box_doc_ref.collection("snapshots")
 
@@ -1750,8 +1810,9 @@ light.off()
 try:
     bootstrap_if_needed()
     update_pi_status()
+    report_camera_hardware()
 
-    log("ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â¸ Startup test snapshot uitvoeren...")
+    log(“ÃƒÂ°Ã…Â¸Ã¢â‚¬Å”Ã‚Â¸ Startup test snapshot uitvoeren...”)
     threading.Thread(
         target=lambda: take_snapshot(phase="startup-test", sequence_number=0),
         daemon=True
