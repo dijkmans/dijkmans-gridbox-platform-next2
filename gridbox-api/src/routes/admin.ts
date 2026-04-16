@@ -421,23 +421,17 @@ router.get("/admin/boxes/:boxId", async (req, res) => {
       updatedAt: data.updatedAt || null,
       autoClose: data.autoClose ?? null,
       hardware: data.hardware ?? null,
-      gatewayIp: data.gatewayIp ?? data.hardware?.gatewayIp ?? null,
-      gatewayMac: data.gatewayMac ?? data.hardware?.gatewayMac ?? null,
-      rut: {
-        ip:       data.rut?.ip       ?? data.gatewayIp  ?? data.hardware?.gatewayIp  ?? null,
-        mac:      data.rut?.mac      ?? data.gatewayMac ?? data.hardware?.gatewayMac ?? null,
-        model:    data.rut?.model    ?? "RUT241",
-        username: data.rut?.username ?? "admin",
-        password: data.rut?.password ?? null,
-      },
-      scriptVersion: data.scriptVersion
-        ?? data.provisioning?.scriptVersion
-        ?? data.software?.currentVersion
-        ?? null,
+      gatewayIp: typeof data.gatewayIp === "string" ? data.gatewayIp : null,
+      gatewayMac: typeof data.gatewayMac === "string" ? data.gatewayMac : null,
+      rut: data.rut ?? null,
+      scriptVersion: typeof data.scriptVersion === "string"
+        ? data.scriptVersion
+        : typeof data.software?.currentVersion === "string"
+          ? data.software.currentVersion
+          : null,
       lastProvisionedAt: data.lastProvisionedAt
-        ?? data.provisioning?.lastProvisionedAt
-        ?? data.state?.lastHeartbeatAt
-        ?? null
+        || data.state?.lastHeartbeatAt
+        || null
     };
 
     console.log("ADMIN GET BOX", { boxId, user: context.portalUser.email });
@@ -502,10 +496,10 @@ router.put("/admin/boxes/:boxId/config", async (req, res) => {
 
     if (body.rut !== undefined && typeof body.rut === "object") {
       const rut = body.rut as Record<string, any>;
-      if (typeof rut.ip === "string" && rut.ip.length > 0) update["rut.ip"] = rut.ip;
-      if (typeof rut.mac === "string" && rut.mac.length > 0) update["rut.mac"] = rut.mac;
-      if (typeof rut.model === "string" && rut.model.length > 0) update["rut.model"] = rut.model;
-      if (typeof rut.username === "string" && rut.username.length > 0) update["rut.username"] = rut.username;
+      if (typeof rut.ip === "string") update["rut.ip"] = rut.ip;
+      if (typeof rut.mac === "string" || rut.mac === null) update["rut.mac"] = rut.mac;
+      if (typeof rut.model === "string" || rut.model === null) update["rut.model"] = rut.model;
+      if (typeof rut.username === "string") update["rut.username"] = rut.username;
       if (typeof rut.password === "string" && rut.password.length > 0) update["rut.password"] = rut.password;
     }
 
