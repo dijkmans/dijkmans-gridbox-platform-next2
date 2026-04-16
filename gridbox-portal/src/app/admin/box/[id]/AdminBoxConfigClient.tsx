@@ -105,6 +105,7 @@ export default function AdminBoxConfigClient() {
   // Camera
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [cameraIp, setCameraIp] = useState("");
+  const [cameraMac, setCameraMac] = useState<string | null>(null);
   const [cameraUsername, setCameraUsername] = useState("");
   const [cameraPassword, setCameraPassword] = useState("");
   const [cameraSnapshotInterval, setCameraSnapshotInterval] = useState("");
@@ -195,6 +196,7 @@ export default function AdminBoxConfigClient() {
       const cam = b.hardware?.camera;
       setCameraEnabled(cam?.enabled ?? false);
       setCameraIp(cam?.ip ?? "");
+      setCameraMac(cam?.mac ?? null);
       setCameraUsername(cam?.username ?? "");
       setCameraPassword("");
       setCameraSnapshotInterval(numField(cam?.snapshotIntervalSeconds));
@@ -484,6 +486,9 @@ export default function AdminBoxConfigClient() {
               <FieldRow label="IP-adres">
                 <TextInput value={cameraIp} onChange={setCameraIp} placeholder="192.168.10.x" />
               </FieldRow>
+              <FieldRow label="MAC-adres camera">
+                <TextInput value={cameraMac ?? "—"} disabled />
+              </FieldRow>
               <FieldRow label="Gebruikersnaam">
                 <TextInput value={cameraUsername} onChange={setCameraUsername} placeholder="admin" />
               </FieldRow>
@@ -540,10 +545,10 @@ export default function AdminBoxConfigClient() {
 
         {/* C — NETWERK & INFO */}
         <SectionCard title="Netwerk & info">
-          <KVRow label="Gateway IP" value={box?.gatewayIp} />
-          <KVRow label="Gateway MAC" value={box?.gatewayMac} />
-          <KVRow label="Software versie" value={box?.scriptVersion} />
-          <KVRow label="Laatste heartbeat" value={formatDate(box?.lastProvisionedAt)} />
+          <KVRow label="IP-adres RUT" value={box?.gatewayIp} />
+          <KVRow label="MAC-adres RUT" value={box?.gatewayMac} />
+          <KVRow label="Software versie Pi" value={box?.scriptVersion} />
+          <KVRow label="Laatste heartbeat Pi" value={formatDate(box?.lastProvisionedAt)} />
           <KVRow label="Laatste update" value={formatDate(box?.updatedAt)} />
         </SectionCard>
 
