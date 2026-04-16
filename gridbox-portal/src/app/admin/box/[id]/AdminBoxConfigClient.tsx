@@ -220,9 +220,9 @@ export default function AdminBoxConfigClient() {
       setShutterOpen(numField(shutter?.openDurationSeconds));
 
       const rut = (b as any).rut as { ip?: string; mac?: string; model?: string; username?: string; password?: string } | null | undefined;
-      setRutIp(rut?.ip ?? "");
-      setRutMac(rut?.mac ?? null);
-      setRutModel(rut?.model ?? null);
+      setRutIp(rut?.ip ?? (b as any).gatewayIp ?? "");
+      setRutMac(rut?.mac ?? (b as any).gatewayMac ?? null);
+      setRutModel(rut?.model ?? "RUT241");
       setRutUsername(rut?.username ?? "");
       setRutPassword("");
 

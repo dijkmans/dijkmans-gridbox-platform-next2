@@ -502,10 +502,10 @@ router.put("/admin/boxes/:boxId/config", async (req, res) => {
 
     if (body.rut !== undefined && typeof body.rut === "object") {
       const rut = body.rut as Record<string, any>;
-      if (typeof rut.ip === "string") update["rut.ip"] = rut.ip;
-      if (typeof rut.mac === "string" || rut.mac === null) update["rut.mac"] = rut.mac;
-      if (typeof rut.model === "string" || rut.model === null) update["rut.model"] = rut.model;
-      if (typeof rut.username === "string") update["rut.username"] = rut.username;
+      if (typeof rut.ip === "string" && rut.ip.length > 0) update["rut.ip"] = rut.ip;
+      if (typeof rut.mac === "string" && rut.mac.length > 0) update["rut.mac"] = rut.mac;
+      if (typeof rut.model === "string" && rut.model.length > 0) update["rut.model"] = rut.model;
+      if (typeof rut.username === "string" && rut.username.length > 0) update["rut.username"] = rut.username;
       if (typeof rut.password === "string" && rut.password.length > 0) update["rut.password"] = rut.password;
     }
 
