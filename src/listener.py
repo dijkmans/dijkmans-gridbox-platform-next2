@@ -36,7 +36,7 @@ from db_manager import get_db
 # - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.63"
+VERSION = "v1.0.64"
 KEY_PATH = "service-account.json"
 BOOTSTRAP_PATH = "box_bootstrap.json"
 RUNTIME_CONFIG_PATH = "runtime_config.json"
@@ -1086,13 +1086,17 @@ def update_pi_status():
 
         latest_github = get_latest_github_tag()
         version_raspberry = get_running_version()
-        target_version = sw_cfg.get("targetVersion", VERSION)
+        target_version = sw_cfg.get("targetVersion")
+        target_version_configured = target_version is not None
 
-        # Als git fetch faalt, val terug op targetVersion zodat de heartbeat
-        # leesbaar blijft en softwareUpdateRequested: true gewoon verwerkt wordt.
-        if latest_github == "error":
-            latest_github = target_version or VERSION
-            log(f"WARN: GitHub tag fetch mislukt — latestGithub valt terug op targetVersion: {latest_github}")
+        if latest_github in ("error", "unknown"):
+            latest_github = None
+            github_status = "UNKNOWN"
+            log("WARN: GitHub tag fetch mislukt of geen tags — latestGithub=null, githubStatus=UNKNOWN")
+        elif latest_github == version_raspberry:
+            github_status = "UP_TO_DATE"
+        else:
+            github_status = "NEWER_AVAILABLE"
         deployment_mode = sw_cfg.get("deploymentMode", "firestore")
         software_update_requested = bool(sw_cfg.get("softwareUpdateRequested", False))
 
@@ -1109,8 +1113,10 @@ def update_pi_status():
 
         software_update = {
             "latestGithub": latest_github,
+            "githubStatus": github_status,
             "versionRaspberry": version_raspberry,
             "targetVersion": target_version,
+            "targetVersionConfigured": target_version_configured,
             "deploymentMode": deployment_mode,
             "deploymentStatus": deployment_status,
             "softwareUpdateRequested": software_update_requested,
@@ -1173,7 +1179,7 @@ def update_pi_status():
 
         refresh_cached_config()
         log(
-            f"ÃƒÂ¢Ã…Â¡Ã¢â€žÂ¢ÃƒÂ¯Ã‚Â¸Ã‚Â Heartbeat OK | latestGithub={latest_github} | "
+            f"ÃƒÂ¢Ã…Â¡Ã¢â€žÂ¢ÃƒÂ¯Ã‚Â¸Ã‚Â Heartbeat OK | latestGithub={latest_github} | githubStatus={github_status} | "
             f"versionRaspberry={version_raspberry} | targetVersion={target_version} | "
             f"deploymentStatus={deployment_status} | updateStatus={update_status}"
         )
