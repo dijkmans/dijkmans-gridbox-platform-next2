@@ -120,6 +120,13 @@ export default function AdminBoxConfigClient() {
   const [shutterClose, setShutterClose] = useState("");
   const [shutterOpen, setShutterOpen] = useState("");
 
+  // RUT router
+  const [rutIp, setRutIp] = useState("");
+  const [rutMac, setRutMac] = useState<string | null>(null);
+  const [rutModel, setRutModel] = useState<string | null>(null);
+  const [rutUsername, setRutUsername] = useState("");
+  const [rutPassword, setRutPassword] = useState("");
+
   // Beheer
   const [displayName, setDisplayName] = useState("");
   const [selectedSiteId, setSelectedSiteId] = useState("");
@@ -212,6 +219,13 @@ export default function AdminBoxConfigClient() {
       setShutterClose(numField(shutter?.closeDurationSeconds));
       setShutterOpen(numField(shutter?.openDurationSeconds));
 
+      const rut = (b as any).rut as { ip?: string; mac?: string; model?: string; username?: string; password?: string } | null | undefined;
+      setRutIp(rut?.ip ?? "");
+      setRutMac(rut?.mac ?? null);
+      setRutModel(rut?.model ?? null);
+      setRutUsername(rut?.username ?? "");
+      setRutPassword("");
+
       setDisplayName(b.displayName ?? "");
 
       // Fix 1: case-insensitieve klant matching (Firestore doc ID kan afwijken van opgeslagen waarde)
@@ -270,6 +284,13 @@ export default function AdminBoxConfigClient() {
           displayName,
           siteId: selectedSiteId,
           customerId: selectedCustomerId,
+          rut: {
+            ip: rutIp,
+            mac: rutMac,
+            model: rutModel,
+            username: rutUsername,
+            ...(rutPassword ? { password: rutPassword } : {})
+          },
           autoClose: {
             enabled: autoCloseEnabled,
             delaySeconds: parseNum(autoCloseDelay)
@@ -508,6 +529,35 @@ export default function AdminBoxConfigClient() {
               </FieldRow>
               <FieldRow label="Snapshot duur na sluiten (sec)">
                 <NumInput value={cameraPostCloseDuration} onChange={setCameraPostCloseDuration} placeholder="bijv. 10" />
+              </FieldRow>
+            </div>
+          </div>
+
+          <hr className="border-slate-100" />
+
+          {/* RUT Router */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-4">Router (RUT-241)</p>
+            <div className="space-y-4">
+              <FieldRow label="IP-adres RUT">
+                <TextInput value={rutIp} onChange={setRutIp} placeholder="192.168.10.1" />
+              </FieldRow>
+              <FieldRow label="MAC-adres RUT">
+                <TextInput value={rutMac ?? "—"} disabled />
+              </FieldRow>
+              <FieldRow label="Model">
+                <TextInput value={rutModel ?? "—"} disabled />
+              </FieldRow>
+              <FieldRow label="Gebruikersnaam">
+                <TextInput value={rutUsername} onChange={setRutUsername} placeholder="admin" />
+              </FieldRow>
+              <FieldRow label="Wachtwoord">
+                <TextInput
+                  type="password"
+                  value={rutPassword}
+                  onChange={setRutPassword}
+                  placeholder="Laat leeg om ongewijzigd te laten"
+                />
               </FieldRow>
             </div>
           </div>

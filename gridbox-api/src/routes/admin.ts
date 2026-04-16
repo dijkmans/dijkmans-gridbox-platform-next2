@@ -423,6 +423,7 @@ router.get("/admin/boxes/:boxId", async (req, res) => {
       hardware: data.hardware ?? null,
       gatewayIp: typeof data.gatewayIp === "string" ? data.gatewayIp : null,
       gatewayMac: typeof data.gatewayMac === "string" ? data.gatewayMac : null,
+      rut: data.rut ?? null,
       scriptVersion: typeof data.scriptVersion === "string"
         ? data.scriptVersion
         : typeof data.software?.currentVersion === "string"
@@ -492,6 +493,15 @@ router.put("/admin/boxes/:boxId/config", async (req, res) => {
 
     if (typeof body.siteId === "string") update["siteId"] = body.siteId;
     if (typeof body.customerId === "string") update["customerId"] = body.customerId;
+
+    if (body.rut !== undefined && typeof body.rut === "object") {
+      const rut = body.rut as Record<string, any>;
+      if (typeof rut.ip === "string") update["rut.ip"] = rut.ip;
+      if (typeof rut.mac === "string" || rut.mac === null) update["rut.mac"] = rut.mac;
+      if (typeof rut.model === "string" || rut.model === null) update["rut.model"] = rut.model;
+      if (typeof rut.username === "string") update["rut.username"] = rut.username;
+      if (typeof rut.password === "string" && rut.password.length > 0) update["rut.password"] = rut.password;
+    }
 
     await boxDocRef.update(update);
 
