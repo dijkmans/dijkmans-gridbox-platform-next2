@@ -421,17 +421,17 @@ router.get("/admin/boxes/:boxId", async (req, res) => {
       updatedAt: data.updatedAt || null,
       autoClose: data.autoClose ?? null,
       hardware: data.hardware ?? null,
-      gatewayIp: typeof data.gatewayIp === "string" ? data.gatewayIp : null,
-      gatewayMac: typeof data.gatewayMac === "string" ? data.gatewayMac : null,
+      gatewayIp: data.gatewayIp ?? data.hardware?.gatewayIp ?? null,
+      gatewayMac: data.gatewayMac ?? data.hardware?.gatewayMac ?? null,
       rut: data.rut ?? null,
-      scriptVersion: typeof data.scriptVersion === "string"
-        ? data.scriptVersion
-        : typeof data.software?.currentVersion === "string"
-          ? data.software.currentVersion
-          : null,
+      scriptVersion: data.scriptVersion
+        ?? data.provisioning?.scriptVersion
+        ?? data.software?.currentVersion
+        ?? null,
       lastProvisionedAt: data.lastProvisionedAt
-        || data.state?.lastHeartbeatAt
-        || null
+        ?? data.provisioning?.lastProvisionedAt
+        ?? data.state?.lastHeartbeatAt
+        ?? null
     };
 
     console.log("ADMIN GET BOX", { boxId, user: context.portalUser.email });
