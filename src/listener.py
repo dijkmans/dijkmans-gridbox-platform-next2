@@ -1026,6 +1026,7 @@ def try_backend_heartbeat(version_raspberry, software_update):
     gateway_ip = get_gateway_ip()
     if gateway_ip:
         ping_gateway(gateway_ip)
+        payload["gatewayIp"] = gateway_ip
     gateway_mac = get_gateway_mac()
     if gateway_mac:
         payload["gatewayMac"] = gateway_mac
@@ -1112,26 +1113,26 @@ def update_pi_status():
             "updatedBy": f"gridbox-service-{VERSION}"
         }, merge=True)
 
-        # Gateway detectie — schrijf altijd gatewayIp zodat detectie zichtbaar is in Firestore
+        # Gateway detectie — schrijf top-level gatewayIp/gatewayMac (standaard)
         gateway_ip = get_gateway_ip()
-        hw_update: dict = {"hardware.gatewayIp": gateway_ip or "unknown"}
+        gw_update: dict = {"gatewayIp": gateway_ip or "unknown"}
 
         if gateway_ip:
             gateway_serial = get_gateway_serial()
             if gateway_serial:
-                hw_update["hardware.gatewaySerial"] = gateway_serial
+                gw_update["gatewaySerial"] = gateway_serial
                 log(f"INFO: gateway serial: {gateway_serial}")
             else:
                 log(f"WARN: gateway serial niet beschikbaar voor {gateway_ip}")
 
             gateway_mac = get_gateway_mac_fallback()
             if gateway_mac:
-                hw_update["hardware.gatewayMac"] = gateway_mac
+                gw_update["gatewayMac"] = gateway_mac
                 log(f"INFO: gateway MAC: {gateway_mac}")
             else:
                 log(f"WARN: gateway MAC niet beschikbaar voor {gateway_ip}")
 
-        box_doc_ref.update(hw_update)
+        box_doc_ref.update(gw_update)
 
         refresh_cached_config()
         log(
