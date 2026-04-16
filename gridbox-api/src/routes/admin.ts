@@ -423,7 +423,13 @@ router.get("/admin/boxes/:boxId", async (req, res) => {
       hardware: data.hardware ?? null,
       gatewayIp: data.gatewayIp ?? data.hardware?.gatewayIp ?? null,
       gatewayMac: data.gatewayMac ?? data.hardware?.gatewayMac ?? null,
-      rut: data.rut ?? null,
+      rut: {
+        ip:       data.rut?.ip       ?? data.gatewayIp  ?? data.hardware?.gatewayIp  ?? null,
+        mac:      data.rut?.mac      ?? data.gatewayMac ?? data.hardware?.gatewayMac ?? null,
+        model:    data.rut?.model    ?? "RUT241",
+        username: data.rut?.username ?? "admin",
+        password: data.rut?.password ?? null,
+      },
       scriptVersion: data.scriptVersion
         ?? data.provisioning?.scriptVersion
         ?? data.software?.currentVersion
