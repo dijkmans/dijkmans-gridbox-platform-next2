@@ -1002,6 +1002,33 @@ def get_gateway_mac_fallback():
     return None
 
 
+def find_rut241_via_arp_neigh():
+    """
+    Zoekt de RUT-241 via bestaande ARP-tabel (ip neigh show).
+    Teltonika OUI = 20:97:27 — geen extra dependencies nodig.
+    Werkt ook als de RUT-241 niet de default gateway is (ander subnet).
+    """
+    try:
+        result = subprocess.run(
+            ["ip", "neigh", "show"],
+            capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.splitlines():
+            parts = line.split()
+            if len(parts) < 5:
+                continue
+            ip = parts[0]
+            mac = next((p for p in parts if ":" in p and len(p) == 17), None)
+            if not mac:
+                continue
+            if mac.lower().startswith("20:97:27"):
+                log(f"INFO: [RUT241] Teltonika MAC gevonden in ARP neigh: {ip} → {mac}")
+                return ip, mac.lower()
+    except Exception as e:
+        log(f"WARN: [RUT241] ARP neigh fout: {e}")
+    return None, None
+
+
 def try_backend_heartbeat(version_raspberry, software_update):
     if not isinstance(runtime_config, dict) or not runtime_config:
         return False
@@ -1131,6 +1158,16 @@ def update_pi_status():
                 log(f"INFO: gateway MAC: {gateway_mac}")
             else:
                 log(f"WARN: gateway MAC niet beschikbaar voor {gateway_ip}")
+
+        # RUT-241 detectie via ARP neigh (werkt ook als RUT-241 niet de default gateway is)
+        rut_ip, rut_mac = find_rut241_via_arp_neigh()
+        if rut_ip and rut_mac:
+            if rut_mac != gw_update.get("gatewayMac"):
+                log(f"INFO: [RUT241] Gevonden via ARP neigh: {rut_ip} {rut_mac} (overschrijft default gateway MAC)")
+            gw_update["gatewayIp"] = rut_ip
+            gw_update["gatewayMac"] = rut_mac
+        else:
+            log("INFO: [RUT241] Geen Teltonika MAC in ARP neigh — gebruik default gateway")
 
         box_doc_ref.update(gw_update)
 
