@@ -72,6 +72,7 @@ snapshot_lock = threading.Lock()
 
 light_off_timer = None
 shutter_motor_timer = None
+auto_close_timer = None
 
 github_tag_cache = {
     "value": "unknown",
@@ -1545,7 +1546,7 @@ def mark_command(doc_ref, status, extra=None):
         log(f"ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Command status opslaan mislukt: {e}")
 
 def handle_command(doc_ref, data):
-    global shutter_motor_timer, light_off_timer
+    global shutter_motor_timer, light_off_timer, auto_close_timer
 
     with command_lock:
         cmd = (data.get("command") or "").upper()
@@ -1581,6 +1582,17 @@ def handle_command(doc_ref, data):
                     take_snapshot(phase="open_start", sequence_number=0)
 
                 ensure_snapshot_thread()
+
+                # Auto-close timer
+                cancel_timer(auto_close_timer)
+                ac_cfg = cached_config.get("autoClose", {})
+                if ac_cfg.get("enabled", False):
+                    delay = float(ac_cfg.get("delaySeconds", 300))
+                    log(f"Auto-close timer ingesteld op {delay} seconden")
+                    auto_close_timer = start_daemon_timer(
+                        delay,
+                        lambda: handle_command(None, {"command": "CLOSE", "source": "Auto-Close"})
+                    )
 
                 duration = float(shutter_cfg.get("openDurationSeconds", 30))
                 cancel_timer(shutter_motor_timer)
