@@ -1186,7 +1186,7 @@ def handle_command(doc_ref, data):
 
                 # --- NIEUWE AUTO CLOSE LOGICA ---
                 cancel_timer(auto_close_timer)
-                ac_cfg = hw_cfg.get("autoClose", {})
+                ac_cfg = cached_config.get("autoClose", {})
                 if ac_cfg.get("enabled", False):
                     delay = float(ac_cfg.get("delaySeconds", 300))
                     log(f"⏰ Auto-close timer ingesteld op {delay} seconden")
