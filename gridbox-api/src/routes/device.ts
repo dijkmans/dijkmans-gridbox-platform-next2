@@ -415,4 +415,87 @@ router.post("/device/heartbeat", async (req, res) => {
   }
 });
 
+router.post("/device/camera/discovery", async (req, res) => {
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+
+    const rawBoxId =
+      typeof body.boxId === "string" ? body.boxId.trim() : "";
+    const boxId = rawBoxId.toLowerCase();
+    const macAddress =
+      typeof body.macAddress === "string" ? body.macAddress.trim() : "";
+    const detectedIp =
+      typeof body.detectedIp === "string" ? body.detectedIp.trim() : "";
+
+    if (!rawBoxId) {
+      return res.status(400).json({
+        error: "INVALID_BOX_ID",
+        message: "boxId is verplicht"
+      });
+    }
+
+    if (!macAddress) {
+      return res.status(400).json({
+        error: "INVALID_MAC_ADDRESS",
+        message: "macAddress is verplicht"
+      });
+    }
+
+    if (!detectedIp) {
+      return res.status(400).json({
+        error: "INVALID_DETECTED_IP",
+        message: "detectedIp is verplicht"
+      });
+    }
+
+    const db = getFirestore();
+    const boxRef = db.collection("boxes").doc(boxId);
+    const boxDoc = await boxRef.get();
+
+    if (!boxDoc.exists) {
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Box bestaat niet"
+      });
+    }
+
+    const detectedAt = nowIso();
+
+    await boxRef.set(
+      {
+        hardware: {
+          camera: {
+            mac: macAddress,
+            detectedIp,
+            detectionStatus: "detected",
+            detectedAt
+          }
+        },
+        updatedAt: detectedAt
+      },
+      { merge: true }
+    );
+
+    console.log(`POST /device/camera/discovery: camera gedetecteerd voor ${boxId} mac=${macAddress} ip=${detectedIp}`);
+
+    return res.json({
+      ok: true,
+      item: {
+        boxId,
+        macAddress,
+        detectedIp,
+        detectionStatus: "detected",
+        detectedAt
+      }
+    });
+  } catch (error) {
+    console.error("FOUT in POST /device/camera/discovery", error);
+
+    return res.status(500).json({
+      error: "CAMERA_DISCOVERY_FAILED",
+      message: "Kon camera discovery niet verwerken"
+    });
+  }
+});
+
 export default router;

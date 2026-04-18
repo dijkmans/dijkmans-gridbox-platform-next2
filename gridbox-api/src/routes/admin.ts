@@ -2640,4 +2640,181 @@ router.delete("/admin/provisioning/:id", async (req, res) => {
   }
 });
 
+const CAMERA_IP_RANGE_START = 100;
+const CAMERA_IP_RANGE_END = 249;
+const CAMERA_IP_PREFIX = "192.168.10.";
+
+function isValidCameraIp(ip: string): boolean {
+  if (!ip.startsWith(CAMERA_IP_PREFIX)) return false;
+  const last = parseInt(ip.slice(CAMERA_IP_PREFIX.length), 10);
+  return Number.isInteger(last) && last >= CAMERA_IP_RANGE_START && last <= CAMERA_IP_RANGE_END;
+}
+
+router.post("/admin/boxes/:boxId/camera/suggest-ip", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const boxId = req.params.boxId;
+
+    const db = getFirestore();
+    const boxRef = db.collection("boxes").doc(boxId);
+    const boxDoc = await boxRef.get();
+
+    if (!boxDoc.exists) {
+      return res.status(404).json({ error: "BOX_NOT_FOUND", message: "Box bestaat niet" });
+    }
+
+    const allBoxesSnap = await db.collection("boxes").get();
+    const usedIps = new Set<string>();
+
+    for (const doc of allBoxesSnap.docs) {
+      const cameraIp = (doc.data()?.hardware as Record<string, unknown> | undefined)
+        ?.camera as Record<string, unknown> | undefined;
+      const ip = cameraIp?.ip;
+      if (typeof ip === "string" && ip.trim()) {
+        usedIps.add(ip.trim());
+      }
+    }
+
+    let suggestedIp: string | null = null;
+    for (let i = CAMERA_IP_RANGE_START; i <= CAMERA_IP_RANGE_END; i++) {
+      const candidate = `${CAMERA_IP_PREFIX}${i}`;
+      if (!usedIps.has(candidate)) {
+        suggestedIp = candidate;
+        break;
+      }
+    }
+
+    if (!suggestedIp) {
+      return res.status(409).json({
+        error: "NO_IP_AVAILABLE",
+        message: "Geen vrij IP beschikbaar in de camera-range"
+      });
+    }
+
+    const now = nowIso();
+    await boxRef.set(
+      {
+        hardware: {
+          camera: {
+            suggestedIp,
+            detectionStatus: "ip_suggested"
+          }
+        },
+        updatedAt: now
+      },
+      { merge: true }
+    );
+
+    console.log(`POST /admin/boxes/${boxId}/camera/suggest-ip: suggestedIp=${suggestedIp}`);
+
+    return res.json({ ok: true, suggestedIp });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
+    }
+
+    console.error("FOUT in POST /admin/boxes/:boxId/camera/suggest-ip", error);
+    return res.status(500).json({
+      error: "CAMERA_SUGGEST_IP_FAILED",
+      message: "Kon camera-IP niet suggereren"
+    });
+  }
+});
+
+router.post("/admin/boxes/:boxId/camera/confirm", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const boxId = req.params.boxId;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+
+    const macAddress =
+      typeof body.macAddress === "string" ? body.macAddress.trim() : "";
+    const reservedIp =
+      typeof body.reservedIp === "string" ? body.reservedIp.trim() : "";
+
+    if (!macAddress) {
+      return res.status(400).json({ error: "INVALID_MAC_ADDRESS", message: "macAddress is verplicht" });
+    }
+
+    if (!reservedIp) {
+      return res.status(400).json({ error: "INVALID_IP", message: "reservedIp is verplicht" });
+    }
+
+    if (!isValidCameraIp(reservedIp)) {
+      return res.status(400).json({
+        error: "INVALID_IP_RANGE",
+        message: `reservedIp moet in de range ${CAMERA_IP_PREFIX}${CAMERA_IP_RANGE_START}–${CAMERA_IP_RANGE_END} vallen`
+      });
+    }
+
+    const db = getFirestore();
+    const boxRef = db.collection("boxes").doc(boxId);
+    const boxDoc = await boxRef.get();
+
+    if (!boxDoc.exists) {
+      return res.status(404).json({ error: "BOX_NOT_FOUND", message: "Box bestaat niet" });
+    }
+
+    const allBoxesSnap = await db.collection("boxes").get();
+    for (const doc of allBoxesSnap.docs) {
+      if (doc.id === boxId) continue;
+      const cameraIp = (doc.data()?.hardware as Record<string, unknown> | undefined)
+        ?.camera as Record<string, unknown> | undefined;
+      if (cameraIp?.ip === reservedIp) {
+        return res.status(409).json({
+          error: "IP_ALREADY_IN_USE",
+          message: `IP ${reservedIp} is al in gebruik bij box ${doc.id}`
+        });
+      }
+    }
+
+    const snapshotUrl = `http://${reservedIp}/cgi-bin/snapshot.cgi`;
+    const now = nowIso();
+
+    await boxRef.set(
+      {
+        hardware: {
+          camera: {
+            mac: macAddress,
+            ip: reservedIp,
+            snapshotUrl,
+            detectionStatus: "reserved",
+            reservedAt: now
+          }
+        },
+        updatedAt: now
+      },
+      { merge: true }
+    );
+
+    console.log(`POST /admin/boxes/${boxId}/camera/confirm: ip=${reservedIp} mac=${macAddress}`);
+
+    return res.json({ ok: true, ip: reservedIp, snapshotUrl });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+
+    if (statusCode === 401) {
+      return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    }
+
+    if (statusCode === 403) {
+      return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
+    }
+
+    console.error("FOUT in POST /admin/boxes/:boxId/camera/confirm", error);
+    return res.status(500).json({
+      error: "CAMERA_CONFIRM_FAILED",
+      message: "Kon camera-IP niet bevestigen"
+    });
+  }
+});
+
 export default router;

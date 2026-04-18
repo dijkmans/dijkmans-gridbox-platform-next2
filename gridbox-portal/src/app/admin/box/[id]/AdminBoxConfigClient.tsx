@@ -13,6 +13,10 @@ type BoxCamera = {
   enabled?: boolean;
   mac?: string | null;
   ip?: string | null;
+  detectedIp?: string | null;
+  suggestedIp?: string | null;
+  detectionStatus?: string | null;
+  snapshotUrl?: string | null;
   username?: string | null;
   snapshotIntervalSeconds?: number | null;
   changeDetectionThreshold?: number | null;
@@ -111,6 +115,12 @@ export default function AdminBoxConfigClient() {
   const [cameraSnapshotInterval, setCameraSnapshotInterval] = useState("");
   const [cameraChangeThreshold, setCameraChangeThreshold] = useState("");
   const [cameraPostCloseDuration, setCameraPostCloseDuration] = useState("");
+  const [camDetectionStatus, setCamDetectionStatus] = useState("");
+  const [camDetectedMac, setCamDetectedMac] = useState("");
+  const [camDetectedIp, setCamDetectedIp] = useState("");
+  const [camSuggestedIp, setCamSuggestedIp] = useState("");
+  const [camOnboardingBusy, setCamOnboardingBusy] = useState(false);
+  const [camOnboardingError, setCamOnboardingError] = useState("");
 
   // Verlichting
   const [lightsOnWhenOpen, setLightsOnWhenOpen] = useState(false);
@@ -209,6 +219,10 @@ export default function AdminBoxConfigClient() {
       setCameraSnapshotInterval(numField(cam?.snapshotIntervalSeconds));
       setCameraChangeThreshold(numField(cam?.changeDetectionThreshold));
       setCameraPostCloseDuration(numField(cam?.postCloseSnapshotDurationSeconds));
+      setCamDetectionStatus(cam?.detectionStatus ?? (cam?.mac ? "reserved" : ""));
+      setCamDetectedMac(cam?.mac ?? "");
+      setCamDetectedIp(cam?.detectedIp ?? cam?.ip ?? "");
+      setCamSuggestedIp(cam?.suggestedIp ?? "");
 
       // lighting veld — ondersteun zowel hardware.lights als hardware.lighting
       const lights = (b.hardware?.lights ?? (b.hardware as any)?.lighting) as BoxLights | null | undefined;
@@ -327,6 +341,56 @@ export default function AdminBoxConfigClient() {
       setErrorMessage("Onverwachte fout bij opslaan");
     } finally {
       setSaving(false);
+    }
+  }
+
+  // ── Camera onboarding ─────────────────────────────────────────────────────
+
+  async function handleSuggestIp() {
+    try {
+      setCamOnboardingBusy(true);
+      setCamOnboardingError("");
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) { setCamOnboardingError("Niet aangemeld"); return; }
+      const res = await fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/camera/suggest-ip`), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setCamOnboardingError((data as { message?: string }).message || "Fout bij voorstellen IP");
+        return;
+      }
+      setCamSuggestedIp((data as { suggestedIp?: string }).suggestedIp ?? "");
+      setCamDetectionStatus("ip_suggested");
+    } catch {
+      setCamOnboardingError("Onverwachte fout bij voorstellen IP");
+    } finally {
+      setCamOnboardingBusy(false);
+    }
+  }
+
+  async function handleConfirmIp() {
+    try {
+      setCamOnboardingBusy(true);
+      setCamOnboardingError("");
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) { setCamOnboardingError("Niet aangemeld"); return; }
+      const res = await fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/camera/confirm`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ macAddress: camDetectedMac, reservedIp: camSuggestedIp })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setCamOnboardingError((data as { message?: string }).message || "Fout bij bevestigen IP");
+        return;
+      }
+      await loadData();
+    } catch {
+      setCamOnboardingError("Onverwachte fout bij bevestigen IP");
+    } finally {
+      setCamOnboardingBusy(false);
     }
   }
 
@@ -500,26 +564,67 @@ export default function AdminBoxConfigClient() {
           {/* Camera */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-4">Camera</p>
+
+            {camOnboardingError && (
+              <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                {camOnboardingError}
+              </div>
+            )}
+
+            {/* Onboarding status blok */}
+            {!camDetectionStatus && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                Geen camera gedetecteerd. Zorg dat de Raspberry Pi actief is.
+              </div>
+            )}
+
+            {camDetectionStatus === "detected" && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-4 space-y-3">
+                <KVRow label="MAC-adres" value={camDetectedMac} />
+                <KVRow label="Huidig IP" value={camDetectedIp} />
+                <button
+                  type="button"
+                  onClick={handleSuggestIp}
+                  disabled={camOnboardingBusy}
+                  className="mt-2 rounded-xl bg-blue-700 text-white px-5 py-2.5 text-sm font-semibold hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >
+                  {camOnboardingBusy ? "Bezig…" : "IP-adres voorstellen"}
+                </button>
+              </div>
+            )}
+
+            {camDetectionStatus === "ip_suggested" && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 space-y-3">
+                <KVRow label="MAC-adres" value={camDetectedMac} />
+                <KVRow label="Huidig IP" value={camDetectedIp} />
+                <KVRow label="Voorgesteld IP" value={camSuggestedIp} />
+                <button
+                  type="button"
+                  onClick={handleConfirmIp}
+                  disabled={camOnboardingBusy}
+                  className="mt-2 rounded-xl bg-emerald-700 text-white px-5 py-2.5 text-sm font-semibold hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >
+                  {camOnboardingBusy ? "Bezig…" : "Bevestig IP-koppeling"}
+                </button>
+              </div>
+            )}
+
+            {camDetectionStatus === "reserved" && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 space-y-3">
+                <KVRow label="MAC-adres" value={camDetectedMac} />
+                <KVRow label="Vast IP" value={camDetectedIp} />
+              </div>
+            )}
+
+            <hr className="border-slate-100 mt-5 mb-5" />
+
+            {/* Overige camera-instellingen */}
             <div className="space-y-4">
               <FieldRow label="Camera actief">
                 <Toggle checked={cameraEnabled} onChange={setCameraEnabled} />
               </FieldRow>
-              <FieldRow label="IP-adres">
-                <TextInput value={cameraIp} onChange={setCameraIp} placeholder="192.168.10.x" />
-              </FieldRow>
-              <FieldRow label="MAC-adres camera">
-                <TextInput value={cameraMac ?? "—"} disabled />
-              </FieldRow>
               <FieldRow label="Gebruikersnaam">
                 <TextInput value={cameraUsername} onChange={setCameraUsername} placeholder="admin" />
-              </FieldRow>
-              <FieldRow label="Wachtwoord">
-                <TextInput
-                  type="password"
-                  value={cameraPassword}
-                  onChange={setCameraPassword}
-                  placeholder="Laat leeg om ongewijzigd te laten"
-                />
               </FieldRow>
               <FieldRow label="Snapshot interval (sec)">
                 <NumInput value={cameraSnapshotInterval} onChange={setCameraSnapshotInterval} placeholder="bijv. 5" />
@@ -529,6 +634,14 @@ export default function AdminBoxConfigClient() {
               </FieldRow>
               <FieldRow label="Snapshot duur na sluiten (sec)">
                 <NumInput value={cameraPostCloseDuration} onChange={setCameraPostCloseDuration} placeholder="bijv. 10" />
+              </FieldRow>
+              <FieldRow label="Wachtwoord">
+                <TextInput
+                  type="password"
+                  value={cameraPassword}
+                  onChange={setCameraPassword}
+                  placeholder="Laat leeg om ongewijzigd te laten"
+                />
               </FieldRow>
             </div>
           </div>
