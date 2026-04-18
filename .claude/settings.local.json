@@ -11,7 +11,10 @@
       "Bash(gsutil iam:*)",
       "Bash(npm install:*)",
       "Bash(gcloud run deploy gridbox-api:*)",
-      "Bash(gcloud run services describe:*)"
+      "Bash(gcloud run services describe:*)",
+      "Bash(npx tsx *)",
+      "Bash(npm run *)",
+      "Bash(firebase deploy *)"
     ]
   }
 }

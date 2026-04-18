@@ -1,10 +1,12 @@
-﻿"use client";
+"use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { auth } from "@/lib/firebase";
+import Link from "next/link";
+import { auth, googleProvider } from "@/lib/firebase";
+import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { apiUrl } from "@/lib/api";
-import AuthPanel from "@/components/AuthPanel";
+import { button, card, alert, input, badge, typography, cx } from "@/lib/design-tokens";
 
 type InviteValidationResult = {
   valid: boolean;
@@ -29,6 +31,7 @@ type AuthState = {
   loading: boolean;
   email: string;
   uid: string;
+  displayName: string;
 };
 
 function normalizeEmail(value: string | null | undefined) {
@@ -37,6 +40,13 @@ function normalizeEmail(value: string | null | undefined) {
 
 function isValidPhone(value: string) {
   return /^\+[1-9]\d{7,14}$/.test(value.trim());
+}
+
+function roleLabel(role: string | null | undefined): string {
+  if (role === "platformAdmin") return "Platformbeheerder";
+  if (role === "customerAdmin") return "Beheerder";
+  if (role === "customerOperator") return "Operator";
+  return role || "-";
 }
 
 function PageContentRouter() {
@@ -51,57 +61,40 @@ function PageContentRouter() {
     loading: true,
     email: "",
     uid: "",
+    displayName: "",
   });
 
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [phoneCodeSent, setPhoneCodeSent] = useState(false);
   const [phoneCode, setPhoneCode] = useState("");
 
-  const [sendingCode, setSendingCode] = useState(false);
-  const [sendCodeMessage, setSendCodeMessage] = useState("");
-  const [sendCodeError, setSendCodeError] = useState("");
-
-  const [verifyingCode, setVerifyingCode] = useState(false);
-  const [verifyCodeMessage, setVerifyCodeMessage] = useState("");
-  const [verifyCodeError, setVerifyCodeError] = useState("");
-
-  const [accepting, setAccepting] = useState(false);
-  const [acceptMessage, setAcceptMessage] = useState("");
-  const [acceptError, setAcceptError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [stepError, setStepError] = useState("");
+  const [done, setDone] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
       setAuthState({
         loading: false,
         email: user?.email || "",
         uid: user?.uid || "",
+        displayName: user?.displayName || "",
       });
     });
-
     return () => unsubscribe();
   }, []);
 
   async function loadInviteValidation(currentToken: string) {
     const res = await fetch(apiUrl("/invites/validate"), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token: currentToken }),
     });
-
     const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.message || "Kon uitnodiging niet valideren");
-    }
-
+    if (!res.ok) throw new Error(data.message || "Kon uitnodiging niet valideren");
     setInvite(data);
-
-    if (data.phoneNumber) {
-      setPhoneNumber(data.phoneNumber);
-    }
-
-    return data;
+    if (data.phoneNumber) setPhoneNumber(data.phoneNumber);
+    return data as InviteValidationResult;
   }
 
   useEffect(() => {
@@ -110,129 +103,94 @@ function PageContentRouter() {
         setLoading(true);
         setErrorMessage("");
         setInvite(null);
-
         if (!token) {
-          setErrorMessage("Geen invite-token gevonden in de link");
+          setErrorMessage("Geen uitnodigingslink gevonden. Controleer de link en probeer opnieuw.");
           return;
         }
-
-        await loadInviteValidation(token);
+        const data = await loadInviteValidation(token);
+        if (data.status === "accepted") setDone(true);
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Netwerkfout bij valideren van de uitnodiging";
-        setErrorMessage(message);
+        setErrorMessage(
+          error instanceof Error ? error.message : "Netwerkfout bij het laden van de uitnodiging"
+        );
       } finally {
         setLoading(false);
       }
     }
-
     void validateInvite();
   }, [token]);
 
-  async function handleSendPhoneCode() {
+  async function handleGoogleLogin() {
     try {
-      setSendingCode(true);
-      setSendCodeMessage("");
-      setSendCodeError("");
-      setVerifyCodeMessage("");
-      setVerifyCodeError("");
-      setAcceptMessage("");
-      setAcceptError("");
+      setStepError("");
+      await signInWithPopup(auth, googleProvider);
+    } catch {
+      setStepError("Inloggen mislukt. Probeer opnieuw.");
+    }
+  }
 
-      if (!phoneNumber.trim()) {
-        setSendCodeError("Vul een gsm-nummer in");
-        return;
-      }
+  async function handleLogout() {
+    await signOut(auth);
+  }
 
-      if (!isValidPhone(phoneNumber)) {
-        setSendCodeError("Vul een geldig gsm-nummer in in internationaal formaat");
-        return;
-      }
-
+  async function handleSendCode() {
+    setStepError("");
+    if (!phoneNumber.trim()) {
+      setStepError("Vul je gsm-nummer in.");
+      return;
+    }
+    if (!isValidPhone(phoneNumber)) {
+      setStepError("Gebruik internationaal formaat, bijvoorbeeld +32475123456.");
+      return;
+    }
+    try {
+      setBusy(true);
       const res = await fetch(apiUrl("/invites/send-phone-code"), {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          token,
-          phoneNumber: phoneNumber.trim(),
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, phoneNumber: phoneNumber.trim() }),
       });
-
       const data = await res.json();
-
       if (!res.ok) {
-        setSendCodeError(data.message || data.error || "Kon verificatiecode niet versturen");
+        setStepError(data.message || data.error || "Kon de code niet versturen.");
         return;
       }
-
-      setSendCodeMessage(data.message || "Verificatiecode verzonden");
-      await loadInviteValidation(token);
-    } catch (error) {
-      setSendCodeError("Netwerkfout bij versturen van de verificatiecode");
+      setPhoneCodeSent(true);
+    } catch {
+      setStepError("Netwerkfout bij het versturen van de code.");
     } finally {
-      setSendingCode(false);
+      setBusy(false);
     }
   }
 
-  async function handleVerifyPhoneCode() {
+  async function handleVerifyAndAccept() {
+    setStepError("");
+    if (!phoneCode.trim()) {
+      setStepError("Vul de ontvangen code in.");
+      return;
+    }
     try {
-      setVerifyingCode(true);
-      setVerifyCodeMessage("");
-      setVerifyCodeError("");
-      setAcceptMessage("");
-      setAcceptError("");
+      setBusy(true);
 
-      if (!phoneCode.trim()) {
-        setVerifyCodeError("Vul de verificatiecode in");
-        return;
-      }
-
-      const res = await fetch(apiUrl("/invites/verify-phone-code"), {
+      const verifyRes = await fetch(apiUrl("/invites/verify-phone-code"), {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          token,
-          code: phoneCode.trim(),
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, code: phoneCode.trim() }),
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setVerifyCodeError(data.message || data.error || "Kon verificatiecode niet controleren");
+      const verifyData = await verifyRes.json();
+      if (!verifyRes.ok) {
+        setStepError(verifyData.message || verifyData.error || "Code klopt niet. Probeer opnieuw.");
         return;
       }
-
-      setVerifyCodeMessage(data.message || "Gsm-nummer geverifieerd");
-      setPhoneCode("");
-      await loadInviteValidation(token);
-    } catch (error) {
-      setVerifyCodeError("Netwerkfout bij controleren van de verificatiecode");
-    } finally {
-      setVerifyingCode(false);
-    }
-  }
-
-  async function handleAcceptInvite() {
-    try {
-      setAccepting(true);
-      setAcceptMessage("");
-      setAcceptError("");
 
       const user = auth.currentUser;
-
       if (!user) {
-        setAcceptError("Je bent niet aangemeld");
+        setStepError("Sessie verlopen. Log opnieuw in.");
         return;
       }
-
       const idToken = await user.getIdToken();
 
-      const res = await fetch(apiUrl("/invites/accept"), {
+      const acceptRes = await fetch(apiUrl("/invites/accept"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -243,240 +201,236 @@ function PageContentRouter() {
           displayName: user.displayName || invite?.displayName || "",
         }),
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setAcceptError(data.message || data.error || "Activatie mislukt");
+      const acceptData = await acceptRes.json();
+      if (!acceptRes.ok) {
+        setStepError(acceptData.message || acceptData.error || "Activatie mislukt.");
         return;
       }
 
-      setAcceptMessage("Activatie gelukt. Deze uitnodiging is nu afgewerkt.");
-      setInvite((current) =>
-        current
-          ? {
-              ...current,
-              status: "accepted",
-            }
-          : current
-      );
-    } catch (error) {
-      setAcceptError("Netwerkfout bij activatie");
+      setDone(true);
+    } catch {
+      setStepError("Netwerkfout bij het activeren van de uitnodiging.");
     } finally {
-      setAccepting(false);
+      setBusy(false);
     }
   }
 
   const inviteEmail = normalizeEmail(invite?.email);
   const loggedInEmail = normalizeEmail(authState.email);
-  const emailMatches = inviteEmail && loggedInEmail && inviteEmail === loggedInEmail;
-
-  const canUsePhoneFlow =
-    !!invite?.valid &&
-    !!authState.uid &&
-    !!emailMatches &&
-    invite?.status !== "accepted" &&
-    invite?.phoneVerified !== true;
-
-  const canAttemptAccept =
-    !!invite?.valid &&
-    !!authState.uid &&
-    !!emailMatches &&
-    invite?.status !== "accepted" &&
-    invite?.phoneVerified === true;
+  const emailMatches = !!(inviteEmail && loggedInEmail && inviteEmail === loggedInEmail);
 
   return (
-    <main style={{ padding: "24px", fontFamily: "sans-serif", maxWidth: "760px" }}>
-      <h1>Uitnodiging activeren</h1>
+    <div className="min-h-screen bg-slate-50 flex items-start justify-center px-4 py-12">
+      <div className="w-full" style={{ maxWidth: 480 }}>
 
-      {loading && <p>Uitnodiging controleren...</p>}
-
-      {!loading && errorMessage && (
-        <div style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "16px" }}>
-          <p style={{ color: "red", marginTop: 0 }}>{errorMessage}</p>
-          <p style={{ marginBottom: 0 }}>
-            Controleer of je de juiste link gebruikt of vraag een nieuwe uitnodiging aan.
-          </p>
+        {/* Header */}
+        <div className="mb-8 text-center">
+          <span className={cx(badge.blue, "mb-4 inline-block")}>Gridbox</span>
+          <h1 className="text-2xl font-bold text-slate-900">Uitnodiging activeren</h1>
         </div>
-      )}
 
-      {!loading && invite?.valid && (
-        <>
-          <div style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "16px" }}>
-            <p><strong>Status:</strong> {invite.status === "accepted" ? "uitnodiging afgewerkt" : "uitnodiging geldig"}</p>
-            <p><strong>Email:</strong> {invite.email || "-"}</p>
-            <p><strong>Naam:</strong> {invite.displayName || "-"}</p>
-            <p><strong>Customer:</strong> {invite.customerId || "-"}</p>
-            <p><strong>Rol:</strong> {invite.role || "-"}</p>
-            <p><strong>Permissions:</strong> {invite.scope?.permissions?.length ? invite.scope.permissions.join(", ") : "-"}</p>
-            <p><strong>Geldig tot:</strong> {invite.expiresAt || "-"}</p>
-            <p><strong>Phone verified:</strong> {invite.phoneVerified ? "ja" : "nee"}</p>
-            <p><strong>Phone status:</strong> {invite.phoneVerificationStatus || "-"}</p>
-            <p><strong>Gsm-nummer:</strong> {invite.phoneNumber || "-"}</p>
+        {/* Loading */}
+        {loading && (
+          <div className={card.panel}>
+            <p className={typography.body}>Uitnodiging wordt gecontroleerd&hellip;</p>
           </div>
+        )}
 
-          <AuthPanel />
-
-          <div style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "16px", marginTop: "16px" }}>
-            <h2 style={{ marginTop: 0 }}>Login-status</h2>
-
-            {authState.loading && <p>Loginstatus controleren...</p>}
-
-            {!authState.loading && !authState.uid && (
-              <>
-                <p style={{ color: "darkorange" }}>
-                  Je bent nog niet ingelogd.
-                </p>
-                <p>
-                  Log in met het uitgenodigde e-mailadres: <strong>{invite.email || "-"}</strong>
-                </p>
-              </>
-            )}
-
-            {!authState.loading && authState.uid && (
-              <>
-                <p><strong>Ingelogd als:</strong> {authState.email || "-"}</p>
-
-                {!emailMatches && (
-                  <p style={{ color: "red" }}>
-                    Dit account komt niet overeen met het uitgenodigde e-mailadres.
-                  </p>
-                )}
-
-                {emailMatches && (
-                  <p style={{ color: "green" }}>
-                    Dit account komt overeen met de uitnodiging.
-                  </p>
-                )}
-              </>
-            )}
+        {/* Error bij laden */}
+        {!loading && errorMessage && (
+          <div className={alert.amber}>
+            <p className="font-semibold mb-1">Uitnodiging niet geldig</p>
+            <p>{errorMessage}</p>
           </div>
+        )}
 
-          {canUsePhoneFlow && (
-            <div style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "16px", marginTop: "16px" }}>
-              <h2 style={{ marginTop: 0 }}>Gsm-verificatie</h2>
+        {/* Afgerond scherm */}
+        {done && (
+          <div className={cx(card.base, "p-8 text-center")}>
+            <div className="text-4xl mb-4">✓</div>
+            <h2 className="text-xl font-bold text-slate-900 mb-2">Activatie gelukt</h2>
+            <p className={cx(typography.body, "mb-6")}>
+              Je account is gereed. Je kunt nu naar het portaal.
+            </p>
+            <Link href="/" className={button.primary + " inline-block"}>
+              Ga naar portaal
+            </Link>
+          </div>
+        )}
 
-              <p>
-                Vul je gsm-nummer in in internationaal formaat, bijvoorbeeld <strong>+32475123456</strong>.
-              </p>
+        {/* Wizard */}
+        {!loading && !errorMessage && invite?.valid && !done && (
+          <div className="space-y-4">
 
-              <p>
-                <input
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  placeholder="+32475123456"
-                  style={{ width: "100%", padding: "8px", marginBottom: "8px" }}
-                />
-              </p>
-
-              <button
-                type="button"
-                onClick={() => void handleSendPhoneCode()}
-                disabled={sendingCode}
-                style={{ padding: "8px 12px" }}
-              >
-                {sendingCode ? "Code verzenden..." : "Verificatiecode versturen"}
-              </button>
-
-              {sendCodeMessage && (
-                <p style={{ color: "green", marginTop: "12px", marginBottom: 0 }}>
-                  {sendCodeMessage}
+            {/* Stap 1: Uitnodigingsinfo */}
+            <div className={card.base}>
+              <div className={card.header}>
+                <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1">
+                  Stap 1 — Jouw uitnodiging
                 </p>
-              )}
+                <h2 className="text-lg font-bold text-slate-900">
+                  {invite.displayName || invite.email || "Welkom"}
+                </h2>
+              </div>
+              <div className="px-6 py-5 space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">E-mailadres</span>
+                  <span className="font-medium text-slate-900">{invite.email || "-"}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Rol</span>
+                  <span className="font-medium text-slate-900">{roleLabel(invite.role)}</span>
+                </div>
+                {invite.customerId && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">Bedrijf</span>
+                    <span className="font-medium text-slate-900">{invite.customerId}</span>
+                  </div>
+                )}
+              </div>
 
-              {sendCodeError && (
-                <p style={{ color: "red", marginTop: "12px", marginBottom: 0 }}>
-                  {sendCodeError}
-                </p>
-              )}
-
-              <div style={{ marginTop: "16px", borderTop: "1px solid #eee", paddingTop: "16px" }}>
-                <p>
-                  Heb je een code ontvangen? Vul ze hier in.
-                </p>
-
-                <p>
-                  <input
-                    value={phoneCode}
-                    onChange={(e) => setPhoneCode(e.target.value)}
-                    placeholder="6-cijferige code"
-                    style={{ width: "100%", padding: "8px", marginBottom: "8px" }}
-                  />
-                </p>
-
-                <button
-                  type="button"
-                  onClick={() => void handleVerifyPhoneCode()}
-                  disabled={verifyingCode}
-                  style={{ padding: "8px 12px" }}
-                >
-                  {verifyingCode ? "Code controleren..." : "Code bevestigen"}
-                </button>
-
-                {verifyCodeMessage && (
-                  <p style={{ color: "green", marginTop: "12px", marginBottom: 0 }}>
-                    {verifyCodeMessage}
-                  </p>
+              {/* Login blok */}
+              <div className="border-t border-slate-200 px-6 py-5">
+                {authState.loading && (
+                  <p className={typography.body}>Aanmeldstatus controleren&hellip;</p>
                 )}
 
-                {verifyCodeError && (
-                  <p style={{ color: "red", marginTop: "12px", marginBottom: 0 }}>
-                    {verifyCodeError}
-                  </p>
+                {!authState.loading && !authState.uid && (
+                  <div className="space-y-3">
+                    <p className={typography.body}>
+                      Log in met het uitgenodigde e-mailadres om verder te gaan.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void handleGoogleLogin()}
+                      className={button.primary + " w-full"}
+                    >
+                      Aanmelden met Google
+                    </button>
+                  </div>
+                )}
+
+                {!authState.loading && authState.uid && !emailMatches && (
+                  <div className="space-y-3">
+                    <div className={alert.amber}>
+                      <p className="font-semibold mb-1">Verkeerd account</p>
+                      <p>
+                        Je bent ingelogd als <strong>{authState.email}</strong>, maar de uitnodiging
+                        is voor <strong>{invite.email}</strong>.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleLogout()}
+                      className={button.secondary + " w-full"}
+                    >
+                      Ander account gebruiken
+                    </button>
+                  </div>
+                )}
+
+                {!authState.loading && emailMatches && (
+                  <div className={alert.green}>
+                    Ingelogd als <strong>{authState.email}</strong>. Je kunt doorgaan.
+                  </div>
                 )}
               </div>
             </div>
-          )}
 
-          {canAttemptAccept && (
-            <div style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "16px", marginTop: "16px" }}>
-              <h2 style={{ marginTop: 0 }}>Activatie</h2>
+            {/* Stap 2: Gsm-verificatie — alleen zichtbaar als email matched */}
+            {emailMatches && (
+              <div className={card.base}>
+                <div className={card.header}>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1">
+                    Stap 2 — Gsm-verificatie
+                  </p>
+                  <h2 className="text-lg font-bold text-slate-900">
+                    {phoneCodeSent ? "Voer de ontvangen code in" : "Vul je gsm-nummer in"}
+                  </h2>
+                </div>
+                <div className="px-6 py-5 space-y-4">
 
-              <button
-                type="button"
-                onClick={() => void handleAcceptInvite()}
-                disabled={accepting}
-                style={{ padding: "8px 12px" }}
-              >
-                {accepting ? "Activatie bezig..." : "Activatie afronden"}
-              </button>
+                  {!phoneCodeSent && (
+                    <>
+                      <p className={typography.body}>
+                        Je ontvangt een eenmalige code via sms om je identiteit te bevestigen.
+                      </p>
+                      <input
+                        type="tel"
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value)}
+                        placeholder="+32475123456"
+                        className={input.base}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void handleSendCode()}
+                        disabled={busy}
+                        className={button.primary + " w-full"}
+                      >
+                        {busy ? "Code versturen\u2026" : "Verificatiecode versturen"}
+                      </button>
+                    </>
+                  )}
 
-              {acceptMessage && (
-                <p style={{ color: "green", marginTop: "12px", marginBottom: 0 }}>
-                  {acceptMessage}
-                </p>
-              )}
+                  {phoneCodeSent && (
+                    <>
+                      <p className={typography.body}>
+                        Voer de 6-cijferige code in die je op <strong>{phoneNumber}</strong> hebt
+                        ontvangen.
+                      </p>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={phoneCode}
+                        onChange={(e) => setPhoneCode(e.target.value)}
+                        placeholder="123456"
+                        className={input.base}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void handleVerifyAndAccept()}
+                        disabled={busy}
+                        className={button.primary + " w-full"}
+                      >
+                        {busy ? "Bezig met activeren\u2026" : "Code bevestigen"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setPhoneCodeSent(false); setPhoneCode(""); setStepError(""); }}
+                        className={cx(button.secondary, "w-full")}
+                      >
+                        Ander nummer gebruiken
+                      </button>
+                    </>
+                  )}
 
-              {acceptError && (
-                <p style={{ color: "red", marginTop: "12px", marginBottom: 0 }}>
-                  {acceptError}
-                </p>
-              )}
-            </div>
-          )}
+                  {stepError && (
+                    <div className={alert.amber}>
+                      {stepError}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
-          {invite?.status === "accepted" && (
-            <div style={{ border: "1px solid #ccc", borderRadius: "8px", padding: "16px", marginTop: "16px" }}>
-              <h2 style={{ marginTop: 0 }}>Afgerond</h2>
-              <p style={{ marginBottom: 0 }}>
-                Deze uitnodiging is al geactiveerd en kan niet opnieuw gebruikt worden.
-              </p>
-            </div>
-          )}
-
-          <div style={{ marginTop: "20px", borderTop: "1px solid #eee", paddingTop: "16px" }}>
-            <p style={{ marginTop: 0 }}>
-              Volgorde: login met het juiste e-mailadres, gsm-code ontvangen, code bevestigen, daarna activatie afronden.
-            </p>
           </div>
-        </>
-      )}
-    </main>
+        )}
+
+      </div>
+    </div>
   );
 }
+
 export default function Page() {
   return (
-    <Suspense fallback={<main style={{ padding: "24px", fontFamily: "sans-serif" }}><p>Pagina laden...</p></main>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+          <p className="text-slate-500 text-sm">Pagina laden&hellip;</p>
+        </div>
+      }
+    >
       <PageContentRouter />
     </Suspense>
   );
