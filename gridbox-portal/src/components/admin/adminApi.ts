@@ -91,6 +91,41 @@ export async function fetchAdminNextCameraIp({ token }: FetchOptions) {
   return fetchAdminPath("/admin/boxes/next-camera-ip", { token });
 }
 
+export async function createAdminSite(
+  body: { id: string; name: string; address?: string; city?: string; postalCode?: string; country?: string; customerId?: string },
+  { token }: { token: string }
+) {
+  return fetch(apiUrl("/admin/sites"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body)
+  });
+}
+
+export async function updateAdminSite(
+  siteId: string,
+  body: { name?: string; address?: string; city?: string; postalCode?: string; country?: string; active?: boolean },
+  { token }: { token: string }
+) {
+  return fetch(apiUrl(`/admin/sites/${encodeURIComponent(siteId)}`), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body)
+  });
+}
+
+export async function updateAdminCustomer(
+  customerId: string,
+  body: { name?: string; logoPath?: string; active?: boolean },
+  { token }: { token: string }
+) {
+  return fetch(apiUrl(`/admin/customers/${encodeURIComponent(customerId)}`), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body)
+  });
+}
+
 export async function putAdminBoxCamera(
   boxId: string,
   body: { mac: string; ip: string; username?: string; password?: string },

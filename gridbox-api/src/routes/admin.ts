@@ -209,6 +209,10 @@ router.get("/admin/sites", async (req, res) => {
           id: siteDoc.id,
           customerId: typeof data.customerId === "string" ? data.customerId : null,
           name: typeof data.name === "string" ? data.name : null,
+          address: typeof data.address === "string" ? data.address : null,
+          city: typeof data.city === "string" ? data.city : null,
+          postalCode: typeof data.postalCode === "string" ? data.postalCode : null,
+          country: typeof data.country === "string" ? data.country : null,
           active: data.active !== false
         };
       })
@@ -241,6 +245,98 @@ router.get("/admin/sites", async (req, res) => {
       error: "ADMIN_SITES_GET_FAILED",
       message: "Kon sites niet ophalen"
     });
+  }
+});
+
+router.post("/admin/sites", async (req, res) => {
+  try {
+    const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+
+    const siteId = typeof body.id === "string" ? body.id.trim() : "";
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+
+    if (!siteId) {
+      return res.status(400).json({ error: "INVALID_SITE_ID", message: "Site id is verplicht" });
+    }
+    if (!name) {
+      return res.status(400).json({ error: "INVALID_SITE_NAME", message: "Site naam is verplicht" });
+    }
+
+    const db = getFirestore();
+    const docRef = db.collection("sites").doc(siteId);
+    const existing = await docRef.get();
+
+    if (existing.exists) {
+      return res.status(409).json({ error: "SITE_ALREADY_EXISTS", message: `Site '${siteId}' bestaat al` });
+    }
+
+    const now = nowIso();
+    await docRef.set({
+      name,
+      address: typeof body.address === "string" ? body.address.trim() || null : null,
+      city: typeof body.city === "string" ? body.city.trim() || null : null,
+      postalCode: typeof body.postalCode === "string" ? body.postalCode.trim() || null : null,
+      country: typeof body.country === "string" ? body.country.trim() || null : null,
+      customerId: typeof body.customerId === "string" ? body.customerId.trim() || null : null,
+      active: true,
+      createdAt: now,
+      addedBy: context.portalUser.email
+    });
+
+    console.log(`POST /admin/sites: site '${siteId}' aangemaakt door ${context.portalUser.email}`);
+
+    return res.json({ ok: true, id: siteId });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
+    console.error("FOUT in POST /admin/sites", error);
+    return res.status(500).json({ error: "ADMIN_SITE_CREATE_FAILED", message: "Kon site niet aanmaken" });
+  }
+});
+
+router.put("/admin/sites/:id", async (req, res) => {
+  try {
+    const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const siteId = req.params.id?.trim();
+    if (!siteId) {
+      return res.status(400).json({ error: "INVALID_SITE_ID", message: "Site id is verplicht" });
+    }
+
+    const db = getFirestore();
+    const docRef = db.collection("sites").doc(siteId);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      return res.status(404).json({ error: "SITE_NOT_FOUND", message: "Site bestaat niet" });
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const update: Record<string, unknown> = {
+      updatedAt: nowIso(),
+      updatedBy: context.portalUser.email
+    };
+
+    if (typeof body.name === "string" && body.name.trim()) update.name = body.name.trim();
+    if (typeof body.address === "string") update.address = body.address.trim() || null;
+    if (typeof body.city === "string") update.city = body.city.trim() || null;
+    if (typeof body.postalCode === "string") update.postalCode = body.postalCode.trim() || null;
+    if (typeof body.country === "string") update.country = body.country.trim() || null;
+    if (typeof body.active === "boolean") update.active = body.active;
+
+    await docRef.set(update, { merge: true });
+
+    console.log(`PUT /admin/sites/${siteId}`, update);
+
+    return res.json({ ok: true, id: siteId });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
+    console.error("FOUT in PUT /admin/sites/:id", error);
+    return res.status(500).json({ error: "ADMIN_SITE_UPDATE_FAILED", message: "Kon site niet updaten" });
   }
 });
 
@@ -859,6 +955,44 @@ router.post("/admin/customers", async (req, res) => {
       error: "ADMIN_CUSTOMER_CREATE_FAILED",
       message: "Kon customer niet aanmaken"
     });
+  }
+});
+
+router.put("/admin/customers/:id", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const customerId = req.params.id?.trim();
+    if (!customerId) {
+      return res.status(400).json({ error: "INVALID_CUSTOMER_ID", message: "Customer id is verplicht" });
+    }
+
+    const db = getFirestore();
+    const docRef = db.collection("customers").doc(customerId);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      return res.status(404).json({ error: "CUSTOMER_NOT_FOUND", message: "Klant bestaat niet" });
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const update: Record<string, unknown> = { updatedAt: nowIso() };
+
+    if (typeof body.name === "string" && body.name.trim()) update.name = body.name.trim();
+    if (typeof body.logoPath === "string") update.logoPath = body.logoPath.trim() || null;
+    if (typeof body.active === "boolean") update.active = body.active;
+
+    await docRef.set(update, { merge: true });
+
+    console.log(`PUT /admin/customers/${customerId}`, update);
+
+    return res.json({ ok: true, id: customerId });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
+    console.error("FOUT in PUT /admin/customers/:id", error);
+    return res.status(500).json({ error: "ADMIN_CUSTOMER_UPDATE_FAILED", message: "Kon klant niet updaten" });
   }
 });
 

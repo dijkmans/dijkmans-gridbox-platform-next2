@@ -8,6 +8,7 @@ import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminDashboardSection from "@/components/admin/sections/AdminDashboardSection";
 import AdminProvisioningSection from "@/components/admin/sections/AdminProvisioningSection";
 import AdminCustomersSection from "@/components/admin/sections/AdminCustomersSection";
+import AdminSitesSection from "@/components/admin/sections/AdminSitesSection";
 import AdminInvitesSection from "@/components/admin/sections/AdminInvitesSection";
 import AdminMembershipsSection from "@/components/admin/sections/AdminMembershipsSection";
 import AdminRolesSection from "@/components/admin/sections/AdminRolesSection";
@@ -28,7 +29,10 @@ import {
   updateAdminBox,
   fetchAdminBoxCamera,
   fetchAdminNextCameraIp,
-  putAdminBoxCamera
+  putAdminBoxCamera,
+  updateAdminCustomer,
+  updateAdminSite,
+  createAdminSite
 } from "@/components/admin/adminApi";
 import type {
   ActiveSection,
@@ -81,6 +85,14 @@ export default function AdminPage() {
 
   const [newCustomerId, setNewCustomerId] = useState("");
   const [newCustomerName, setNewCustomerName] = useState("");
+
+  const [newSiteId, setNewSiteId] = useState("");
+  const [newSiteName, setNewSiteName] = useState("");
+  const [newSiteAddress, setNewSiteAddress] = useState("");
+  const [newSiteCity, setNewSiteCity] = useState("");
+  const [newSitePostalCode, setNewSitePostalCode] = useState("");
+  const [newSiteCountry, setNewSiteCountry] = useState("");
+  const [newSiteCustomerId, setNewSiteCustomerId] = useState("");
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteDisplayName, setInviteDisplayName] = useState("");
@@ -339,6 +351,61 @@ export default function AdminPage() {
     ) {
       setSuccessMessage(`Bedrijf ${active ? "geactiveerd" : "gedeactiveerd"}`);
       await loadAdminData(false);
+    }
+  }
+
+  async function handleUpdateCustomer(customerId: string, data: { name?: string; logoPath?: string }) {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return;
+    const res = await updateAdminCustomer(customerId, data, { token });
+    if (res.ok) {
+      setSuccessMessage("Klant bijgewerkt");
+      await loadAdminData(false);
+    } else {
+      const err = await res.json().catch(() => ({}));
+      setErrorMessage((err as { message?: string }).message || "Fout bij bijwerken klant");
+    }
+  }
+
+  async function handleCreateSite(e: React.FormEvent) {
+    e.preventDefault();
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return;
+    const res = await createAdminSite({
+      id: newSiteId.trim(),
+      name: newSiteName.trim(),
+      address: newSiteAddress.trim() || undefined,
+      city: newSiteCity.trim() || undefined,
+      postalCode: newSitePostalCode.trim() || undefined,
+      country: newSiteCountry.trim() || undefined,
+      customerId: newSiteCustomerId.trim() || undefined
+    }, { token });
+    if (res.ok) {
+      setSuccessMessage("Site aangemaakt");
+      setNewSiteId("");
+      setNewSiteName("");
+      setNewSiteAddress("");
+      setNewSiteCity("");
+      setNewSitePostalCode("");
+      setNewSiteCountry("");
+      setNewSiteCustomerId("");
+      await loadAdminData(false);
+    } else {
+      const err = await res.json().catch(() => ({}));
+      setErrorMessage((err as { message?: string }).message || "Fout bij aanmaken site");
+    }
+  }
+
+  async function handleUpdateSite(siteId: string, data: { name?: string; address?: string; city?: string; postalCode?: string; country?: string }) {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return;
+    const res = await updateAdminSite(siteId, data, { token });
+    if (res.ok) {
+      setSuccessMessage("Site bijgewerkt");
+      await loadAdminData(false);
+    } else {
+      const err = await res.json().catch(() => ({}));
+      setErrorMessage((err as { message?: string }).message || "Fout bij bijwerken site");
     }
   }
 
@@ -1057,49 +1124,31 @@ export default function AdminPage() {
                 onNewCustomerNameChange={setNewCustomerName}
                 onCreateCustomer={handleCreateCustomer}
                 onToggleCustomerStatus={handleSetCustomerStatus}
+                onUpdateCustomer={handleUpdateCustomer}
               />
             )}
 {activeSection === "sites" && (
-              <section className="space-y-6">
-                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <h2 className="text-2xl font-bold text-slate-900">Sites</h2>
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-                    In deze slice is er nog geen volwaardig sitescherm met eigen endpoint en adresdata.
-                    Wat je hier al wel ziet, zijn de siteverwijzingen die vandaag in de boxdata zitten.
-                  </p>
-                </div>
-
-                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-left text-sm">
-                      <thead className="border-b border-slate-200 text-slate-500">
-                        <tr>
-                          <th className="pb-3 pr-4 font-semibold">Site ID</th>
-                          <th className="pb-3 pr-4 font-semibold">Aantal boxen</th>
-                          <th className="pb-3 pr-4 font-semibold">Aantal klanten</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {siteSummaries.map((site) => (
-                          <tr key={site.siteId} className="border-b border-slate-100">
-                            <td className="py-4 pr-4 font-semibold text-slate-900">{site.siteId}</td>
-                            <td className="py-4 pr-4 text-slate-600">{site.boxCount}</td>
-                            <td className="py-4 pr-4 text-slate-600">{site.customerIds.size}</td>
-                          </tr>
-                        ))}
-
-                        {siteSummaries.length === 0 && (
-                          <tr>
-                            <td colSpan={3} className="py-6 text-slate-500">
-                              Nog geen siteverwijzingen gevonden in de geladen boxen.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </section>
+              <AdminSitesSection
+                sites={sites}
+                boxes={boxes}
+                customers={customers}
+                onUpdateSite={handleUpdateSite}
+                onCreateSite={handleCreateSite}
+                newSiteId={newSiteId}
+                newSiteName={newSiteName}
+                newSiteAddress={newSiteAddress}
+                newSiteCity={newSiteCity}
+                newSitePostalCode={newSitePostalCode}
+                newSiteCountry={newSiteCountry}
+                newSiteCustomerId={newSiteCustomerId}
+                onNewSiteIdChange={setNewSiteId}
+                onNewSiteNameChange={setNewSiteName}
+                onNewSiteAddressChange={setNewSiteAddress}
+                onNewSiteCityChange={setNewSiteCity}
+                onNewSitePostalCodeChange={setNewSitePostalCode}
+                onNewSiteCountryChange={setNewSiteCountry}
+                onNewSiteCustomerIdChange={setNewSiteCustomerId}
+              />
             )}
 
             {activeSection === "boxes" && (

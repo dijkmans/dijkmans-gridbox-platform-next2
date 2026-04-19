@@ -23,6 +23,7 @@ export type CustomerItem = {
   id: string;
   name?: string;
   active?: boolean;
+  logoPath?: string;
   createdAt?: string;
   addedBy?: string;
 };
@@ -72,6 +73,10 @@ export type AdminSiteItem = {
   id: string;
   customerId?: string | null;
   name?: string | null;
+  address?: string | null;
+  city?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
   active?: boolean;
 };
 
