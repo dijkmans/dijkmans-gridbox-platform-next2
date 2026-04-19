@@ -2235,7 +2235,6 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "      chown -R pi:pi \"$WORK_DIR\"",
       "      pip3 install -r \"$WORK_DIR/requirements.txt\" --break-system-packages",
       "      cp \"$WORK_DIR/gridbox.service\" /etc/systemd/system/",
-      "      sed -i 's|WorkingDirectory=.*|WorkingDirectory=/home/pi/dijkmans-gridbox-platform-next2|' /etc/systemd/system/gridbox.service",
       "      systemctl daemon-reload",
       "      systemctl enable gridbox.service",
       "      systemctl start gridbox.service",
