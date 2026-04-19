@@ -9,6 +9,9 @@ WorkingDirectory=/home/pi/dijkmans-gridbox-platform-next2
 ExecStart=/usr/bin/python3 src/listener.py
 Restart=always
 RestartSec=10
+StandardOutput=journal
+StandardError=journal
+WatchdogSec=60
 
 [Install]
 WantedBy=multi-user.target
