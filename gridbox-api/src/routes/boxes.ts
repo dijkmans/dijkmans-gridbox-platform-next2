@@ -1027,13 +1027,15 @@ router.post("/portal/boxes/:id/close", async (req, res) => {
 
     const context = await requireCustomerContext(portalUser.email);
 
-    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+    if (context.membership.role !== "platformAdmin") {
+      const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
 
-    if (!hasAccess) {
-      return res.status(403).json({
-        error: "FORBIDDEN",
-        message: "Je hebt geen toegang tot deze box"
-      });
+      if (!hasAccess) {
+        return res.status(403).json({
+          error: "FORBIDDEN",
+          message: "Je hebt geen toegang tot deze box"
+        });
+      }
     }
 
     if (!canOperateBox(context.membership.role)) {

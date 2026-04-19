@@ -60,7 +60,8 @@ type OperationsBoxItem = {
   rms: RmsSummary | null;
   hardware?: {
     camera?: { ip?: string; mac?: string; snapshotUrl?: string; enabled?: boolean } | null;
-    pi?: { mac?: string | null; ip?: string | null } | null;
+    pi?: { mac?: string | null; ip?: string | null; serial?: string | null } | null;
+    piConnect?: { deviceId?: string | null } | null;
     rut?: { ip?: string | null; mac?: string | null; serial?: string | null } | null;
   } | null;
 };
@@ -538,13 +539,25 @@ export default function OperationsPage() {
                                 )}
                               </div>
 
-                              <button
-                                type="button"
-                                onClick={() => toggleDiagnose(box.id)}
-                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
-                              >
-                                {isOpen ? "Verberg diagnose" : "Diagnose"}
-                              </button>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleDiagnose(box.id)}
+                                  className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+                                >
+                                  {isOpen ? "Verberg diagnose" : "Diagnose"}
+                                </button>
+                                {box.hardware?.piConnect?.deviceId && box.hardware.piConnect.deviceId !== "XXXXX" && (
+                                  <a
+                                    href={`https://connect.raspberrypi.com/devices/${box.hardware.piConnect.deviceId}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition"
+                                  >
+                                    Pi Connect
+                                  </a>
+                                )}
+                              </div>
                             </div>
 
                             {isOpen && sw && (
