@@ -1003,6 +1003,41 @@ def get_gateway_mac_fallback():
     return None
 
 
+def get_pi_mac(interface="eth0"):
+    """Leest het MAC-adres van de Pi zelf via /sys/class/net."""
+    try:
+        with open(f"/sys/class/net/{interface}/address") as f:
+            mac = f.read().strip().lower()
+        if re.match(r"^[0-9a-f]{2}(:[0-9a-f]{2}){5}$", mac):
+            return mac
+        if interface == "eth0":
+            return get_pi_mac("wlan0")
+    except Exception as e:
+        log(f"WARN: get_pi_mac({interface}): {e}")
+        if interface == "eth0":
+            return get_pi_mac("wlan0")
+    return None
+
+
+def get_pi_ip(interface="eth0"):
+    """Leest het IP-adres van de Pi zelf via ip addr show."""
+    try:
+        result = subprocess.run(
+            ["ip", "-4", "addr", "show", interface],
+            capture_output=True, text=True, timeout=5
+        )
+        match = re.search(r"inet (\d+\.\d+\.\d+\.\d+)/", result.stdout)
+        if match:
+            return match.group(1)
+        if interface == "eth0":
+            return get_pi_ip("wlan0")
+    except Exception as e:
+        log(f"WARN: get_pi_ip({interface}): {e}")
+        if interface == "eth0":
+            return get_pi_ip("wlan0")
+    return None
+
+
 def try_backend_heartbeat(version_raspberry, software_update):
     if not isinstance(runtime_config, dict) or not runtime_config:
         return False
