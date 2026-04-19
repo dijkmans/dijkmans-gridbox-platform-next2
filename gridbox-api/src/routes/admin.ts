@@ -2103,6 +2103,10 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       });
     }
 
+    const rpiConnectAuthKey = typeof req.body?.rpiConnectAuthKey === "string"
+      ? req.body.rpiConnectAuthKey.trim()
+      : "";
+
     const db = getFirestore();
     const provisioningRef = db.collection("provisionings").doc(provisioningId);
     const provisioningSnap = await provisioningRef.get();
@@ -2324,7 +2328,8 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
         boxId,
         bootstrapToken,
         apiBaseUrl,
-        bootstrapVersion
+        bootstrapVersion,
+        ...(rpiConnectAuthKey ? { rpiConnectAuthKey } : {})
       },
       null,
       2

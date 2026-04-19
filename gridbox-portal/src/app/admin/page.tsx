@@ -105,6 +105,7 @@ export default function AdminPage() {
   const [provisioningCustomerId, setProvisioningCustomerId] = useState("");
   const [provisioningSiteId, setProvisioningSiteId] = useState("");
   const [provisioningBoxId, setProvisioningBoxId] = useState("");
+  const [rpiConnectAuthKey, setRpiConnectAuthKey] = useState("");
   const [provisioningItem, setProvisioningItem] = useState<AdminProvisioningItem | null>(null);
   const [provisioningItems, setProvisioningItems] = useState<AdminProvisioningItem[]>([]);
   const [provisioningBusy, setProvisioningBusy] = useState(false);
@@ -818,7 +819,13 @@ export default function AdminPage() {
         ),
         {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` }
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            rpiConnectAuthKey: rpiConnectAuthKey.trim() || undefined
+          })
         }
       );
 
@@ -1100,6 +1107,8 @@ export default function AdminPage() {
                   onProvisioningCustomerChange={setProvisioningCustomerId}
                   onProvisioningSiteChange={setProvisioningSiteId}
                   onProvisioningBoxIdChange={setProvisioningBoxId}
+                  rpiConnectAuthKey={rpiConnectAuthKey}
+                  onRpiConnectAuthKeyChange={setRpiConnectAuthKey}
                   onCreateProvisioning={handleCreateProvisioning}
                   onRefreshProvisioning={handleRefreshProvisioning}
                   onFinalizeProvisioning={handleFinalizeProvisioning}

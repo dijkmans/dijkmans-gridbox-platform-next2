@@ -20,6 +20,8 @@ type Props = {
   onProvisioningCustomerChange: (value: string) => void;
   onProvisioningSiteChange: (value: string) => void;
   onProvisioningBoxIdChange: (value: string) => void;
+  rpiConnectAuthKey: string;
+  onRpiConnectAuthKeyChange: (value: string) => void;
   onCreateProvisioning: () => void | Promise<void>;
   onRefreshProvisioning: () => void | Promise<void>;
   onFinalizeProvisioning: () => void | Promise<void>;
@@ -104,6 +106,8 @@ export default function AdminProvisioningSection({
   onProvisioningCustomerChange,
   onProvisioningSiteChange,
   onProvisioningBoxIdChange,
+  rpiConnectAuthKey,
+  onRpiConnectAuthKeyChange,
   onCreateProvisioning,
   onRefreshProvisioning,
   onFinalizeProvisioning,
@@ -272,6 +276,32 @@ export default function AdminProvisioningSection({
                 {trimmedBoxId.length > 0 && boxIdLooksValid && !boxIdAlreadyExists && (
                   <p className="mt-1 text-xs text-green-700">Box-ID ziet er goed uit.</p>
                 )}
+              </div>
+
+              {/* Raspberry Pi Connect Auth Key */}
+              <div className="md:col-span-2">
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Raspberry Pi Connect Auth Key{" "}
+                  <span className="font-normal text-slate-400">(optioneel)</span>
+                </label>
+                <input
+                  value={rpiConnectAuthKey}
+                  onChange={(e) => onRpiConnectAuthKeyChange(e.target.value)}
+                  placeholder="rpuak_xxxxxxxxxxxxxxxx"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900"
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Genereer een auth key op{" "}
+                  <a
+                    href="https://connect.raspberrypi.com/settings"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline text-blue-600 hover:text-blue-800"
+                  >
+                    connect.raspberrypi.com/settings
+                  </a>{" "}
+                  en plak hem hier. De Pi gebruikt hem automatisch bij eerste opstart om te koppelen aan Raspberry Pi Connect. Als je het veld leeg laat werkt de provisioning gewoon verder zonder auto-signin.
+                </p>
               </div>
             </div>
 
