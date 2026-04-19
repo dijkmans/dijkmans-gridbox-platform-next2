@@ -6,6 +6,8 @@ import AuthPanel from "@/components/AuthPanel";
 import { apiUrl } from "@/lib/api";
 
 type RmsSummary = {
+  rmsDeviceId: number | null;
+  rmsMac: string | null;
   rmsStatus: "online" | "offline" | null;
   rmsName: string | null;
   connectionState: string | null;
@@ -56,12 +58,15 @@ type OperationsBoxItem = {
   gatewayMac?: string | null;
   software?: BoxSoftware | null;
   rms: RmsSummary | null;
-  hardware?: { camera?: { ip?: string; mac?: string; snapshotUrl?: string; enabled?: boolean } } | null;
+  hardware?: {
+    camera?: { ip?: string; mac?: string; snapshotUrl?: string; enabled?: boolean } | null;
+    pi?: { mac?: string | null; ip?: string | null } | null;
+    rut?: { ip?: string | null; mac?: string | null; serial?: string | null } | null;
+  } | null;
 };
 
 type RouterGroup = {
   key: string;
-  rmsDeviceId: number | null;
   rms: RmsSummary | null;
   boxes: OperationsBoxItem[];
 };
@@ -111,20 +116,20 @@ function isCreditExpiringSoon(dateStr: string | null): boolean {
 function buildGroups(boxes: OperationsBoxItem[]): RouterGroup[] {
   const map = new Map<string, RouterGroup>();
   for (const box of boxes) {
-    const key = box.rmsDeviceId != null ? String(box.rmsDeviceId) : "__unknown__";
+    const key = box.rms?.rmsDeviceId != null ? String(box.rms.rmsDeviceId) : "__unknown__";
     if (!map.has(key)) {
-      map.set(key, { key, rmsDeviceId: box.rmsDeviceId ?? null, rms: box.rms, boxes: [] });
+      map.set(key, { key, rms: box.rms, boxes: [] });
     }
     map.get(key)!.boxes.push(box);
   }
   return Array.from(map.values()).sort((a, b) => {
     if (a.key === "__unknown__") return 1;
     if (b.key === "__unknown__") return -1;
-    return (a.rmsDeviceId ?? 0) - (b.rmsDeviceId ?? 0);
+    return (a.rms?.rmsDeviceId ?? 0) - (b.rms?.rmsDeviceId ?? 0);
   });
 }
 
-function DiagnosePanel({ sw, onClose }: { sw: BoxSoftware; onClose: () => void }) {
+function DiagnosePanel({ sw, hardware, onClose }: { sw: BoxSoftware; hardware?: OperationsBoxItem["hardware"]; onClose: () => void }) {
   const mono = "font-mono text-xs text-slate-800";
   const label = "text-xs text-slate-500 mb-0.5";
   const row = "flex justify-between gap-4 py-1 border-b border-slate-100 last:border-0";
@@ -193,16 +198,36 @@ function DiagnosePanel({ sw, onClose }: { sw: BoxSoftware; onClose: () => void }
         </div>
       </div>
 
-      <div className={sectionTitle}>Netwerk</div>
+      <div className={sectionTitle}>RUT Router</div>
       <div className="space-y-0">
         <div className={row}>
-          <span className={label}>Gateway IP</span>
-          <span className={mono}>{sw.gatewayIp || "-"}</span>
+          <span className={label}>IP</span>
+          <span className={mono}>{hardware?.rut?.ip || sw.gatewayIp || "-"}</span>
         </div>
         <div className={row}>
-          <span className={label}>Gateway MAC</span>
-          <span className={mono}>{sw.gatewayMac || "-"}</span>
+          <span className={label}>MAC</span>
+          <span className={mono}>{hardware?.rut?.mac || sw.gatewayMac || "-"}</span>
         </div>
+        <div className={row}>
+          <span className={label}>Serial</span>
+          <span className={mono}>{hardware?.rut?.serial || "-"}</span>
+        </div>
+      </div>
+
+      <div className={sectionTitle}>Pi</div>
+      <div className="space-y-0">
+        <div className={row}>
+          <span className={label}>MAC</span>
+          <span className={mono}>{hardware?.pi?.mac || "-"}</span>
+        </div>
+        <div className={row}>
+          <span className={label}>IP</span>
+          <span className={mono}>{hardware?.pi?.ip || "-"}</span>
+        </div>
+      </div>
+
+      <div className={sectionTitle}>Netwerk</div>
+      <div className="space-y-0">
         <div className={row}>
           <span className={label}>Laatste heartbeat</span>
           <span className={mono}>{sw.lastHeartbeatIso ? formatDate(sw.lastHeartbeatIso) : "-"}</span>
@@ -361,7 +386,7 @@ export default function OperationsPage() {
               const creditDays = creditDaysRemaining(rms?.creditExpireDate ?? null);
               const creditWarn = creditDays !== null && creditDays <= 30;
               const rmsOnline = rms?.rmsStatus === "online";
-              const routerTitle = rms?.rmsName || (group.rmsDeviceId ? `Router ${group.rmsDeviceId}` : "Onbekende router");
+              const routerTitle = rms?.rmsName || (rms?.rmsDeviceId ? `Router ${rms.rmsDeviceId}` : "Onbekende router");
 
               return (
                 <div key={group.key}>
@@ -523,7 +548,7 @@ export default function OperationsPage() {
                             </div>
 
                             {isOpen && sw && (
-                              <DiagnosePanel sw={sw} onClose={() => toggleDiagnose(box.id)} />
+                              <DiagnosePanel sw={sw} hardware={box.hardware} onClose={() => toggleDiagnose(box.id)} />
                             )}
                           </div>
                         );

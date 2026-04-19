@@ -3,7 +3,14 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { auth, googleProvider } from "@/lib/firebase";
+import {
+  auth,
+  googleProvider,
+  sendSignInLinkToEmail,
+  isSignInWithEmailLink,
+  signInWithEmailLink,
+  magicLinkSettings,
+} from "@/lib/firebase";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { apiUrl } from "@/lib/api";
 import { button, card, alert, input, badge, typography, cx } from "@/lib/design-tokens";
@@ -72,6 +79,11 @@ function PageContentRouter() {
   const [stepError, setStepError] = useState("");
   const [done, setDone] = useState(false);
 
+  const [magicEmail, setMagicEmail] = useState("");
+  const [magicSent, setMagicSent] = useState(false);
+  const [magicError, setMagicError] = useState("");
+  const [magicBusy, setMagicBusy] = useState(false);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setAuthState({
@@ -82,6 +94,15 @@ function PageContentRouter() {
       });
     });
     return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!isSignInWithEmailLink(auth, window.location.href)) return;
+    const savedEmail = localStorage.getItem("gridbox_magic_link_email");
+    if (!savedEmail) return;
+    signInWithEmailLink(auth, savedEmail, window.location.href)
+      .then(() => localStorage.removeItem("gridbox_magic_link_email"))
+      .catch(() => setStepError("Automatisch inloggen via e-maillink mislukt. Probeer opnieuw."));
   }, []);
 
   async function loadInviteValidation(currentToken: string) {
@@ -131,6 +152,25 @@ function PageContentRouter() {
 
   async function handleLogout() {
     await signOut(auth);
+  }
+
+  async function handleSendMagicLink() {
+    setMagicError("");
+    if (!magicEmail.trim()) {
+      setMagicError("Vul je e-mailadres in.");
+      return;
+    }
+    try {
+      setMagicBusy(true);
+      const settings = { ...magicLinkSettings, url: window.location.href };
+      await sendSignInLinkToEmail(auth, magicEmail.trim(), settings);
+      localStorage.setItem("gridbox_magic_link_email", magicEmail.trim());
+      setMagicSent(true);
+    } catch {
+      setMagicError("Kon de link niet versturen. Controleer het e-mailadres.");
+    } finally {
+      setMagicBusy(false);
+    }
   }
 
   async function handleSendCode() {
@@ -307,6 +347,42 @@ function PageContentRouter() {
                     >
                       Aanmelden met Google
                     </button>
+
+                    <div className="flex items-center gap-3 py-1">
+                      <div className="flex-1 h-px bg-slate-200" />
+                      <span className="text-xs text-slate-400 font-medium">of</span>
+                      <div className="flex-1 h-px bg-slate-200" />
+                    </div>
+
+                    {!magicSent ? (
+                      <div className="space-y-2">
+                        <input
+                          type="email"
+                          value={magicEmail}
+                          onChange={(e) => setMagicEmail(e.target.value)}
+                          placeholder="jouw@email.be"
+                          className={input.base}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void handleSendMagicLink()}
+                          disabled={magicBusy}
+                          className={button.secondary + " w-full"}
+                        >
+                          {magicBusy ? "Versturen\u2026" : "Aanmelden via e-maillink"}
+                        </button>
+                        {magicError && (
+                          <div className={alert.amber}>{magicError}</div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className={alert.green}>
+                        <p className="font-semibold mb-1">Link verstuurd</p>
+                        <p>
+                          Controleer je mailbox op <strong>{magicEmail}</strong> en klik op de link om in te loggen.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 

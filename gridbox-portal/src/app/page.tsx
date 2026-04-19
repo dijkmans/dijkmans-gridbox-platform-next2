@@ -318,13 +318,13 @@ export default function Home() {
       <div className="space-y-4">
 
         {/* Header card */}
-        <section className="bg-white border border-slate-200 rounded-3xl shadow-sm px-8 py-6">
+        <section className="bg-white border border-slate-200 rounded-3xl shadow-sm px-4 py-5 lg:px-8 lg:py-6 overflow-hidden">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
 
             {/* Logo + titel + sync badge */}
             <div className="flex items-center gap-5">
               {gridboxLogoUrl ? (
-                <img src={gridboxLogoUrl} alt="Gridbox" className="h-32 w-auto object-contain shrink-0" />
+                <img src={gridboxLogoUrl} alt="Gridbox" className="h-16 lg:h-32 w-auto max-w-[120px] lg:max-w-[200px] object-contain shrink-0" />
               ) : (
                 <div className="flex w-16 h-16 items-center justify-center rounded-xl bg-slate-900 text-white text-sm font-bold shrink-0">
                   GB
@@ -334,7 +334,7 @@ export default function Home() {
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-1">
                   Beheerdashboard
                 </p>
-                <h1 className="text-3xl font-bold text-slate-900 leading-tight">
+                <h1 className="text-2xl lg:text-3xl font-bold text-slate-900 leading-tight">
                   Gridbox Dashboard
                 </h1>
                 <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 px-3 py-1 text-xs font-semibold">
@@ -454,7 +454,7 @@ export default function Home() {
                   className="bg-white border border-slate-200 rounded-3xl shadow-sm p-6 lg:p-8 flex flex-wrap items-start justify-between gap-6"
                 >
                   {/* Linker kolom: box-info + acties */}
-                  <div className="flex flex-col gap-4 flex-1 min-w-[280px]">
+                  <div className="flex flex-col gap-4 flex-1 min-w-0">
 
                     {/* Naam + status */}
                     <div className="flex items-center gap-3 flex-wrap">
@@ -471,7 +471,7 @@ export default function Home() {
                       <div className="text-base font-semibold text-slate-700">
                         {box.displayName}
                       </div>
-                      <div className="text-sm text-slate-400 mt-0.5">
+                      <div className="text-sm text-slate-400 mt-0.5 truncate">
                         Laatste actie: {formatLastAction(box)}
                       </div>
                     </div>
@@ -504,7 +504,7 @@ export default function Home() {
                   </div>
 
                   {/* Rechter kolom: GSM-paneel */}
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 shrink-0 min-w-[240px]">
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 w-full lg:w-auto lg:min-w-[240px] lg:shrink-0">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-3">
                       Gedeelde gsm-nummers
                     </p>

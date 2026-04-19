@@ -423,6 +423,11 @@ router.get("/admin/boxes/:boxId", async (req, res) => {
       hardware: data.hardware ?? null,
       gatewayIp: typeof data.gatewayIp === "string" ? data.gatewayIp : null,
       gatewayMac: typeof data.gatewayMac === "string" ? data.gatewayMac : null,
+      rutIp: typeof data.hardware?.rut?.ip === "string" ? data.hardware.rut.ip : null,
+      rutMac: typeof data.hardware?.rut?.mac === "string" ? data.hardware.rut.mac : null,
+      rutSerial: typeof data.hardware?.rut?.serial === "string" ? data.hardware.rut.serial : null,
+      piMac: typeof data.hardware?.pi?.mac === "string" ? data.hardware.pi.mac : null,
+      piIp: typeof data.hardware?.pi?.ip === "string" ? data.hardware.pi.ip : null,
       rut: data.rut ?? null,
       scriptVersion: typeof data.scriptVersion === "string"
         ? data.scriptVersion
@@ -480,7 +485,7 @@ router.put("/admin/boxes/:boxId/config", async (req, res) => {
     }
 
     if (body.hardware?.lights !== undefined && typeof body.hardware.lights === "object") {
-      update["hardware.lights"] = body.hardware.lights;
+      update["hardware.lighting"] = body.hardware.lights;
     }
 
     if (body.hardware?.shutter !== undefined && typeof body.hardware.shutter === "object") {

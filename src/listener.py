@@ -1113,26 +1113,28 @@ def update_pi_status():
             "updatedBy": f"gridbox-service-{VERSION}"
         }, merge=True)
 
-        # Gateway detectie — schrijf altijd gatewayIp zodat detectie zichtbaar is in Firestore
-        gateway_ip = get_gateway_ip()
-        hw_update: dict = {"hardware.gatewayIp": gateway_ip or "unknown"}
+        # Hardware detectie
+        hw_update: dict = {}
 
+        gateway_ip = get_gateway_ip()
         if gateway_ip:
+            hw_update["hardware.rut.ip"] = gateway_ip
             gateway_serial = get_gateway_serial()
             if gateway_serial:
-                hw_update["hardware.gatewaySerial"] = gateway_serial
-                log(f"INFO: gateway serial: {gateway_serial}")
-            else:
-                log(f"WARN: gateway serial niet beschikbaar voor {gateway_ip}")
-
+                hw_update["hardware.rut.serial"] = gateway_serial
             gateway_mac = get_gateway_mac_fallback()
             if gateway_mac:
-                hw_update["hardware.gatewayMac"] = gateway_mac
-                log(f"INFO: gateway MAC: {gateway_mac}")
-            else:
-                log(f"WARN: gateway MAC niet beschikbaar voor {gateway_ip}")
+                hw_update["hardware.rut.mac"] = gateway_mac
 
-        box_doc_ref.update(hw_update)
+        pi_mac = get_pi_mac()
+        if pi_mac:
+            hw_update["hardware.pi.mac"] = pi_mac
+        pi_ip = get_pi_ip()
+        if pi_ip:
+            hw_update["hardware.pi.ip"] = pi_ip
+
+        if hw_update:
+            box_doc_ref.update(hw_update)
 
         refresh_cached_config()
         log(

@@ -34,50 +34,51 @@ function getStatusCode(error: unknown): number {
   return 500;
 }
 
-async function fetchRmsDevice(rmsDeviceId: number): Promise<Record<string, unknown> | null> {
-  if (!env.rmsApiToken) return null;
-
-  try {
-    const res = await fetch(`${env.rmsApiBaseUrl}/devices/${rmsDeviceId}`, {
-      headers: { Authorization: `Bearer ${env.rmsApiToken}` }
-    });
-
-    if (!res.ok) return null;
-
-    const data = await res.json() as { success: boolean; data?: Record<string, unknown> };
-    return data.success && data.data ? data.data : null;
-  } catch {
-    return null;
-  }
+function normalizeMac(mac: string): string {
+  return mac.toLowerCase().replace(/[-:]/g, "");
 }
 
-async function fetchAllRmsDevices(): Promise<Record<number, Record<string, unknown>>> {
-  if (!env.rmsApiToken) return {};
+type RmsIndex = {
+  byId: Map<number, Record<string, unknown>>;
+  byMac: Map<string, Record<string, unknown>>;
+};
+
+async function fetchAllRmsDevices(): Promise<RmsIndex> {
+  const empty: RmsIndex = { byId: new Map(), byMac: new Map() };
+  if (!env.rmsApiToken) return empty;
 
   try {
     const res = await fetch(`${env.rmsApiBaseUrl}/devices`, {
       headers: { Authorization: `Bearer ${env.rmsApiToken}` }
     });
 
-    if (!res.ok) return {};
+    if (!res.ok) return empty;
 
     const data = await res.json() as { success: boolean; data?: Record<string, unknown>[] };
-    if (!data.success || !Array.isArray(data.data)) return {};
+    if (!data.success || !Array.isArray(data.data)) return empty;
 
-    const map: Record<number, Record<string, unknown>> = {};
+    const byId = new Map<number, Record<string, unknown>>();
+    const byMac = new Map<string, Record<string, unknown>>();
+
     for (const device of data.data) {
       if (typeof device.id === "number") {
-        map[device.id] = device;
+        byId.set(device.id, device);
+      }
+      if (typeof device.mac === "string" && device.mac) {
+        byMac.set(normalizeMac(device.mac), device);
       }
     }
-    return map;
+
+    return { byId, byMac };
   } catch {
-    return {};
+    return empty;
   }
 }
 
 function extractRmsSummary(rms: Record<string, unknown>) {
   return {
+    rmsDeviceId: typeof rms.id === "number" ? rms.id : null,
+    rmsMac: typeof rms.mac === "string" ? rms.mac : null,
     rmsStatus: rms.status === 1 ? "online" : "offline",
     rmsName: rms.name ?? null,
     connectionState: rms.connection_state ?? null,
@@ -99,6 +100,40 @@ function extractRmsSummary(rms: Record<string, unknown>) {
   };
 }
 
+function resolveRmsDevice(
+  box: Record<string, unknown>,
+  index: RmsIndex
+): Record<string, unknown> | null {
+  const hardware = box["hardware"] as Record<string, unknown> | null | undefined;
+  const rmsDeviceIdRaw = hardware?.["rmsDeviceId"];
+  const rmsDeviceId = typeof rmsDeviceIdRaw === "number"
+    ? rmsDeviceIdRaw
+    : typeof rmsDeviceIdRaw === "string" && rmsDeviceIdRaw
+      ? parseInt(rmsDeviceIdRaw, 10)
+      : NaN;
+
+  if (!isNaN(rmsDeviceId) && index.byId.has(rmsDeviceId)) {
+    return index.byId.get(rmsDeviceId)!;
+  }
+
+  const software = box["software"] as Record<string, unknown> | undefined;
+  const gatewayMac =
+    typeof box["gatewayMac"] === "string" && box["gatewayMac"]
+      ? box["gatewayMac"]
+      : typeof software?.["gatewayMac"] === "string" && software["gatewayMac"]
+        ? software["gatewayMac"] as string
+        : null;
+
+  if (gatewayMac) {
+    const normalized = normalizeMac(gatewayMac);
+    if (index.byMac.has(normalized)) {
+      return index.byMac.get(normalized)!;
+    }
+  }
+
+  return null;
+}
+
 router.get("/operations/boxes", async (req, res) => {
   try {
     await requirePlatformAdmin(req.header("Authorization") || undefined);
@@ -111,21 +146,10 @@ router.get("/operations/boxes", async (req, res) => {
       ...(doc.data() as Record<string, unknown>)
     })) as Array<{ id: string } & Record<string, unknown>>;
 
-    const toRmsId = (value: unknown): number | null => {
-      const parsed = parseInt(String(value), 10);
-      return isNaN(parsed) ? null : parsed;
-    };
-
-    const rmsDeviceIds = boxes
-      .map((box) => toRmsId(box["rmsDeviceId"]))
-      .filter((id): id is number => id !== null);
-
-    const rmsMap = rmsDeviceIds.length > 0 ? await fetchAllRmsDevices() : {};
+    const rmsIndex = await fetchAllRmsDevices();
 
     const items = boxes.map((box) => {
-      const rmsDeviceId = toRmsId(box["rmsDeviceId"]);
-      const rmsData = rmsDeviceId !== null ? rmsMap[rmsDeviceId] : null;
-
+      const rmsData = resolveRmsDevice(box, rmsIndex);
       const software = box["software"] as Record<string, unknown> | undefined;
       const lastHeartbeatAt = software?.["lastHeartbeatIso"] ?? box["lastHeartbeatAt"] ?? null;
 
@@ -170,17 +194,14 @@ router.get("/operations/boxes/:boxId", async (req, res) => {
     }
 
     const box = { id: boxDoc.id, ...(boxDoc.data() as Record<string, unknown>) } as { id: string } & Record<string, unknown>;
-    const rmsDeviceId = (() => { const p = parseInt(String(box["rmsDeviceId"]), 10); return isNaN(p) ? null : p; })();
 
-    let rmsData: Record<string, unknown> | null = null;
-    if (rmsDeviceId !== null) {
-      rmsData = await fetchRmsDevice(rmsDeviceId);
-    }
+    const rmsIndex = await fetchAllRmsDevices();
+    const rmsData = resolveRmsDevice(box, rmsIndex);
 
     return res.json({
       item: {
         ...box,
-        rms: rmsData ?? null
+        rms: rmsData ? extractRmsSummary(rmsData) : null
       }
     });
   } catch (error) {

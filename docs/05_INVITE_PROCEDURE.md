@@ -1,4 +1,4 @@
-﻿# INVITE PROCEDURE AND ACTIVATION FLOW
+# INVITE PROCEDURE AND ACTIVATION FLOW
 
 ## Doel
 
@@ -13,12 +13,12 @@ Belangrijk onderscheid:
 
 2. authenticated user
 - bestaat in Firebase Authentication
-- identiteit via login
+- identiteit via login (Google of Magic Link)
 - e-mail en gsm kunnen geverifieerd worden
 
 3. active membership
 - gebruiker heeft effectieve rechten in het Gridbox platform
-- gekoppeld aan customer, role, scope en authUid
+- gekoppeld aan customer, role en authUid
 - pas actief na volledige activatie
 
 ## Hoofdregels
@@ -28,9 +28,9 @@ Belangrijk onderscheid:
 - invite-link is uniek, tijdelijk geldig en éénmalig bruikbaar
 - alleen de hash van de token wordt opgeslagen
 - e-mailadres van de ingelogde gebruiker moet overeenkomen met de invite
-- gsm-verificatie via Firebase Authentication is verplicht
+- gsm-verificatie via Bird SMS API is verplicht
 - membership wordt pas aangemaakt of geactiveerd na succesvolle verificatie
-- autorisatie gebeurt op basis van membership gekoppeld aan authUid
+- autorisatie gebeurt op basis van membership opgezocht via email
 - frontend werkt altijd via de API
 - frontend beslist nooit zelf of een invite geldig of opgebruikt is
 
@@ -38,34 +38,32 @@ Belangrijk onderscheid:
 
 ### invites
 
-Voorstel velden:
+Velden:
 
 - id
 - email
 - displayName
 - customerId
 - role
-- scope
-- createdByAuthUid
 - tokenHash
 - expiresAt
-- status
+- status (`pending` / `accepted` / `expired` / `revoked`)
+- createdByAuthUid
 - createdAt
 - acceptedAt
 - acceptedByAuthUid
 - phoneNumber
 - phoneVerified
-
-Toegelaten statuswaarden:
-
-- pending
-- accepted
-- expired
-- revoked
+- phoneVerification (object):
+  - status
+  - codeHash (SHA-256 hash van de SMS-code)
+  - expiresAt
+  - attemptCount
+  - lastSentAt
 
 ### memberships
 
-Voorstel velden:
+Velden:
 
 - id
 - authUid
@@ -75,30 +73,32 @@ Voorstel velden:
 - phoneVerified
 - customerId
 - role
-- scope
 - active
 - invitedByAuthUid
 - inviteId
 - createdAt
 - activatedAt
+- updatedAt
 
 Belangrijk:
 
-- membership mag niet alleen op e-mail steunen
+- membership lookup in de API verloopt via email (`getMembershipByEmail`)
 - authUid is de technische koppeling naar Firebase Authentication
 - active mag pas true worden na volledige activatie
+- platformAdmin heeft geen customerId nodig
 
 ## Rollen
 
-Voorlopige rollen:
+Actuele rollen:
 
 - platformAdmin
 - customerAdmin
-- viewer
+- customerOperator
+- customerOperatorNoCamera
+- customerViewer
 
-Opmerking:
-platformAdmin mag niet zomaar via een gewone customer invite worden toegekend zonder bijkomende controle.
-Daar moet de backend expliciet streng op zijn.
+platformAdmin mag niet via een gewone customer invite worden toegekend zonder bijkomende controle.
+De backend is hier expliciet streng op.
 
 ## Invite-flow
 
@@ -110,17 +110,16 @@ Input:
 - displayName optioneel
 - customerId
 - role
-- scope
 
 Backend doet:
 
-- validatie van rol en scope
+- validatie van rol
 - check op ongewenste duplicaten
 - genereren van unieke raw token
-- opslaan van tokenHash in Firestore
+- opslaan van tokenHash (SHA-256) in Firestore
 - status = pending
 - expiresAt invullen
-- invite-mail voorbereiden of versturen
+- invite-link beschikbaar maken voor kopiëren
 
 Belangrijk:
 hier wordt nog geen actieve membership aangemaakt.
@@ -157,11 +156,10 @@ Pas daarna mag de activatieflow verder.
 
 ### Stap 4 - gebruiker logt in via Firebase Authentication
 
-Gebruiker:
+Twee methodes worden ondersteund, beide beschikbaar in de wizard:
 
-- logt in
-of
-- maakt een account aan
+- **Google login** — `signInWithPopup` met Google provider
+- **Magic Link** — `sendSignInLinkToEmail` (passwordless email, `handleCodeInApp: true`)
 
 Backend controleert daarna:
 
@@ -174,17 +172,23 @@ Zonder e-mailmatch mag activatie niet doorgaan.
 
 Gebruiker vult zijn gsm-nummer zelf in.
 
-Daarna volgt verificatie via sms-code in Firebase Authentication.
+Daarna volgt SMS-verificatie via Bird API:
+- backend genereert een code
+- slaat `codeHash` op in `invite.phoneVerification`
+- verstuurt SMS via Bird (`BIRD_API_KEY`, `BIRD_WORKSPACE_ID`, `BIRD_CHANNEL_ID`, `BIRD_SMS_FROM`)
+- gebruiker vult de ontvangen code in
+- backend vergelijkt hash
 
 Belangrijk:
 de backend mag niet vertrouwen op een los formulier zonder geldige auth-context.
 
 ### Stap 6 - phone verification
 
-Na succesvolle sms-verificatie geldt:
+Na succesvolle SMS-verificatie geldt:
 
 - phoneNumber is gekend
 - phoneVerified = true
+- `invite.phoneVerification.status` = verified
 
 Pas nu is de identiteit sterk genoeg om een membership te activeren.
 
@@ -213,7 +217,7 @@ Daarna wordt de invite aangepast naar:
 ### POST /admin/invites
 
 Doel:
-master of admin maakt een invite aan.
+admin maakt een invite aan.
 
 Input:
 
@@ -221,7 +225,6 @@ Input:
 - displayName
 - customerId
 - role
-- scope
 
 Output:
 
@@ -244,7 +247,6 @@ Output bij succes:
 - displayName
 - customerId
 - role
-- scope
 - expiresAt
 
 ### POST /invites/accept
@@ -301,17 +303,15 @@ Output:
 
 ## Duplicate-regels
 
-Voorstel v1:
-
 - maximaal één actieve pending invite per combinatie van customerId en email
 - een tweede invite voor dezelfde context moet de vorige pending invite blokkeren of revoken
 - een accepted invite kan niet opnieuw gebruikt worden
-- een bestaande actieve membership voor exact dezelfde context moet nieuwe activatie blokkeren of expliciet laten herbekijken
+- een bestaande actieve membership voor exact dezelfde context moet nieuwe activatie blokkeren
 
 ## Security-principes
 
 - raw token nooit in Firestore bewaren
-- alleen tokenHash bewaren
+- alleen tokenHash (SHA-256) bewaren
 - invite-links moeten vervallen
 - frontend krijgt geen rechtstreekse Firestore-logica
 - autorisatie gebeurt in de API
@@ -322,19 +322,17 @@ Voorstel v1:
 - membership automatisch aanmaken bij invite
 - toegang geven puur op basis van e-mail
 - invite-link laten volstaan zonder login
-- phoneVerified manueel op true zetten zonder echte verificatie
+- phoneVerified manueel op true zetten zonder echte Bird SMS verificatie
 - frontend rechtstreeks met Firestore laten werken voor invite-logica
 
 ## Open implementatiepunten
 
-Nog technisch uit te werken:
-
-1. exacte expiry-duur van een invite
+1. exacte expiry-duur van een invite (nog te configureren)
 2. precieze duplicate-strategie bij opnieuw uitnodigen
 3. audit logging per stap
-4. mailtemplate voor invite
-5. UI-schermen voor activatie
-6. middleware voor portal access op basis van active membership
+4. mailtemplate voor invite (invites worden nu handmatig gedeeld via link-kopieer knop)
+5. ~~**UI-schermen voor activatie**~~ — afgewerkt: `activate-invite/page.tsx` wizard volledig gebouwd
+6. ~~**middleware voor portal access op basis van active membership**~~ — afgewerkt: `requireCustomerContext` en `requirePlatformAdmin` in API
 7. migratiepad van email-only memberships naar authUid-based memberships
 
 ## Besluit
@@ -345,8 +343,8 @@ Volgorde:
 
 1. invite aanmaken
 2. invite valideren
-3. login via Firebase
-4. gsm-verificatie
+3. login via Firebase (Google of Magic Link)
+4. gsm-verificatie via Bird SMS
 5. membership activeren
 6. toegang geven
 

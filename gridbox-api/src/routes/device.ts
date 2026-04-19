@@ -26,10 +26,10 @@ async function tryLinkRmsDevice(boxId: string, gatewayMac: string): Promise<void
     }
     const db = getFirestore();
     await db.collection("boxes").doc(boxId).set(
-      { hardware: { rmsDeviceId: match.id } },
+      { hardware: { rmsDeviceId: match.id, rmsDeviceMac: match.mac ?? null } },
       { merge: true }
     );
-    console.log(`tryLinkRmsDevice: rmsDeviceId ${match.id} gekoppeld aan ${boxId}`);
+    console.log(`tryLinkRmsDevice: rmsDeviceId ${match.id} rmsDeviceMac ${match.mac ?? null} gekoppeld aan ${boxId}`);
   } catch (err) {
     console.error(`tryLinkRmsDevice: fout bij koppelen voor ${boxId}:`, err);
   }
@@ -260,6 +260,9 @@ router.post("/device/heartbeat", async (req, res) => {
         ? body.software as Record<string, unknown>
         : undefined;
 
+    const piMac = typeof body.piMac === "string" && body.piMac.trim() ? body.piMac.trim() : null;
+    const piIp = typeof body.piIp === "string" && body.piIp.trim() ? body.piIp.trim() : null;
+
     if (!rawBoxId) {
       return res.status(400).json({
         error: "INVALID_BOX_ID",
@@ -377,6 +380,13 @@ router.post("/device/heartbeat", async (req, res) => {
         },
         { merge: true }
       );
+    }
+
+    if (piMac !== null || piIp !== null) {
+      const piUpdate: Record<string, string | null> = {};
+      if (piMac !== null) piUpdate["hardware.pi.mac"] = piMac;
+      if (piIp !== null) piUpdate["hardware.pi.ip"] = piIp;
+      await boxRef.update(piUpdate);
     }
 
     const existingRmsDeviceId = (boxDoc.data()?.hardware as Record<string, unknown> | undefined)?.rmsDeviceId;

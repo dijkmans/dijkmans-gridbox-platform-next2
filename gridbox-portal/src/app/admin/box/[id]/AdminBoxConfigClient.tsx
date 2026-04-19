@@ -32,7 +32,10 @@ type BoxShutter = {
 type BoxHardware = {
   camera?: BoxCamera | null;
   lights?: BoxLights | null;
+  lighting?: BoxLights | null;
   shutter?: BoxShutter | null;
+  pi?: { mac?: string | null; ip?: string | null } | null;
+  rut?: { ip?: string | null; mac?: string | null; serial?: string | null } | null;
 };
 
 type BoxAutoClose = {
@@ -51,6 +54,11 @@ type BoxDetail = {
   hardware?: BoxHardware | null;
   gatewayIp?: string | null;
   gatewayMac?: string | null;
+  rutIp?: string | null;
+  rutMac?: string | null;
+  rutSerial?: string | null;
+  piMac?: string | null;
+  piIp?: string | null;
   scriptVersion?: string | null;
   lastProvisionedAt?: string | null;
 };
@@ -210,8 +218,7 @@ export default function AdminBoxConfigClient() {
       setCameraChangeThreshold(numField(cam?.changeDetectionThreshold));
       setCameraPostCloseDuration(numField(cam?.postCloseSnapshotDurationSeconds));
 
-      // lighting veld — ondersteun zowel hardware.lights als hardware.lighting
-      const lights = (b.hardware?.lights ?? (b.hardware as any)?.lighting) as BoxLights | null | undefined;
+      const lights = b.hardware?.lighting as BoxLights | null | undefined;
       setLightsOnWhenOpen(lights?.onWhenOpen ?? false);
       setLightsOffDelay(numField(lights?.lightOffDelaySeconds));
 
@@ -302,7 +309,7 @@ export default function AdminBoxConfigClient() {
               changeDetectionThreshold: parseNum(cameraChangeThreshold),
               postCloseSnapshotDurationSeconds: parseNum(cameraPostCloseDuration)
             },
-            lights: {
+            lighting: {
               onWhenOpen: lightsOnWhenOpen,
               lightOffDelaySeconds: parseNum(lightsOffDelay)
             },
@@ -595,8 +602,11 @@ export default function AdminBoxConfigClient() {
 
         {/* C — NETWERK & INFO */}
         <SectionCard title="Netwerk & info">
-          <KVRow label="IP-adres RUT" value={box?.gatewayIp} />
-          <KVRow label="MAC-adres RUT" value={box?.gatewayMac} />
+          <KVRow label="IP RUT" value={box?.rutIp ?? box?.gatewayIp} />
+          <KVRow label="MAC RUT" value={box?.rutMac ?? box?.gatewayMac} />
+          <KVRow label="Serial RUT" value={box?.rutSerial} />
+          <KVRow label="MAC Pi" value={box?.piMac} />
+          <KVRow label="IP Pi" value={box?.piIp} />
           <KVRow label="Software versie Pi" value={box?.scriptVersion} />
           <KVRow label="Laatste heartbeat Pi" value={formatDate(box?.lastProvisionedAt)} />
           <KVRow label="Laatste update" value={formatDate(box?.updatedAt)} />

@@ -22,9 +22,14 @@
 
 ## Roles
 
+Actuele rollenset:
 - platformAdmin
 - customerAdmin
-- viewer
+- customerOperator
+- customerOperatorNoCamera
+- customerViewer
+
+(`viewer` is een verouderde naam, niet meer in gebruik)
 
 ## Shares niet voor portal access
 
@@ -70,7 +75,7 @@ Afspraken:
 - raw invite token wordt niet opgeslagen, alleen hash
 - acceptatie vereist login via Firebase Authentication
 - acceptatie vereist e-mailmatch met invite
-- acceptatie vereist verplichte gsm-verificatie
+- acceptatie vereist verplichte gsm-verificatie via Bird SMS
 - autorisatie gebeurt op actieve membership gekoppeld aan `authUid`
 
 Gevolg:
@@ -110,3 +115,39 @@ Afspraken:
 - admin = klantbeheer (klanten, memberships, invites, provisioning)
 - operations = technisch beheer (real-time boxstatus, netwerk, hardware, remote acties, kosten)
 - de twee lagen worden niet gemengd in één scherm
+
+## 2026-04-18 - Magic Link login toegevoegd
+
+Beslissing: naast Google login wordt Magic Link (passwordless email) ondersteund als tweede loginmethode.
+
+Reden: sommige gebruikers hebben geen Google-account of willen geen Google-koppeling.
+
+Implementatie:
+- `firebase.ts`: `magicLinkSettings` en `sendSignInLinkToEmail` toegevoegd
+- `AuthPanel.tsx`: twee loginopties (Google knop + Magic Link formulier)
+- `activate-invite/page.tsx`: beide opties beschikbaar in stap 1 van de wizard
+- Firebase Console: Email/Password en Email link (passwordless) beide actief
+
+Afspraak: beide methodes zijn gelijkwaardig. De backend controleert alleen of het Firebase-token geldig is en of het email-adres overeenkomt — de loginmethode zelf maakt niet uit.
+
+## 2026-04-18 - PlatformAdmin bypass in portal
+
+Beslissing: `requireCustomerContext` in `boxes.ts` slaat de `customerId`-check over voor gebruikers met `role === "platformAdmin"`.
+
+Reden: platformAdmin heeft geen `customerId` in de membership, waardoor ze anders altijd "geen toegang" zagen in het portal.
+
+Gevolg:
+- platformAdmin ziet alle boxen in `/portal/boxes` zonder `customerBoxAccess` filter
+- hardcoded email-fallback (`piet.dijkmans@gmail.com`) werkt ook als membership ontbreekt
+
+## 2026-04-18 - Mobiele viewport en overflow fix
+
+Beslissing: viewport meta tag en overflow-x hidden vastgelegd als standaard in `layout.tsx`.
+
+Reden: zonder viewport meta tag rendert iOS Safari de pagina op desktop-breedte (~980px) en zoomt uit. Zonder `overflow-x: hidden` op `html` en `body` snapt de pagina terug naar de brede versie na scrollen op iPhone.
+
+Implementatie:
+- `layout.tsx`: `Viewport` export met `width: "device-width"` en `initialScale: 1`
+- `layout.tsx`: `overflowX: "hidden"` op `<html>` en `<body>`
+- Header: `px-4 lg:px-8` i.p.v. vaste `px-8`, logo `max-w` beperkt, titel `text-2xl lg:text-3xl`
+- Artikel linkerkolom: `min-w-0` i.p.v. `min-w-[280px]`

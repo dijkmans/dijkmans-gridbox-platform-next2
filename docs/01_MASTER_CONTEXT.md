@@ -1,4 +1,4 @@
-﻿# GRIDBOX PLATFORM - MASTER CONTEXT
+# GRIDBOX PLATFORM - MASTER CONTEXT
 
 ## Doel van het platform
 
@@ -16,17 +16,19 @@ Functionaliteit:
 ### Frontend
 - locatie: `/gridbox-portal`
 - technologie: Next.js
+- gedeployed op: Firebase Hosting (`https://gridbox-platform.web.app`)
 - praat met: API
 
 De frontend bevat:
-- portal
-- admin
-- box-weergave
-- sessie- en gebruikersinteractie
+- portal (boxoverzicht, cockpit, toegangsbeheer)
+- admin (klantbeheer, memberships, invites, provisioning)
+- operations center (technisch beheer, RMS, hardware)
+- activatie-flow (`/activate-invite`)
 
 ### Backend
 - locatie: `/gridbox-api`
 - technologie: Node.js (Express)
+- gedeployed op: Google Cloud Run (`europe-west1`)
 - praat met: Firestore
 
 De backend:
@@ -58,22 +60,40 @@ De device laag:
 - root `404.html`
 - legacy en niet meer leidend
 
-#### `/web`
-- onduidelijk
-- niet gebruiken voor nieuwe features
-- behandelen als onzeker of legacy tot expliciete beslissing
-
 ## Autorisatiemodel
 
 Membership per email:
 - email
+- authUid
 - customerId
 - role
+- phoneNumber
+- phoneVerified
 
-Roles:
-- platformAdmin
-- customerAdmin
-- viewer
+Roles (volledig):
+- `platformAdmin` — volledige platformtoegang, ziet alle boxen in de portal
+- `customerAdmin` — beheert klant, leden en toegang
+- `customerOperator` — kan box bedienen, heeft cameratoegang
+- `customerOperatorNoCamera` — kan box bedienen, geen cameratoegang
+- `customerViewer` — alleen-lezen toegang
+
+Bijzonderheid platformAdmin:
+- `requireCustomerContext` slaat de `customerId`-check over voor platformAdmin
+- platformAdmin ziet alle boxen in `/portal/boxes` zonder `customerBoxAccess` filter
+
+## Login methodes
+
+Twee methodes worden ondersteund via Firebase Authentication:
+1. **Google login** — via `signInWithPopup` met Google provider
+2. **Magic Link (passwordless email)** — via `sendSignInLinkToEmail` en `isSignInWithEmailLink`
+
+Beide methodes zijn actief in Firebase Console (Email/Password + Email link).
+
+Magic Link gebruikt `magicLinkSettings` in `firebase.ts` met `handleCodeInApp: true`.
+
+Login is aanwezig in:
+- `AuthPanel.tsx` (portal en admin)
+- `activate-invite/page.tsx` (stap 1 van activatiefunnel)
 
 ## Belangrijk principe
 
@@ -96,13 +116,44 @@ Frontend -> Firestore
 - netwerk, hardware, remote acties
 - Teltonika RMS integratie
 - SIM saldo en dataverbruik
-- volgende fase
+
+## Camera architectuur (samenvatting)
+
+De Raspberry Pi neemt snapshots en filtert lokaal. Alleen relevante beelden gaan naar GCS.
+
+Sessiemodel: één open-close cyclus = één sessie met unieke `session_id`.
+
+Phases / captureReason:
+- `startup_test` — bij opstart listener
+- `open_start` — bij openen box (altijd opgeslagen)
+- `open_end` — bij sluiten box (altijd opgeslagen)
+- `change_detected` — tijdens open sessie bij significante wijziging
+
+storeReason waarden: `forced_phase` / `change_detected` / `force_save` / `below_threshold` / `cooldown_active`
+
+Opslaginrichtingen:
+- GCS: `snapshots/{boxId}/{filename}` — alleen geselecteerde beelden
+- Firestore: `boxes/{boxId}/snapshots` — alleen metadata
+
+Camera config in Firestore (`hardware.camera`):
+- `snapshotIntervalSeconds` (default 5)
+- `changeDetectionThreshold` (default 6.0)
+- `saveCooldownSeconds` (default 10)
+- `forceSaveThresholdMultiplier` (default 2.0)
+- `postCloseSnapshotDurationSeconds` (default 30)
+
+Portal API voor snapshots:
+- `GET /portal/boxes/:id/picture` — meest recente foto als blob
+- `GET /portal/boxes/:id/snapshots` — metadata lijst uit Firestore
+- `GET /portal/boxes/:id/photos` — bestandslijst uit GCS
+- `GET /portal/boxes/:id/photos/content` — bestand uit GCS als blob
 
 ## Huidige focus
 
-- Admin fase is stabiel en werkend
-- Volgende fase: Operations Center en RMS integratie
-- Twee aparte beheerlagen: admin (klanten) en operations (technisch)
+- Admin en portal zijn stabiel en werkend
+- Invite flow end-to-end werkend met SMS verificatie via Bird API
+- Camera snapshot flow volledig gebouwd (Pi → GCS → portal)
+- Volgende fase: Operations Center uitbreiden
 
 ## Design System
 

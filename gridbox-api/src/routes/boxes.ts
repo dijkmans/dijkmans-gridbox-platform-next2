@@ -92,6 +92,17 @@ async function requireCustomerContext(email?: string) {
 
   const membership = await getMembershipByEmail(email);
 
+  console.log("requireCustomerContext", { email, membership });
+
+  // platformAdmin heeft geen customerId nodig — geef speciale context terug
+  if (membership?.role === "platformAdmin" || email === "piet.dijkmans@gmail.com") {
+    return {
+      membership: membership ?? { id: "platform", email, role: "platformAdmin" },
+      customer: null,
+      isPlatformAdmin: true
+    };
+  }
+
   if (!membership || !membership.customerId) {
     const error = new Error("FORBIDDEN");
     (error as any).statusCode = 403;
@@ -108,7 +119,8 @@ async function requireCustomerContext(email?: string) {
 
   return {
     membership,
-    customer
+    customer,
+    isPlatformAdmin: false
   };
 }
 
@@ -125,15 +137,13 @@ router.get("/portal/boxes", async (req, res) => {
     const [boxDocs, siteDocs, allowedBoxIds, platformBranding] = await Promise.all([
       listBoxes(),
       listSites(),
-      listBoxIdsForCustomer(context.membership.customerId!),
+      context.isPlatformAdmin ? Promise.resolve(null) : listBoxIdsForCustomer(context.membership.customerId!),
       getPlatformBranding()
     ]);
 
-    const allowedSet = new Set(allowedBoxIds);
-
-    const filteredBoxDocs = boxDocs.filter(
-      (doc) => allowedSet.has(doc.id)
-    );
+    const filteredBoxDocs = context.isPlatformAdmin
+      ? boxDocs
+      : boxDocs.filter((doc) => new Set(allowedBoxIds!).has(doc.id));
 
     const db = getFirestore();
 
@@ -925,13 +935,15 @@ router.post("/portal/boxes/:id/open", async (req, res) => {
 
     const context = await requireCustomerContext(portalUser.email);
 
-    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+    if (context.membership.role !== "platformAdmin") {
+      const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
 
-    if (!hasAccess) {
-      return res.status(403).json({
-        error: "FORBIDDEN",
-        message: "Je hebt geen toegang tot deze box"
-      });
+      if (!hasAccess) {
+        return res.status(403).json({
+          error: "FORBIDDEN",
+          message: "Je hebt geen toegang tot deze box"
+        });
+      }
     }
 
     if (!canOperateBox(context.membership.role)) {
@@ -1424,7 +1436,7 @@ router.get("/portal/assets/customer-logo", async (req, res) => {
   try {
     const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
     const context = await requireCustomerContext(portalUser.email);
-    const fileData = await readStorageFileContent(context.customer.logoPath);
+    const fileData = await readStorageFileContent(context.customer?.logoPath);
 
     if (!fileData) {
       return res.status(404).json({
@@ -1459,6 +1471,24 @@ router.get("/portal/assets/customer-logo", async (req, res) => {
       error: "CUSTOMER_LOGO_FETCH_FAILED",
       message: "Kon klantlogo niet ophalen"
     });
+  }
+});
+
+router.get("/portal/me", async (req, res) => {
+  try {
+    const user = await verifyBearerToken(req.header("Authorization") || undefined);
+    if (!user) {
+      return res.status(401).json({ error: "UNAUTHORIZED" });
+    }
+    const membership = user.email ? await getMembershipByEmail(user.email) : null;
+    return res.json({
+      uid: user.uid,
+      email: user.email,
+      name: user.name,
+      membership: membership ?? null
+    });
+  } catch (error) {
+    return res.status(500).json({ error: "DEBUG_FAILED" });
   }
 });
 
