@@ -22,6 +22,11 @@ function canOperateBox(role?: string | null) {
   return role === "platformAdmin" || role === "customerOperator" || role === "customerOperatorNoCamera";
 }
 
+async function requireBoxAccess(context: Awaited<ReturnType<typeof requireCustomerContext>>, boxId: string): Promise<boolean> {
+  if (context.isPlatformAdmin) return true;
+  return hasCustomerBoxAccess(context.membership.customerId!, boxId);
+}
+
 async function readStorageFileContent(storagePath?: string): Promise<{ buffer: Buffer; contentType: string } | null> {
   if (!storagePath) {
     return null;
@@ -246,7 +251,7 @@ router.get("/portal/boxes/:id", async (req, res) => {
       customerId: context.membership.customerId
     });
 
-    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+    const hasAccess = await requireBoxAccess(context, boxId);
 
     if (!hasAccess) {
       return res.status(403).json({
@@ -317,7 +322,7 @@ router.get("/portal/boxes/:id/shares", async (req, res) => {
       customerId: context.membership.customerId
     });
 
-    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+    const hasAccess = await requireBoxAccess(context, boxId);
 
     if (!hasAccess) {
       return res.status(403).json({
@@ -410,7 +415,7 @@ router.post("/portal/boxes/:id/shares", async (req, res) => {
       customerId: context.membership.customerId
     });
 
-    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+    const hasAccess = await requireBoxAccess(context, boxId);
 
     if (!hasAccess) {
       return res.status(403).json({
@@ -526,7 +531,7 @@ router.put("/portal/boxes/:id/shares/:shareId/activate", async (req, res) => {
       customerId: context.membership.customerId
     });
 
-    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+    const hasAccess = await requireBoxAccess(context, boxId);
     if (!hasAccess) {
       return res.status(403).json({ error: "FORBIDDEN", message: "Geen toegang" });
     }
@@ -599,7 +604,7 @@ router.delete("/portal/boxes/:id/shares/:shareId", async (req, res) => {
       customerId: context.membership.customerId
     });
 
-    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+    const hasAccess = await requireBoxAccess(context, boxId);
 
     if (!hasAccess) {
       return res.status(403).json({
@@ -668,7 +673,7 @@ router.get("/portal/boxes/:id/smslogs", async (req, res) => {
     const context = await requireCustomerContext(portalUser.email);
     const boxId = req.params.id;
 
-    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+    const hasAccess = await requireBoxAccess(context, boxId);
     if (!hasAccess) {
       return res.status(403).json({ error: "FORBIDDEN", message: "Je hebt geen toegang tot deze box" });
     }
@@ -715,7 +720,7 @@ router.get("/portal/boxes/:id/commands/latest", async (req, res) => {
       customerId: context.membership.customerId
     });
 
-    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+    const hasAccess = await requireBoxAccess(context, boxId);
 
     if (!hasAccess) {
       return res.status(403).json({
@@ -777,7 +782,7 @@ router.get("/portal/boxes/:id/commands/:commandId", async (req, res) => {
       customerId: context.membership.customerId
     });
 
-    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+    const hasAccess = await requireBoxAccess(context, boxId);
 
     if (!hasAccess) {
       return res.status(403).json({
@@ -837,7 +842,7 @@ router.get("/portal/boxes/:id/events", async (req, res) => {
       customerId: context.membership.customerId
     });
 
-    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+    const hasAccess = await requireBoxAccess(context, boxId);
 
     if (!hasAccess) {
       return res.status(403).json({
@@ -936,7 +941,7 @@ router.post("/portal/boxes/:id/open", async (req, res) => {
     const context = await requireCustomerContext(portalUser.email);
 
     if (context.membership.role !== "platformAdmin") {
-      const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+      const hasAccess = await requireBoxAccess(context, boxId);
 
       if (!hasAccess) {
         return res.status(403).json({
@@ -1028,7 +1033,7 @@ router.post("/portal/boxes/:id/close", async (req, res) => {
     const context = await requireCustomerContext(portalUser.email);
 
     if (context.membership.role !== "platformAdmin") {
-      const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+      const hasAccess = await requireBoxAccess(context, boxId);
 
       if (!hasAccess) {
         return res.status(403).json({
@@ -1105,7 +1110,7 @@ router.get("/portal/boxes/:id/snapshots", async (req, res) => {
     const context = await requireCustomerContext(portalUser.email);
     const boxId = req.params.id;
 
-    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+    const hasAccess = await requireBoxAccess(context, boxId);
     if (!hasAccess) {
       return res.status(403).json({
         error: "FORBIDDEN",
@@ -1167,7 +1172,7 @@ router.get("/portal/boxes/:id/photos", async (req, res) => {
       customerId: context.membership.customerId
     });
 
-    const hasAccess = await hasCustomerBoxAccess(context.membership.customerId!, boxId);
+    const hasAccess = await requireBoxAccess(context, boxId);
 
     if (!hasAccess) {
       return res.status(403).json({

@@ -35,14 +35,28 @@ exports.onShareStatusChanged = onDocumentWritten({
     const name = afterData.name || 'Gebruiker';
 
     try {
+        // Haal city op via box → siteId → sites
+        let city = '';
+        try {
+            const boxSnap = await db.collection('boxes').doc(boxId).get();
+            const siteId = boxSnap.exists ? boxSnap.data().siteId : null;
+            if (siteId) {
+                const siteSnap = await db.collection('sites').doc(siteId).get();
+                city = (siteSnap.exists && siteSnap.data().city) ? siteSnap.data().city : '';
+            }
+        } catch (cityErr) {
+            console.warn(`[WARN] City niet beschikbaar voor ${boxId}:`, cityErr.message);
+        }
+
         const templateSnap = await db.collection('smsTemplates').doc('invitation').get();
-        let body = `Beste ${name}, je hebt toegang tot Gridbox ${boxNr}.`; 
+        let body = `Beste ${name}, je hebt toegang tot Gridbox ${boxNr}.`;
 
         if (templateSnap.exists && templateSnap.data().body) {
             body = templateSnap.data().body
                 .replace(/\[customerName\]/g, name)
-                .replace(/\[boxNr\]/g, boxNr)            
-                .replace(/\[shortBoxNr\]/g, shortBoxNr); 
+                .replace(/\[boxNr\]/g, boxNr)
+                .replace(/\[shortBoxNr\]/g, shortBoxNr)
+                .replace(/\[city\]/g, city);
         }
 
         // Formatteer telefoonnummer (exact zoals in je originele code)
