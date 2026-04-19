@@ -2182,6 +2182,17 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
     const apiBaseUrl = `${req.protocol}://${host}`;
     const bootstrapVersion = "v1";
 
+    // Escape voor gebruik in PowerShell double-quoted strings ("...").
+    // In single-quoted here-strings (@'...'@) zijn deze tekens veilig, maar
+    // customerName/siteName etc. komen in gewone "..." strings terecht.
+    const escapePsStr = (v: string) =>
+      v.replace(/`/g, "``").replace(/\$/g, "`$").replace(/"/g, '`"');
+
+    const safeBoxId = escapePsStr(boxId);
+    const safeCustomerName = escapePsStr(customerName);
+    const safeSiteName = escapePsStr(siteName);
+    const safeProvisioningId = escapePsStr(provisioningId);
+
     const cloudInitUserData = [
       "#cloud-config",
       "hostname: " + boxId,
@@ -2350,18 +2361,18 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "exit /b",
       "::PS_START",
       "# Gridbox SD-kaart flash script",
-      `# Gegenereerd voor box: ${boxId}`,
-      `# Provisioning ID: ${provisioningId}`,
+      `# Gegenereerd voor box: ${safeBoxId}`,
+      `# Provisioning ID: ${safeProvisioningId}`,
       "",
       "Write-Host \"\"",
       "Write-Host \"============================================\" -ForegroundColor Cyan",
       "Write-Host \"  GRIDBOX SD-KAART FLASH SCRIPT\" -ForegroundColor Cyan",
       "Write-Host \"============================================\" -ForegroundColor Cyan",
       "Write-Host \"\"",
-      `Write-Host \"  Box ID          : ${boxId}\" -ForegroundColor White`,
-      `Write-Host \"  Klant            : ${customerName}\" -ForegroundColor White`,
-      `Write-Host \"  Locatie          : ${siteName}\" -ForegroundColor White`,
-      `Write-Host \"  Provisioning ID  : ${provisioningId}\" -ForegroundColor White`,
+      `Write-Host \"  Box ID          : ${safeBoxId}\" -ForegroundColor White`,
+      `Write-Host \"  Klant            : ${safeCustomerName}\" -ForegroundColor White`,
+      `Write-Host \"  Locatie          : ${safeSiteName}\" -ForegroundColor White`,
+      `Write-Host \"  Provisioning ID  : ${safeProvisioningId}\" -ForegroundColor White`,
       "Write-Host \"\"",
       "Write-Host \"============================================\" -ForegroundColor Cyan",
       "Write-Host \"\"",
@@ -2388,7 +2399,7 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "",
       "$ErrorActionPreference = \"Stop\"",
       "Write-Host \"=== Gridbox SD-kaart installatie ===\" -ForegroundColor Cyan",
-      `Write-Host \"Box: ${boxId}\" -ForegroundColor White`,
+      `Write-Host \"Box: ${safeBoxId}\" -ForegroundColor White`,
       "Write-Host \"\"",
       "",
       "$ImagerPath = \"C:\\Program Files\\Raspberry Pi Ltd\\Imager\\rpi-imager.exe\"",
@@ -2489,7 +2500,7 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "Write-Host \"Schrijfbeveiliging verwijderd en schijf leeggemaakt.\" -ForegroundColor Gray",
       "",
       "# Cloud-init userdata tijdelijk opslaan",
-      `$TempDir = "C:\\Windows\\Temp\\gridbox-${boxId}"`,
+      `$TempDir = "C:\\Windows\\Temp\\gridbox-${safeBoxId}"`,
       "New-Item -ItemType Directory -Force -Path $TempDir | Out-Null",
       `$CloudInitPath = "$TempDir\\userdata.yaml"`,
       "$CloudInitContent = @'",
@@ -2615,7 +2626,7 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "",
       "    # meta-data altijd overschrijven zodat instance-id altijd uniek en correct is",
       "    $MetaDataPath = \"${bootDriveLetter}:\\meta-data\"",
-      "    $MetaDataContent = \"instance-id: gridbox-" + boxId + "`nlocal-hostname: " + boxId + "`n\"",
+      "    $MetaDataContent = \"instance-id: gridbox-" + safeBoxId + "`nlocal-hostname: " + safeBoxId + "`n\"",
       "    [System.IO.File]::WriteAllText($MetaDataPath, $MetaDataContent, (New-Object System.Text.UTF8Encoding $false))",
       "    Write-Host \"meta-data geschreven naar $MetaDataPath\"",
       "",
