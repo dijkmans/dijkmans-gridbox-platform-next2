@@ -92,8 +92,8 @@ function pickDisplayName(
 
 function pickLastHeartbeat(data: Record<string, any>): string | undefined {
   return (
-    normalizeText(data.state?.lastHeartbeatAt) ||
     normalizeText(data.software?.lastHeartbeatIso) ||
+    normalizeText(data.state?.lastHeartbeatAt) ||
     normalizeText(data.updatedAt) ||
     normalizeText(data.status?.timestamp) ||
     normalizeText(data.lifecycle?.openedAt) ||
@@ -116,7 +116,7 @@ function pickStatus(data: Record<string, any>): PortalBoxStatus {
 
   const minutesAgo = (Date.now() - heartbeatDate.getTime()) / 60000;
 
-  if (minutesAgo <= 5) {
+  if (minutesAgo <= 7) {
     return "online";
   }
 
