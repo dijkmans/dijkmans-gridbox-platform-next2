@@ -1185,6 +1185,11 @@ def update_pi_status():
             hw_update["hardware.pi.serial"] = pi_serial
             log(f"INFO: Pi serial: {pi_serial}")
 
+        existing_pi_connect_id = (cached_config.get("hardware") or {}).get("piConnect", {}).get("deviceId")
+        if not existing_pi_connect_id:
+            hw_update["hardware.piConnect.deviceId"] = "XXXXX"
+            log("INFO: piConnect.deviceId placeholder aangemaakt - vul in via Firestore")
+
         if hw_update:
             box_doc_ref.update(hw_update)
 
