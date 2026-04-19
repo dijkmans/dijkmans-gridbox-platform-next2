@@ -1038,6 +1038,18 @@ def get_pi_ip(interface="eth0"):
     return None
 
 
+def get_pi_serial():
+    """Leest het serienummer van de Pi via /proc/cpuinfo."""
+    try:
+        with open("/proc/cpuinfo", "r") as f:
+            for line in f:
+                if line.startswith("Serial"):
+                    return line.split(":")[1].strip().lstrip("0") or None
+    except Exception as e:
+        log(f"WARN: get_pi_serial(): {e}")
+    return None
+
+
 def try_backend_heartbeat(version_raspberry, software_update):
     if not isinstance(runtime_config, dict) or not runtime_config:
         return False
@@ -1167,6 +1179,11 @@ def update_pi_status():
         pi_ip = get_pi_ip()
         if pi_ip:
             hw_update["hardware.pi.ip"] = pi_ip
+
+        pi_serial = get_pi_serial()
+        if pi_serial:
+            hw_update["hardware.pi.serial"] = pi_serial
+            log(f"INFO: Pi serial: {pi_serial}")
 
         if hw_update:
             box_doc_ref.update(hw_update)
