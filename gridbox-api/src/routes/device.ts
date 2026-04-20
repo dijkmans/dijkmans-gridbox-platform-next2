@@ -425,4 +425,37 @@ router.post("/device/heartbeat", async (req, res) => {
   }
 });
 
+// PATCH /device/rpi-connect-register
+// Geen Firebase auth — aangeroepen door de Pi direct na rpi-connect signin.
+// Slaat het Pi Connect device ID op in Firestore.
+router.patch("/device/rpi-connect-register", async (req, res) => {
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const boxId = typeof body.boxId === "string" ? body.boxId.trim().toLowerCase() : "";
+    const deviceId = typeof body.deviceId === "string" ? body.deviceId.trim() : "";
+
+    if (!boxId || !deviceId) {
+      return res.status(400).json({
+        error: "MISSING_FIELDS",
+        message: "boxId en deviceId zijn verplicht"
+      });
+    }
+
+    const db = getFirestore();
+    await db.collection("boxes").doc(boxId).set(
+      { hardware: { piConnect: { deviceId } } },
+      { merge: true }
+    );
+
+    console.log(`rpi-connect-register: ${boxId} → deviceId=${deviceId}`);
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("FOUT in PATCH /device/rpi-connect-register", error);
+    return res.status(500).json({
+      error: "RPI_CONNECT_REGISTER_FAILED",
+      message: "Kon deviceId niet opslaan"
+    });
+  }
+});
+
 export default router;

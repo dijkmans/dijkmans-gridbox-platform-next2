@@ -2167,7 +2167,7 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
         "      User=pi",
         "      Environment=XDG_RUNTIME_DIR=/run/user/1000",
         "      ExecStartPre=loginctl enable-linger pi",
-        "      ExecStart=/bin/bash -c 'rpi-connect signin --auth-key $(cat /boot/firmware/rpi-connect-auth-key) && systemctl --user enable rpi-connect && systemctl --user start rpi-connect'",
+        "      ExecStart=/bin/bash -c 'rpi-connect on && sleep 3 && rpi-connect signin --auth-key $(cat /boot/firmware/rpi-connect-auth-key) && systemctl --user enable rpi-connect && systemctl --user start rpi-connect && RPI_DEVICE_ID=$(rpi-connect status --json 2>/dev/null | python3 -c \"import sys,json; d=json.load(sys.stdin); print(d.get(\\\"device_id\\\",\\\"\\\"))\" 2>/dev/null) && if [ -n \"$RPI_DEVICE_ID\" ]; then BOX_ID=$(python3 -c \"import json; print(json.load(open(\\\"/boot/firmware/box_bootstrap.json\\\"))[\\\"boxId\\\"])\" 2>/dev/null) && curl -s -X PATCH https://gridbox-api-960191535038.europe-west1.run.app/device/rpi-connect-register -H \"Content-Type: application/json\" -d \"{\\\"boxId\\\":\\\"$BOX_ID\\\",\\\"deviceId\\\":\\\"$RPI_DEVICE_ID\\\"}\"; fi'",
         "      ExecStartPost=/bin/rm -f /boot/firmware/rpi-connect-auth-key",
         "      RemainAfterExit=yes",
         "      ",
