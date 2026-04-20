@@ -72,6 +72,10 @@ export type AdminSiteItem = {
   id: string;
   customerId?: string | null;
   name?: string | null;
+  city?: string | null;
+  address?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
   active?: boolean;
 };
 

@@ -75,6 +75,18 @@ export async function deleteAdminProvisioning(provisioningId: string, { token }:
   return deleteAdminPath(`/admin/provisioning/${encodeURIComponent(provisioningId)}`, { token });
 }
 
+export async function patchAdminSite(
+  siteId: string,
+  body: Record<string, unknown>,
+  { token }: { token: string }
+) {
+  return fetch(apiUrl(`/admin/sites/${encodeURIComponent(siteId)}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body)
+  });
+}
+
 export async function updateAdminBox(boxId: string, body: { customerId: string; siteId: string }, { token }: { token: string }) {
   return fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}`), {
     method: "PUT",

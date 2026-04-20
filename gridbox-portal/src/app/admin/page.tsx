@@ -23,6 +23,7 @@ import {
   fetchAdminProvisionings,
   fetchAdminPath,
   postAdminJson,
+  patchAdminSite,
   deleteAdminPath,
   deleteAdminProvisioning,
   updateAdminBox,
@@ -113,6 +114,16 @@ export default function AdminPage() {
   const [newCameraIp, setNewCameraIp] = useState("");
   const [newCameraUsername, setNewCameraUsername] = useState("");
   const [newCameraPassword, setNewCameraPassword] = useState("");
+
+  const [showSiteForm, setShowSiteForm] = useState(false);
+  const [editingSiteId, setEditingSiteId] = useState<string | null>(null);
+  const [siteName, setSiteName] = useState("");
+  const [siteCity, setSiteCity] = useState("");
+  const [siteAddress, setSiteAddress] = useState("");
+  const [sitePostalCode, setSitePostalCode] = useState("");
+  const [siteCountry, setSiteCountry] = useState("België");
+  const [siteCustomerId, setSiteCustomerId] = useState("");
+  const [siteBusy, setSiteBusy] = useState(false);
 
   async function loadAdminData(clearFeedback = false) {
     try {
@@ -890,6 +901,76 @@ export default function AdminPage() {
     setSuccessMessage("");
   }
 
+  function resetSiteForm() {
+    setSiteName("");
+    setSiteCity("");
+    setSiteAddress("");
+    setSitePostalCode("");
+    setSiteCountry("België");
+    setSiteCustomerId("");
+    setEditingSiteId(null);
+    setShowSiteForm(false);
+  }
+
+  function handleEditSite(site: AdminSiteItem) {
+    setEditingSiteId(site.id);
+    setSiteName(site.name || "");
+    setSiteCity(site.city || "");
+    setSiteAddress(site.address || "");
+    setSitePostalCode(site.postalCode || "");
+    setSiteCountry(site.country || "België");
+    setSiteCustomerId(site.customerId || "");
+    setShowSiteForm(true);
+  }
+
+  async function handleSubmitSite(e: FormEvent) {
+    e.preventDefault();
+    const name = siteName.trim();
+    const city = siteCity.trim();
+    if (!name) return setErrorMessage("Naam is verplicht");
+    if (!city) return setErrorMessage("Stad is verplicht");
+
+    const user = auth.currentUser;
+    if (!user) return setErrorMessage("Niet aangemeld");
+
+    setSiteBusy(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const token = await user.getIdToken();
+      const body = {
+        name,
+        city,
+        address: siteAddress.trim() || null,
+        postalCode: sitePostalCode.trim() || null,
+        country: siteCountry.trim() || "België",
+        customerId: siteCustomerId.trim() || null
+      };
+
+      let res: Response;
+      if (editingSiteId) {
+        res = await patchAdminSite(editingSiteId, body, { token });
+      } else {
+        res = await postAdminJson("/admin/sites", { token, body });
+      }
+
+      const data = await res.json();
+      if (!res.ok) {
+        setErrorMessage(data.message || "Opslaan mislukt");
+        return;
+      }
+
+      setSuccessMessage(editingSiteId ? "Site bijgewerkt" : "Site aangemaakt");
+      resetSiteForm();
+      await loadAdminData(false);
+    } catch {
+      setErrorMessage("Netwerkfout bij opslaan site");
+    } finally {
+      setSiteBusy(false);
+    }
+  }
+
   const selectedCustomer = getSelectedCustomer(customers, selectedCustomerId);
   const customerMembers = getCustomerMembers(memberships, selectedCustomerId);
   const customerInvites = getCustomerInvites(invites, selectedCustomerId);
@@ -1062,36 +1143,157 @@ export default function AdminPage() {
 {activeSection === "sites" && (
               <section className="space-y-6">
                 <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <h2 className="text-2xl font-bold text-slate-900">Sites</h2>
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-                    In deze slice is er nog geen volwaardig sitescherm met eigen endpoint en adresdata.
-                    Wat je hier al wel ziet, zijn de siteverwijzingen die vandaag in de boxdata zitten.
-                  </p>
+                  <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                    <div>
+                      <h2 className="text-2xl font-bold text-slate-900">Sites</h2>
+                      <p className="mt-2 text-sm text-slate-500">
+                        Overzicht van alle locaties in het platform.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { resetSiteForm(); setShowSiteForm(true); }}
+                      className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-black"
+                    >
+                      + Nieuwe site toevoegen
+                    </button>
+                  </div>
                 </div>
+
+                {showSiteForm && (
+                  <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <h3 className="mb-4 text-lg font-bold text-slate-900">
+                      {editingSiteId ? "Site aanpassen" : "Nieuwe site"}
+                    </h3>
+                    <form onSubmit={handleSubmitSite} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-slate-500">Naam *</label>
+                        <input
+                          type="text"
+                          value={siteName}
+                          onChange={(e) => setSiteName(e.target.value)}
+                          placeholder="Naam van de locatie"
+                          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                          required
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-slate-500">Stad *</label>
+                        <input
+                          type="text"
+                          value={siteCity}
+                          onChange={(e) => setSiteCity(e.target.value)}
+                          placeholder="Gent"
+                          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                          required
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-slate-500">Adres</label>
+                        <input
+                          type="text"
+                          value={siteAddress}
+                          onChange={(e) => setSiteAddress(e.target.value)}
+                          placeholder="Straat 1"
+                          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-slate-500">Postcode</label>
+                        <input
+                          type="text"
+                          value={sitePostalCode}
+                          onChange={(e) => setSitePostalCode(e.target.value)}
+                          placeholder="9000"
+                          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-slate-500">Land</label>
+                        <input
+                          type="text"
+                          value={siteCountry}
+                          onChange={(e) => setSiteCountry(e.target.value)}
+                          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-slate-500">Klant</label>
+                        <select
+                          value={siteCustomerId}
+                          onChange={(e) => setSiteCustomerId(e.target.value)}
+                          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                        >
+                          <option value="">-- geen klant --</option>
+                          {customers.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name || c.id}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-span-full flex gap-3 pt-2">
+                        <button
+                          type="submit"
+                          disabled={siteBusy}
+                          className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-40"
+                        >
+                          {siteBusy ? "Bezig..." : editingSiteId ? "Opslaan" : "Aanmaken"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={resetSiteForm}
+                          className="rounded-xl border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          Annuleer
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
 
                 <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
                   <div className="overflow-x-auto">
                     <table className="min-w-full text-left text-sm">
                       <thead className="border-b border-slate-200 text-slate-500">
                         <tr>
-                          <th className="pb-3 pr-4 font-semibold">Site ID</th>
-                          <th className="pb-3 pr-4 font-semibold">Aantal boxen</th>
-                          <th className="pb-3 pr-4 font-semibold">Aantal klanten</th>
+                          <th className="pb-3 pr-4 font-semibold">Naam</th>
+                          <th className="pb-3 pr-4 font-semibold">Stad</th>
+                          <th className="pb-3 pr-4 font-semibold">Adres</th>
+                          <th className="pb-3 pr-4 font-semibold">Land</th>
+                          <th className="pb-3 pr-4 font-semibold">Klant</th>
+                          <th className="pb-3 pr-4 font-semibold">Boxen</th>
+                          <th className="pb-3 font-semibold"></th>
                         </tr>
                       </thead>
                       <tbody>
-                        {siteSummaries.map((site) => (
-                          <tr key={site.siteId} className="border-b border-slate-100">
-                            <td className="py-4 pr-4 font-semibold text-slate-900">{site.siteId}</td>
-                            <td className="py-4 pr-4 text-slate-600">{site.boxCount}</td>
-                            <td className="py-4 pr-4 text-slate-600">{site.customerIds.size}</td>
+                        {sites.map((site) => (
+                          <tr key={site.id} className="border-b border-slate-100">
+                            <td className="py-4 pr-4 font-semibold text-slate-900">{site.name || site.id}</td>
+                            <td className="py-4 pr-4 text-slate-600">{site.city || "-"}</td>
+                            <td className="py-4 pr-4 text-slate-600">
+                              {[site.address, site.postalCode].filter(Boolean).join(", ") || "-"}
+                            </td>
+                            <td className="py-4 pr-4 text-slate-600">{site.country || "-"}</td>
+                            <td className="py-4 pr-4 text-slate-600">
+                              {customers.find((c) => c.id === site.customerId)?.name || site.customerId || "-"}
+                            </td>
+                            <td className="py-4 pr-4 text-slate-600">
+                              {boxes.filter((b) => b.siteId === site.id).length}
+                            </td>
+                            <td className="py-4">
+                              <button
+                                type="button"
+                                onClick={() => handleEditSite(site)}
+                                className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
+                              >
+                                Aanpassen
+                              </button>
+                            </td>
                           </tr>
                         ))}
-
-                        {siteSummaries.length === 0 && (
+                        {sites.length === 0 && (
                           <tr>
-                            <td colSpan={3} className="py-6 text-slate-500">
-                              Nog geen siteverwijzingen gevonden in de geladen boxen.
+                            <td colSpan={7} className="py-6 text-slate-500">
+                              Nog geen sites gevonden.
                             </td>
                           </tr>
                         )}

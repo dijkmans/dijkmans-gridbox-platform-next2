@@ -210,6 +210,10 @@ router.get("/admin/sites", async (req, res) => {
           id: siteDoc.id,
           customerId: typeof data.customerId === "string" ? data.customerId : null,
           name: typeof data.name === "string" ? data.name : null,
+          city: typeof data.city === "string" ? data.city : null,
+          address: typeof data.address === "string" ? data.address : null,
+          postalCode: typeof data.postalCode === "string" ? data.postalCode : null,
+          country: typeof data.country === "string" ? data.country : null,
           active: data.active !== false
         };
       })
@@ -242,6 +246,88 @@ router.get("/admin/sites", async (req, res) => {
       error: "ADMIN_SITES_GET_FAILED",
       message: "Kon sites niet ophalen"
     });
+  }
+});
+
+router.post("/admin/sites", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    const city = typeof body.city === "string" ? body.city.trim() : "";
+
+    if (!name) {
+      return res.status(400).json({ error: "MISSING_NAME", message: "name is verplicht" });
+    }
+    if (!city) {
+      return res.status(400).json({ error: "MISSING_CITY", message: "city is verplicht" });
+    }
+
+    const db = getFirestore();
+    const ref = db.collection("sites").doc();
+    const now = new Date().toISOString();
+    const siteData = {
+      name,
+      city,
+      address: typeof body.address === "string" ? body.address.trim() : null,
+      postalCode: typeof body.postalCode === "string" ? body.postalCode.trim() : null,
+      country: typeof body.country === "string" ? body.country.trim() : "België",
+      customerId: typeof body.customerId === "string" ? body.customerId.trim() : null,
+      active: true,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await ref.set(siteData);
+
+    return res.status(201).json({ item: { id: ref.id, ...siteData } });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
+    console.error("FOUT in POST /admin/sites", error);
+    return res.status(500).json({ error: "ADMIN_SITES_POST_FAILED", message: "Kon site niet aanmaken" });
+  }
+});
+
+router.patch("/admin/sites/:siteId", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+
+    const siteId = req.params.siteId?.trim();
+    if (!siteId) {
+      return res.status(400).json({ error: "MISSING_SITE_ID", message: "siteId is verplicht" });
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const updates: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+
+    if (typeof body.name === "string") updates.name = body.name.trim();
+    if (typeof body.city === "string") updates.city = body.city.trim();
+    if (typeof body.address === "string") updates.address = body.address.trim();
+    if (typeof body.postalCode === "string") updates.postalCode = body.postalCode.trim();
+    if (typeof body.country === "string") updates.country = body.country.trim();
+    if (typeof body.customerId === "string") updates.customerId = body.customerId.trim();
+
+    const db = getFirestore();
+    const ref = db.collection("sites").doc(siteId);
+    const doc = await ref.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ error: "SITE_NOT_FOUND", message: "Site niet gevonden" });
+    }
+
+    await ref.update(updates);
+
+    const updated = { id: siteId, ...(doc.data() as Record<string, unknown>), ...updates };
+    return res.json({ item: updated });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
+    console.error("FOUT in PATCH /admin/sites/:siteId", error);
+    return res.status(500).json({ error: "ADMIN_SITES_PATCH_FAILED", message: "Kon site niet aanpassen" });
   }
 });
 
