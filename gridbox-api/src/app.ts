@@ -7,6 +7,7 @@ import adminRoutes from "./routes/admin";
 import invitesRoutes from "./routes/invites";
 import deviceRoutes from "./routes/device";
 import operationsRoutes from "./routes/operations";
+import rpiConnectRoutes from "./routes/rpiConnect";
 import webhookRoutes from "./routes/webhooks";
 
 export function createApp() {
@@ -24,6 +25,7 @@ export function createApp() {
   app.use(invitesRoutes);
   app.use(deviceRoutes);
   app.use(operationsRoutes);
+  app.use(rpiConnectRoutes);
   app.use(webhookRoutes);
 
   app.use((_req, res) => {
