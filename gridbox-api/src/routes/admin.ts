@@ -2196,7 +2196,8 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "  - chown pi:crontab /var/spool/cron/crontabs/pi",
       "  - touch /var/log/rpi-connect-setup.log",
       "  - chown pi:pi /var/log/rpi-connect-setup.log",
-      "  - chmod 644 /boot/firmware/rpi-connect-auth-key"
+      "  - chmod 644 /boot/firmware/rpi-connect-auth-key",
+      "  - reboot"
     ].join("\n");
 
     const bootstrapJson = JSON.stringify(
