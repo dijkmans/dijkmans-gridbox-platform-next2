@@ -548,18 +548,15 @@ export default function OperationsPage() {
                                 >
                                   {isOpen ? "Verberg diagnose" : "Diagnose"}
                                 </button>
-                                {box.piConnect?.deviceId && (
+                                {box.hardware?.piConnect?.deviceId && box.hardware.piConnect.deviceId !== "XXXXX" && (
                                   <a
-                                    href={`https://connect.raspberrypi.com/devices/${box.piConnect.deviceId}`}
+                                    href={`https://connect.raspberrypi.com/devices/${box.hardware.piConnect.deviceId}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
-                                      box.piConnect.online === true
-                                        ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
-                                        : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
-                                    }`}
+                                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
                                   >
-                                    {box.piConnect.online === true ? "🟢" : "⚫"} Pi Connect
+                                    <span className={`inline-block h-2 w-2 rounded-full ${isPiOnline(box.lastHeartbeatAt) ? "bg-green-500" : "bg-gray-400"}`} />
+                                    Pi Connect
                                   </a>
                                 )}
                               </div>
