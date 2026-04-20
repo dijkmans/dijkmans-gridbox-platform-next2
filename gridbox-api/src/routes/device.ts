@@ -425,6 +425,41 @@ router.post("/device/heartbeat", async (req, res) => {
   }
 });
 
+// GET /device/rpi-connect-device-id?serial=<serial>
+// Geen auth — aangeroepen door de Pi om het Pi Connect device ID op te halen.
+// Matcht het Pi serienummer tegen de organisatie-devices via de Connect API.
+router.get("/device/rpi-connect-device-id", async (req, res) => {
+  const serial = typeof req.query.serial === "string" ? req.query.serial.trim().toLowerCase() : "";
+
+  if (!serial) {
+    return res.status(400).json({ error: "MISSING_SERIAL", message: "serial is verplicht" });
+  }
+
+  if (!env.rpiConnectToken) {
+    return res.json({ deviceId: null });
+  }
+
+  try {
+    const apiRes = await fetch(`${env.rpiConnectApiBaseUrl}/organisation/devices`, {
+      headers: { Authorization: `Bearer ${env.rpiConnectToken}` }
+    });
+
+    if (!apiRes.ok) {
+      console.warn(`rpi-connect-device-id: Connect API HTTP ${apiRes.status}`);
+      return res.json({ deviceId: null });
+    }
+
+    const data = await apiRes.json() as { devices?: Array<{ id: string; serial_number?: string }> };
+    const devices = Array.isArray(data.devices) ? data.devices : [];
+    const match = devices.find((d) => (d.serial_number ?? "").toLowerCase() === serial);
+
+    return res.json({ deviceId: match?.id ?? null });
+  } catch (err) {
+    console.warn("rpi-connect-device-id: fout:", err);
+    return res.json({ deviceId: null });
+  }
+});
+
 // PATCH /device/rpi-connect-register
 // Geen Firebase auth — aangeroepen door de Pi direct na rpi-connect signin.
 // Slaat het Pi Connect device ID op in Firestore.
