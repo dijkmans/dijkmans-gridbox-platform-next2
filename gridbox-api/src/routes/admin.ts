@@ -5,6 +5,7 @@ import { env } from "../config/env";
 import { getMembershipByEmail } from "../repositories/membershipRepository";
 import { listSites } from "../repositories/siteRepository";
 import { getFirestore } from "firebase-admin/firestore";
+import type { Firestore } from "firebase-admin/firestore";
 
 const router = Router();
 
@@ -608,6 +609,43 @@ router.put("/admin/boxes/:boxId/config", async (req, res) => {
   }
 });
 
+async function getRutCredentials(
+  siteId: string | null,
+  db: Firestore
+): Promise<{ ip: string; username: string; password: string } | null> {
+  if (!siteId) return null;
+  const siteDoc = await db.collection("sites").doc(siteId).get();
+  if (!siteDoc.exists) return null;
+  const d = siteDoc.data() as Record<string, any>;
+  const rut = d?.rut;
+  if (!rut?.ip || !rut?.username || !rut?.password) return null;
+  return { ip: String(rut.ip), username: String(rut.username), password: String(rut.password) };
+}
+
+async function fetchRut241Leases(
+  rutIp: string,
+  username: string,
+  password: string
+): Promise<Array<{ ip: string; mac: string; hostname?: string }>> {
+  const credentials = Buffer.from(`${username}:${password}`).toString("base64");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(`http://${rutIp}/api/dhcp/leases`, {
+      headers: { Authorization: `Basic ${credentials}` },
+      signal: controller.signal as any
+    });
+    if (!res.ok) return [];
+    const raw = await res.json() as unknown;
+    const list: unknown[] = Array.isArray(raw) ? raw : Array.isArray((raw as any)?.data) ? (raw as any).data : [];
+    return list
+      .filter((l): l is Record<string, any> => !!l && typeof l === "object" && typeof (l as any).ip === "string" && typeof (l as any).mac === "string")
+      .map((l) => ({ ip: l.ip as string, mac: (l.mac as string).toLowerCase(), hostname: typeof l.hostname === "string" ? l.hostname : undefined }));
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 router.get("/admin/boxes/:boxId/camera-context", async (req, res) => {
   try {
     await requirePlatformAdmin(req.header("Authorization") || undefined);
@@ -636,11 +674,52 @@ router.get("/admin/boxes/:boxId/camera-context", async (req, res) => {
         }
       : null;
 
-    // TODO: RUT241 integratie — detecteer aangesloten camera via live clients/leases
-    const detectedMac: string | null = null;
-    const detectedIp: string | null = null;
-    const routerStatus: "online" | "offline" | "unknown" = "unknown";
-    const leaseStatus: "active" | "not_set" | "conflict" | "unknown" = "unknown";
+    const siteId: string | null = data?.siteId ?? null;
+    const rutCreds = await getRutCredentials(siteId, db);
+
+    let detectedMac: string | null = null;
+    let detectedIp: string | null = null;
+    let routerStatus: "online" | "offline" | "unknown" = "unknown";
+    let leaseStatus: "active" | "not_set" | "conflict" | "unknown" = "unknown";
+    let lastError: string | null = null;
+
+    if (rutCreds) {
+      let leases: Array<{ ip: string; mac: string }> = [];
+      try {
+        leases = await fetchRut241Leases(rutCreds.ip, rutCreds.username, rutCreds.password);
+        routerStatus = "online";
+      } catch {
+        routerStatus = "offline";
+        lastError = `RUT241 op ${rutCreds.ip} niet bereikbaar`;
+      }
+
+      if (routerStatus === "online") {
+        // Verzamel alle geregistreerde camera-MACs op deze site
+        const allBoxesSnap = await db.collection("boxes").get();
+        const registeredMacs = new Set<string>();
+        allBoxesSnap.docs.forEach((doc) => {
+          const d = doc.data() as Record<string, any>;
+          if (siteId && d?.siteId !== siteId) return;
+          const m = d?.hardware?.camera?.mac;
+          if (typeof m === "string") registeredMacs.add(m.toLowerCase());
+        });
+
+        // Detecteer eerste lease-MAC die nog niet in Firestore staat voor deze site
+        const unregistered = leases.find((l) => !registeredMacs.has(l.mac));
+        if (unregistered) {
+          detectedMac = unregistered.mac;
+          detectedIp = unregistered.ip;
+        }
+
+        // Bepaal leaseStatus voor de al gekoppelde camera (als die er is)
+        if (firestoreCamera?.mac) {
+          const hasLease = leases.some((l) => l.mac === firestoreCamera.mac);
+          leaseStatus = hasLease ? "active" : "not_set";
+        } else {
+          leaseStatus = "not_set";
+        }
+      }
+    }
 
     return res.json({
       firestoreCamera,
@@ -648,7 +727,7 @@ router.get("/admin/boxes/:boxId/camera-context", async (req, res) => {
       detectedIp,
       routerStatus,
       leaseStatus,
-      lastError: null
+      lastError
     });
   } catch (error) {
     const statusCode = getStatusCode(error);
@@ -689,10 +768,16 @@ router.post("/admin/boxes/:boxId/camera-suggest-ip", async (req, res) => {
       if (typeof ip === "string") usedIps.add(ip);
     });
 
-    // TODO: RUT241 integratie — voeg live DHCP leases en clients toe aan usedIps
-    // const rutIp = boxData?.rut?.ip ?? boxData?.gatewayIp;
-    // const liveLeases = await fetchRut241Leases(rutIp, credentials);
-    // liveLeases.forEach(lease => usedIps.add(lease.ip));
+    // Voeg live DHCP lease-IPs toe via RUT241 (best-effort — als router offline is gaan we door met Firestore-data)
+    const rutCreds = await getRutCredentials(siteId, db);
+    if (rutCreds) {
+      try {
+        const liveLeases = await fetchRut241Leases(rutCreds.ip, rutCreds.username, rutCreds.password);
+        liveLeases.forEach((l) => usedIps.add(l.ip));
+      } catch {
+        // Router offline — bereken IP alleen op basis van Firestore
+      }
+    }
 
     let suggestedIp: string | null = null;
     let conflictsWith: string | null = null;
@@ -755,19 +840,47 @@ router.post("/admin/boxes/:boxId/camera-assign", async (req, res) => {
       }
     }
 
-    // Stap 2: zet static DHCP lease op de RUT241
-    // TODO: RUT241 integratie — haal routergegevens op via box → site → router
-    // const rutIp = boxData?.rut?.ip ?? boxData?.gatewayIp;
-    // const leaseResult = await setRut241StaticLease(rutIp, credentials, mac, chosenIp);
-    // if (!leaseResult.ok) {
-    //   return res.status(502).json({ error: "LEASE_FAILED", message: leaseResult.error });
-    // }
-    const leaseConfirmed = true; // TODO: vervangen door echte RUT241-bevestiging
+    // Stap 2: zet static DHCP lease op de RUT241 via box → site → rut
+    const boxForSiteDoc = allBoxesSnap.docs.find((d) => (d.data() as Record<string, any>)?.boxId === boxId || d.id === boxId);
+    const siteIdForRut: string | null = boxForSiteDoc ? ((boxForSiteDoc.data() as Record<string, any>)?.siteId ?? null) : null;
+    const rutCreds = await getRutCredentials(siteIdForRut, db);
 
-    if (!leaseConfirmed) {
+    if (!rutCreds) {
+      return res.status(502).json({
+        error: "NO_RUT_CREDENTIALS",
+        message: "Geen RUT241-gegevens gevonden voor deze site — Firestore niet bijgewerkt"
+      });
+    }
+
+    const leaseCredentials = Buffer.from(`${rutCreds.username}:${rutCreds.password}`).toString("base64");
+    const leaseController = new AbortController();
+    const leaseTimeout = setTimeout(() => leaseController.abort(), 8000);
+    let leaseRes: Response;
+    try {
+      leaseRes = await fetch(`http://${rutCreds.ip}/api/dhcp/static`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Basic ${leaseCredentials}`
+        },
+        body: JSON.stringify({ mac, ip: chosenIp }),
+        signal: leaseController.signal as any
+      });
+    } catch {
+      clearTimeout(leaseTimeout);
+      return res.status(502).json({
+        error: "RUT_UNREACHABLE",
+        message: `RUT241 op ${rutCreds.ip} niet bereikbaar — Firestore niet bijgewerkt`
+      });
+    } finally {
+      clearTimeout(leaseTimeout);
+    }
+
+    if (!leaseRes.ok) {
+      const leaseErr = await leaseRes.json().catch(() => ({})) as Record<string, any>;
       return res.status(502).json({
         error: "LEASE_FAILED",
-        message: "RUT241 kon de DHCP lease niet instellen — Firestore niet bijgewerkt"
+        message: leaseErr?.message || `RUT241 gaf HTTP ${leaseRes.status} terug — Firestore niet bijgewerkt`
       });
     }
 
