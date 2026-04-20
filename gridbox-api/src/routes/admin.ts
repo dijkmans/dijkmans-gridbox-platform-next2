@@ -2483,7 +2483,7 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "    # meta-data schrijven naar bootpartitie (alleen als het nog niet bestaat)",
       "    $MetaDataPath = \"${bootDriveLetter}:\\meta-data\"",
       "    if (-not (Test-Path $MetaDataPath)) {",
-      "        $MetaDataContent = \"instance-id: gridbox-" + boxId + "`nlocal-hostname: " + boxId + "`n\"",
+      "        $MetaDataContent = \"instance-id: gridbox-" + boxId + "-" + provisioningId + "`nlocal-hostname: " + boxId + "`n\"",
       "        [System.IO.File]::WriteAllText($MetaDataPath, $MetaDataContent, (New-Object System.Text.UTF8Encoding $false))",
       "        Write-Host \"meta-data geschreven naar $MetaDataPath\"",
       "    } else {",
