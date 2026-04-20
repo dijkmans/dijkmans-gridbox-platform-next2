@@ -2062,7 +2062,6 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "  - path: /usr/local/bin/gridbox-bootstrap.sh",
       "    owner: root:root",
       "    permissions: '0755'",
-      "    overwrite: true",
       "    content: |",
       "      #!/bin/bash",
       "      set -e",
