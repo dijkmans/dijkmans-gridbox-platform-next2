@@ -9,7 +9,7 @@
     Gewenste box-ID als hostname (bijv. gbox-007)
 
 .EXAMPLE
-    .\fix-hostname.ps1 -IP 192.168.1.50 -BoxId gbox-007
+    .ix-hostname.ps1 -IP 192.168.1.50 -BoxId gbox-007
 #>
 param(
     [Parameter(Mandatory)]
@@ -57,4 +57,4 @@ Write-Host "Hostname ingesteld. Pi wordt herstart zodat rpi-connect de nieuwe na
 ssh "pi@$IP" "sudo reboot" 2>&1 | Out-Null
 
 Write-Host ""
-Write-Host "Klaar. Pi herstart — wacht ~30 seconden en controleer connect.raspberrypi.com op naam '$BoxId'."
+Write-Host "Klaar. Pi herstart - wacht ~30 seconden en controleer connect.raspberrypi.com op naam '$BoxId'."
