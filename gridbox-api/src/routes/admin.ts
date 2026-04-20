@@ -2186,6 +2186,8 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "  - systemctl start gridbox-bootstrap-init.service",
       "  - chmod 0600 /var/spool/cron/crontabs/pi",
       "  - chown pi:crontab /var/spool/cron/crontabs/pi",
+      "  - touch /var/log/rpi-connect-setup.log",
+      "  - chown pi:pi /var/log/rpi-connect-setup.log",
       "  - chmod 644 /boot/firmware/rpi-connect-auth-key"
     ].join("\n");
 
