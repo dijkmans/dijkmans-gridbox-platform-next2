@@ -622,28 +622,97 @@ async function getRutCredentials(
   return { ip: String(rut.ip), username: String(rut.username), password: String(rut.password) };
 }
 
+async function getRut241Token(rutIp: string, username: string, password: string): Promise<string | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(`http://${rutIp}/api/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+      signal: controller.signal as any
+    });
+    if (!res.ok) {
+      console.warn(`[RUT241] login HTTP ${res.status} op ${rutIp}`);
+      return null;
+    }
+    const data = await res.json() as Record<string, any>;
+    console.log(`[RUT241] login response van ${rutIp}:`, JSON.stringify(data));
+    const token = data?.data?.token ?? data?.ubus_rpc_session ?? null;
+    return typeof token === "string" ? token : null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function fetchRut241Leases(
   rutIp: string,
   username: string,
   password: string
 ): Promise<Array<{ ip: string; mac: string; hostname?: string }>> {
-  const credentials = Buffer.from(`${username}:${password}`).toString("base64");
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`http://${rutIp}/api/dhcp/leases`, {
-      headers: { Authorization: `Basic ${credentials}` },
-      signal: controller.signal as any
-    });
-    if (!res.ok) return [];
-    const raw = await res.json() as unknown;
-    const list: unknown[] = Array.isArray(raw) ? raw : Array.isArray((raw as any)?.data) ? (raw as any).data : [];
-    return list
-      .filter((l): l is Record<string, any> => !!l && typeof l === "object" && typeof (l as any).ip === "string" && typeof (l as any).mac === "string")
-      .map((l) => ({ ip: l.ip as string, mac: (l.mac as string).toLowerCase(), hostname: typeof l.hostname === "string" ? l.hostname : undefined }));
-  } finally {
-    clearTimeout(timeout);
+  // BELANGRIJK: deze functie vereist dat de API-server het LAN-IP van de RUT241 kan bereiken.
+  // Bij Cloud Run deployment is 192.168.10.x NIET bereikbaar — calls zullen altijd timeout.
+  // Oplossing vereist: Pi als proxy, of ARP/lease data via heartbeat naar Firestore.
+
+  const token = await getRut241Token(rutIp, username, password);
+  const authHeader = token
+    ? `Bearer ${token}`
+    : `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
+
+  const leasePaths = [
+    `/api/dhcp/leases`,
+    `/api/network/leases`,
+  ];
+
+  for (const path of leasePaths) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const res = await fetch(`http://${rutIp}${path}`, {
+        headers: { Authorization: authHeader },
+        signal: controller.signal as any
+      });
+      const raw = await res.json() as unknown;
+      console.log(`[RUT241] ${path} HTTP ${res.status} van ${rutIp}:`, JSON.stringify(raw).slice(0, 500));
+      if (!res.ok) continue;
+      const list: unknown[] = Array.isArray(raw) ? raw : Array.isArray((raw as any)?.data) ? (raw as any).data : [];
+      const leases = list
+        .filter((l): l is Record<string, any> => !!l && typeof l === "object" && typeof (l as any).ip === "string" && typeof (l as any).mac === "string")
+        .map((l) => ({ ip: l.ip as string, mac: (l.mac as string).toLowerCase(), hostname: typeof l.hostname === "string" ? l.hostname : undefined }));
+      if (leases.length > 0 || res.ok) return leases;
+    } catch (err) {
+      console.warn(`[RUT241] ${path} op ${rutIp} mislukt:`, err instanceof Error ? err.message : String(err));
+    } finally {
+      clearTimeout(timeout);
+    }
   }
+
+  // Fallback: probeer ARP-tabel
+  const arpPaths = [`/api/network/arptable`, `/api/system/arptable`];
+  for (const path of arpPaths) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const res = await fetch(`http://${rutIp}${path}`, {
+        headers: { Authorization: authHeader },
+        signal: controller.signal as any
+      });
+      const raw = await res.json() as unknown;
+      console.log(`[RUT241] ARP fallback ${path} HTTP ${res.status} van ${rutIp}:`, JSON.stringify(raw).slice(0, 500));
+      if (!res.ok) continue;
+      const list: unknown[] = Array.isArray(raw) ? raw : Array.isArray((raw as any)?.data) ? (raw as any).data : [];
+      const entries = list
+        .filter((l): l is Record<string, any> => !!l && typeof l === "object" && typeof (l as any).ip === "string" && typeof (l as any).mac === "string")
+        .map((l) => ({ ip: l.ip as string, mac: (l.mac as string).toLowerCase() }));
+      if (entries.length > 0) return entries;
+    } catch (err) {
+      console.warn(`[RUT241] ARP ${path} op ${rutIp} mislukt:`, err instanceof Error ? err.message : String(err));
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  return [];
 }
 
 router.get("/admin/boxes/:boxId/camera-context", async (req, res) => {
