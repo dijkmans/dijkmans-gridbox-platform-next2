@@ -914,51 +914,7 @@ router.post("/admin/boxes/:boxId/camera-assign", async (req, res) => {
       }
     }
 
-    // Stap 2: zet static DHCP lease op de RUT241 via box → site → rut
-    const boxForSiteDoc = allBoxesSnap.docs.find((d) => (d.data() as Record<string, any>)?.boxId === boxId || d.id === boxId);
-    const siteIdForRut: string | null = boxForSiteDoc ? ((boxForSiteDoc.data() as Record<string, any>)?.siteId ?? null) : null;
-    const rutCreds = await getRutCredentials(siteIdForRut, db);
-
-    if (!rutCreds) {
-      return res.status(502).json({
-        error: "NO_RUT_CREDENTIALS",
-        message: "Geen RUT241-gegevens gevonden voor deze site — Firestore niet bijgewerkt"
-      });
-    }
-
-    const leaseCredentials = Buffer.from(`${rutCreds.username}:${rutCreds.password}`).toString("base64");
-    const leaseController = new AbortController();
-    const leaseTimeout = setTimeout(() => leaseController.abort(), 8000);
-    let leaseRes: Response;
-    try {
-      leaseRes = await fetch(`http://${rutCreds.ip}/api/dhcp/static`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Basic ${leaseCredentials}`
-        },
-        body: JSON.stringify({ mac, ip: chosenIp }),
-        signal: leaseController.signal as any
-      });
-    } catch {
-      clearTimeout(leaseTimeout);
-      return res.status(502).json({
-        error: "RUT_UNREACHABLE",
-        message: `RUT241 op ${rutCreds.ip} niet bereikbaar — Firestore niet bijgewerkt`
-      });
-    } finally {
-      clearTimeout(leaseTimeout);
-    }
-
-    if (!leaseRes.ok) {
-      const leaseErr = await leaseRes.json().catch(() => ({})) as Record<string, any>;
-      return res.status(502).json({
-        error: "LEASE_FAILED",
-        message: leaseErr?.message || `RUT241 gaf HTTP ${leaseRes.status} terug — Firestore niet bijgewerkt`
-      });
-    }
-
-    // Stap 3: schrijf naar Firestore pas na bevestigde lease
+    // Haal box document ref op
     const boxSnap = await db.collection("boxes").where("boxId", "==", boxId).limit(1).get();
     const boxDocRef = !boxSnap.empty
       ? boxSnap.docs[0].ref
@@ -967,41 +923,68 @@ router.post("/admin/boxes/:boxId/camera-assign", async (req, res) => {
         : null;
 
     if (!boxDocRef) {
-      // Lease is gezet maar box niet gevonden — log expliciet
-      console.error(`camera-assign: lease gezet maar box ${boxId} niet gevonden in Firestore`);
-      return res.status(404).json({
-        error: "BOX_NOT_FOUND",
-        message: "Lease gezet op router maar box niet gevonden in Firestore — controleer handmatig"
+      return res.status(404).json({ error: "BOX_NOT_FOUND", message: "Box niet gevonden" });
+    }
+
+    // Stap 2: schrijf pendingCommand naar Firestore — Pi pikt dit op en belt de RUT241 lokaal
+    const cmdRef = boxDocRef.collection("pendingCommand").doc("current");
+    const createdAt = new Date().toISOString();
+    await cmdRef.set({
+      type: "set_dhcp_lease",
+      mac,
+      ip: chosenIp,
+      createdAt,
+      status: "pending"
+    });
+
+    console.log(`camera-assign: pendingCommand geschreven voor ${boxId} — wacht op Pi`);
+
+    // Stap 3: poll maximaal 15s op status, elke 2s
+    const pollIntervalMs = 2000;
+    const pollMaxMs = 15000;
+    const pollStart = Date.now();
+    let finalStatus: string | null = null;
+    let errorMessage: string | null = null;
+
+    while (Date.now() - pollStart < pollMaxMs) {
+      await new Promise((r) => setTimeout(r, pollIntervalMs));
+      const snap = await cmdRef.get();
+      if (!snap.exists) break;
+      const d = snap.data() as Record<string, any>;
+      if (d.status === "done" || d.status === "error") {
+        finalStatus = d.status;
+        errorMessage = typeof d.errorMessage === "string" ? d.errorMessage : null;
+        break;
+      }
+    }
+
+    if (finalStatus === null) {
+      return res.status(504).json({
+        error: "PI_TIMEOUT",
+        message: "Pi heeft niet gereageerd binnen 15 seconden — lease niet bevestigd, Firestore niet bijgewerkt"
       });
     }
 
+    if (finalStatus === "error") {
+      return res.status(502).json({
+        error: "LEASE_FAILED",
+        message: errorMessage || "Pi kon de DHCP lease niet instellen — Firestore niet bijgewerkt"
+      });
+    }
+
+    // Stap 4: Pi bevestigde success — schrijf camera-koppeling naar Firestore
     const snapshotUrl = `http://${chosenIp}/cgi-bin/snapshot.cgi`;
     const now = new Date().toISOString();
 
-    try {
-      await boxDocRef.update({
-        "hardware.camera.mac": mac,
-        "hardware.camera.ip": chosenIp,
-        "hardware.camera.snapshotUrl": snapshotUrl,
-        "hardware.camera.updatedAt": now
-      });
-    } catch (firestoreErr) {
-      // Lease is gezet maar Firestore schrijven mislukt — log expliciet
-      console.error(`camera-assign: lease gezet voor ${boxId} maar Firestore schrijven mislukt:`, firestoreErr);
-      return res.status(500).json({
-        error: "FIRESTORE_WRITE_FAILED",
-        message: "Lease is ingesteld op de router maar Firestore kon niet bijgewerkt worden — controleer handmatig"
-      });
-    }
-
-    console.log(`camera-assign: ${boxId} → mac=${mac} ip=${chosenIp}`);
-    return res.json({
-      ok: true,
-      mac,
-      ip: chosenIp,
-      snapshotUrl,
-      updatedAt: now
+    await boxDocRef.update({
+      "hardware.camera.mac": mac,
+      "hardware.camera.ip": chosenIp,
+      "hardware.camera.snapshotUrl": snapshotUrl,
+      "hardware.camera.updatedAt": now
     });
+
+    console.log(`camera-assign: ${boxId} → mac=${mac} ip=${chosenIp} (via Pi)`);
+    return res.json({ ok: true, mac, ip: chosenIp, snapshotUrl, updatedAt: now });
   } catch (error) {
     const statusCode = getStatusCode(error);
     if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });

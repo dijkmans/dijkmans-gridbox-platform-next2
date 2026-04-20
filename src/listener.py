@@ -1095,6 +1095,97 @@ def update_detected_devices():
         log(f"WARN: update_detected_devices: {e}")
 
 
+def get_site_rut_credentials():
+    """Haalt RUT241-credentials op uit Firestore via boxes/{boxId}.siteId → sites/{siteId}.rut."""
+    try:
+        box_data = box_doc_ref.get().to_dict() or {}
+        site_id = box_data.get("siteId")
+        if not site_id:
+            return None
+        site_doc = db.collection("sites").document(site_id).get()
+        if not site_doc.exists:
+            return None
+        site_data = site_doc.to_dict() or {}
+        rut = site_data.get("rut", {})
+        if not rut.get("ip") or not rut.get("username") or not rut.get("password"):
+            return None
+        return {"ip": rut["ip"], "username": rut["username"], "password": rut["password"]}
+    except Exception as e:
+        log(f"WARN: get_site_rut_credentials: {e}")
+        return None
+
+
+def process_pending_command():
+    """Controleert of er een pendingCommand klaarstaat en voert het uit."""
+    try:
+        cmd_ref = box_doc_ref.collection("pendingCommand").document("current")
+        snap = cmd_ref.get()
+        if not snap.exists:
+            return
+
+        data = snap.to_dict() or {}
+        status = data.get("status")
+
+        # Opruimen: verwijder afgehandelde commando's na 60 seconden
+        if status in ("done", "error"):
+            completed_at = data.get("completedAt") or data.get("createdAt") or ""
+            try:
+                from datetime import timezone
+                age_seconds = (datetime.now(timezone.utc) - datetime.fromisoformat(completed_at)).total_seconds()
+                if age_seconds > PENDING_CMD_CLEANUP_SECONDS:
+                    cmd_ref.delete()
+                    log(f"INFO: pendingCommand opgeruimd na {int(age_seconds)}s")
+            except Exception:
+                pass
+            return
+
+        if status != "pending":
+            return
+
+        cmd_type = data.get("type")
+        if cmd_type != "set_dhcp_lease":
+            return
+
+        mac = data.get("mac", "")
+        ip = data.get("ip", "")
+        if not mac or not ip:
+            cmd_ref.update({"status": "error", "errorMessage": "mac of ip ontbreekt in pendingCommand"})
+            return
+
+        log(f"INFO: pendingCommand set_dhcp_lease ontvangen: mac={mac} ip={ip}")
+
+        creds = get_site_rut_credentials()
+        if not creds:
+            cmd_ref.update({"status": "error", "errorMessage": "Geen RUT241-credentials gevonden voor deze site"})
+            return
+
+        try:
+            resp = requests.post(
+                f"http://{creds['ip']}/api/dhcp/static",
+                json={"mac": mac, "ip": ip},
+                auth=(creds["username"], creds["password"]),
+                timeout=8
+            )
+            if resp.ok:
+                log(f"INFO: DHCP lease gezet op RUT241: mac={mac} → ip={ip}")
+                cmd_ref.update({"status": "done", "completedAt": now_iso()})
+            else:
+                msg = f"RUT241 HTTP {resp.status_code}: {resp.text[:200]}"
+                log(f"WARN: DHCP lease mislukt: {msg}")
+                cmd_ref.update({"status": "error", "errorMessage": msg})
+        except requests.exceptions.Timeout:
+            msg = f"Timeout bij verbinding met RUT241 op {creds['ip']}"
+            log(f"WARN: {msg}")
+            cmd_ref.update({"status": "error", "errorMessage": msg})
+        except Exception as e:
+            msg = f"RUT241 fout: {type(e).__name__}: {e}"
+            log(f"WARN: {msg}")
+            cmd_ref.update({"status": "error", "errorMessage": msg})
+
+    except Exception as e:
+        log(f"WARN: process_pending_command: {e}")
+
+
 def try_backend_heartbeat(version_raspberry, software_update):
     if not isinstance(runtime_config, dict) or not runtime_config:
         return False
@@ -1867,10 +1958,13 @@ if platform.system() != "Windows" and GPIO_AVAILABLE:
 # =========================================================
 
 DEVICE_DETECT_INTERVAL_SECONDS = 30
+PENDING_CMD_POLL_INTERVAL_SECONDS = 5
+PENDING_CMD_CLEANUP_SECONDS = 60
 
 next_heartbeat_at = 0
 next_software_poll_at = 0
 next_device_detect_at = 0
+next_pending_cmd_at = 0
 _claim_permanently_rejected = False
 
 try:
@@ -1886,6 +1980,10 @@ try:
         if now_ts >= next_device_detect_at:
             update_detected_devices()
             next_device_detect_at = now_ts + DEVICE_DETECT_INTERVAL_SECONDS
+
+        if now_ts >= next_pending_cmd_at:
+            process_pending_command()
+            next_pending_cmd_at = now_ts + PENDING_CMD_POLL_INTERVAL_SECONDS
 
         if now_ts >= next_heartbeat_at:
             if bootstrap_config and not runtime_config and not _claim_permanently_rejected:
