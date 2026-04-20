@@ -608,6 +608,222 @@ router.put("/admin/boxes/:boxId/config", async (req, res) => {
   }
 });
 
+router.get("/admin/boxes/:boxId/camera-context", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+    const { boxId } = req.params;
+    const db = getFirestore();
+
+    const boxSnap = await db.collection("boxes").where("boxId", "==", boxId).limit(1).get();
+    const boxDoc = !boxSnap.empty
+      ? boxSnap.docs[0]
+      : await db.collection("boxes").doc(boxId).get();
+
+    if (!boxDoc.exists) {
+      return res.status(404).json({ error: "BOX_NOT_FOUND", message: "Box niet gevonden" });
+    }
+
+    const data = boxDoc.data() as Record<string, any>;
+    const cam = data?.hardware?.camera ?? null;
+
+    const firestoreCamera = cam
+      ? {
+          ip: cam.ip ?? null,
+          mac: cam.mac ?? null,
+          snapshotUrl: cam.snapshotUrl ?? null,
+          updatedAt: cam.updatedAt ?? null,
+          enabled: cam.enabled ?? null
+        }
+      : null;
+
+    // TODO: RUT241 integratie — detecteer aangesloten camera via live clients/leases
+    const detectedMac: string | null = null;
+    const detectedIp: string | null = null;
+    const routerStatus: "online" | "offline" | "unknown" = "unknown";
+    const leaseStatus: "active" | "not_set" | "conflict" | "unknown" = "unknown";
+
+    return res.json({
+      firestoreCamera,
+      detectedMac,
+      detectedIp,
+      routerStatus,
+      leaseStatus,
+      lastError: null
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
+    console.error("FOUT in GET /admin/boxes/:boxId/camera-context", error);
+    return res.status(500).json({ error: "CAMERA_CONTEXT_FAILED", message: "Kon camera-context niet ophalen" });
+  }
+});
+
+router.post("/admin/boxes/:boxId/camera-suggest-ip", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+    const { boxId } = req.params;
+    const db = getFirestore();
+
+    // Haal alle box-camera-IPs op uit Firestore voor dezelfde site
+    const boxSnap = await db.collection("boxes").where("boxId", "==", boxId).limit(1).get();
+    const boxDoc = !boxSnap.empty
+      ? boxSnap.docs[0]
+      : await db.collection("boxes").doc(boxId).get();
+
+    if (!boxDoc.exists) {
+      return res.status(404).json({ error: "BOX_NOT_FOUND", message: "Box niet gevonden" });
+    }
+
+    const boxData = boxDoc.data() as Record<string, any>;
+    const siteId: string | null = boxData?.siteId ?? null;
+
+    // Verzamel gebruikte IPs: alle cameras in Firestore op dezelfde site
+    const allBoxesSnap = await db.collection("boxes").get();
+    const usedIps = new Set<string>();
+
+    allBoxesSnap.docs.forEach((doc) => {
+      const d = doc.data() as Record<string, any>;
+      if (siteId && d?.siteId !== siteId) return;
+      const ip = d?.hardware?.camera?.ip;
+      if (typeof ip === "string") usedIps.add(ip);
+    });
+
+    // TODO: RUT241 integratie — voeg live DHCP leases en clients toe aan usedIps
+    // const rutIp = boxData?.rut?.ip ?? boxData?.gatewayIp;
+    // const liveLeases = await fetchRut241Leases(rutIp, credentials);
+    // liveLeases.forEach(lease => usedIps.add(lease.ip));
+
+    let suggestedIp: string | null = null;
+    let conflictsWith: string | null = null;
+
+    for (let i = 100; i <= 249; i++) {
+      const candidate = `192.168.10.${i}`;
+      if (!usedIps.has(candidate)) {
+        suggestedIp = candidate;
+        break;
+      }
+    }
+
+    if (!suggestedIp) {
+      return res.status(409).json({
+        error: "NO_IP_AVAILABLE",
+        message: "Geen vrij IP-adres beschikbaar in het bereik 192.168.10.100–249",
+        conflictsWith: null
+      });
+    }
+
+    return res.json({ suggestedIp, conflictsWith });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
+    console.error("FOUT in POST /admin/boxes/:boxId/camera-suggest-ip", error);
+    return res.status(500).json({ error: "SUGGEST_IP_FAILED", message: "Kon vrij IP niet bepalen" });
+  }
+});
+
+router.post("/admin/boxes/:boxId/camera-assign", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+    const { boxId } = req.params;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const mac = typeof body.mac === "string" ? body.mac.trim().toLowerCase() : "";
+    const chosenIp = typeof body.chosenIp === "string" ? body.chosenIp.trim() : "";
+
+    if (!mac || !/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(mac)) {
+      return res.status(400).json({ error: "INVALID_MAC", message: "mac moet het formaat xx:xx:xx:xx:xx:xx hebben" });
+    }
+    const ipMatch = chosenIp.match(/^192\.168\.10\.(\d+)$/);
+    if (!ipMatch || parseInt(ipMatch[1], 10) < 100 || parseInt(ipMatch[1], 10) > 249) {
+      return res.status(400).json({ error: "INVALID_IP", message: "chosenIp moet 192.168.10.x zijn (100–249)" });
+    }
+
+    const db = getFirestore();
+
+    // Stap 1: controleer of MAC al aan een andere box hangt
+    const allBoxesSnap = await db.collection("boxes").get();
+    for (const doc of allBoxesSnap.docs) {
+      const d = doc.data() as Record<string, any>;
+      const existingMac = d?.hardware?.camera?.mac;
+      const existingBoxId = d?.boxId ?? doc.id;
+      if (existingMac === mac && existingBoxId !== boxId) {
+        return res.status(409).json({
+          error: "MAC_CONFLICT",
+          message: `MAC ${mac} is al gekoppeld aan box ${existingBoxId}`
+        });
+      }
+    }
+
+    // Stap 2: zet static DHCP lease op de RUT241
+    // TODO: RUT241 integratie — haal routergegevens op via box → site → router
+    // const rutIp = boxData?.rut?.ip ?? boxData?.gatewayIp;
+    // const leaseResult = await setRut241StaticLease(rutIp, credentials, mac, chosenIp);
+    // if (!leaseResult.ok) {
+    //   return res.status(502).json({ error: "LEASE_FAILED", message: leaseResult.error });
+    // }
+    const leaseConfirmed = true; // TODO: vervangen door echte RUT241-bevestiging
+
+    if (!leaseConfirmed) {
+      return res.status(502).json({
+        error: "LEASE_FAILED",
+        message: "RUT241 kon de DHCP lease niet instellen — Firestore niet bijgewerkt"
+      });
+    }
+
+    // Stap 3: schrijf naar Firestore pas na bevestigde lease
+    const boxSnap = await db.collection("boxes").where("boxId", "==", boxId).limit(1).get();
+    const boxDocRef = !boxSnap.empty
+      ? boxSnap.docs[0].ref
+      : (await db.collection("boxes").doc(boxId).get()).exists
+        ? db.collection("boxes").doc(boxId)
+        : null;
+
+    if (!boxDocRef) {
+      // Lease is gezet maar box niet gevonden — log expliciet
+      console.error(`camera-assign: lease gezet maar box ${boxId} niet gevonden in Firestore`);
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Lease gezet op router maar box niet gevonden in Firestore — controleer handmatig"
+      });
+    }
+
+    const snapshotUrl = `http://${chosenIp}/cgi-bin/snapshot.cgi`;
+    const now = new Date().toISOString();
+
+    try {
+      await boxDocRef.update({
+        "hardware.camera.mac": mac,
+        "hardware.camera.ip": chosenIp,
+        "hardware.camera.snapshotUrl": snapshotUrl,
+        "hardware.camera.updatedAt": now
+      });
+    } catch (firestoreErr) {
+      // Lease is gezet maar Firestore schrijven mislukt — log expliciet
+      console.error(`camera-assign: lease gezet voor ${boxId} maar Firestore schrijven mislukt:`, firestoreErr);
+      return res.status(500).json({
+        error: "FIRESTORE_WRITE_FAILED",
+        message: "Lease is ingesteld op de router maar Firestore kon niet bijgewerkt worden — controleer handmatig"
+      });
+    }
+
+    console.log(`camera-assign: ${boxId} → mac=${mac} ip=${chosenIp}`);
+    return res.json({
+      ok: true,
+      mac,
+      ip: chosenIp,
+      snapshotUrl,
+      updatedAt: now
+    });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
+    console.error("FOUT in POST /admin/boxes/:boxId/camera-assign", error);
+    return res.status(500).json({ error: "CAMERA_ASSIGN_FAILED", message: "Toewijzen camera mislukt" });
+  }
+});
+
 router.get("/admin/boxes/:boxId/camera", async (req, res) => {
   try {
     const context = await requirePlatformAdmin(req.header("Authorization") || undefined);

@@ -9,6 +9,21 @@ import type { AdminSiteItem, CustomerItem } from "@/components/admin/types";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+type CameraContext = {
+  firestoreCamera: {
+    ip: string | null;
+    mac: string | null;
+    snapshotUrl: string | null;
+    updatedAt: string | null;
+    enabled: boolean | null;
+  } | null;
+  detectedMac: string | null;
+  detectedIp: string | null;
+  routerStatus: "online" | "offline" | "unknown";
+  leaseStatus: "active" | "not_set" | "conflict" | "unknown";
+  lastError: string | null;
+};
+
 type BoxCamera = {
   enabled?: boolean;
   mac?: string | null;
@@ -119,6 +134,15 @@ export default function AdminBoxConfigClient() {
   const [cameraSnapshotInterval, setCameraSnapshotInterval] = useState("");
   const [cameraChangeThreshold, setCameraChangeThreshold] = useState("");
   const [cameraPostCloseDuration, setCameraPostCloseDuration] = useState("");
+
+  // Camera-toewijzingsflow
+  const [cameraContext, setCameraContext] = useState<CameraContext | null>(null);
+  const [cameraContextBusy, setCameraContextBusy] = useState(false);
+  const [suggestedIp, setSuggestedIp] = useState<string | null>(null);
+  const [suggestBusy, setSuggestBusy] = useState(false);
+  const [assignBusy, setAssignBusy] = useState(false);
+  const [cameraFlowError, setCameraFlowError] = useState("");
+  const [cameraFlowSuccess, setCameraFlowSuccess] = useState("");
 
   // Verlichting
   const [lightsOnWhenOpen, setLightsOnWhenOpen] = useState(false);
@@ -337,6 +361,87 @@ export default function AdminBoxConfigClient() {
     }
   }
 
+  // ── Camera-toewijzingsflow ────────────────────────────────────────────────
+
+  async function loadCameraContext() {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token || !boxId) return;
+    setCameraContextBusy(true);
+    setCameraFlowError("");
+    try {
+      const res = await fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/camera-context`), {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) { setCameraFlowError(data.message || "Camera-context ophalen mislukt"); return; }
+      setCameraContext(data as CameraContext);
+    } catch {
+      setCameraFlowError("Netwerkfout bij ophalen camera-context");
+    } finally {
+      setCameraContextBusy(false);
+    }
+  }
+
+  async function handleSuggestIp() {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token || !boxId) return;
+    setSuggestBusy(true);
+    setCameraFlowError("");
+    setSuggestedIp(null);
+    try {
+      const res = await fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/camera-suggest-ip`), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json() as { suggestedIp?: string; conflictsWith?: string | null; message?: string };
+      if (!res.ok) { setCameraFlowError(data.message || "Vrij IP bepalen mislukt"); return; }
+      setSuggestedIp(data.suggestedIp ?? null);
+    } catch {
+      setCameraFlowError("Netwerkfout bij bepalen vrij IP");
+    } finally {
+      setSuggestBusy(false);
+    }
+  }
+
+  async function handleCameraAssign() {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token || !boxId) return;
+    const mac = cameraContext?.detectedMac;
+    if (!mac || !suggestedIp) return;
+
+    setAssignBusy(true);
+    setCameraFlowError("");
+    setCameraFlowSuccess("");
+    try {
+      const res = await fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/camera-assign`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ mac, chosenIp: suggestedIp })
+      });
+      const data = await res.json() as { ok?: boolean; ip?: string; mac?: string; message?: string; error?: string };
+      if (!res.ok) { setCameraFlowError(data.message || "Toewijzen camera mislukt"); return; }
+      setCameraFlowSuccess(`Camera gekoppeld: MAC ${data.mac} → vast IP ${data.ip}`);
+      await loadCameraContext();
+      await loadData();
+    } catch {
+      setCameraFlowError("Netwerkfout bij toewijzen camera");
+    } finally {
+      setAssignBusy(false);
+    }
+  }
+
+  async function handleTestSnapshot() {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token || !boxId) return;
+    const res = await fetch(
+      apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/camera/snapshot`),
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) { setCameraFlowError("Snapshot ophalen mislukt"); return; }
+    const blob = await res.blob();
+    window.open(URL.createObjectURL(blob), "_blank");
+  }
+
   // ── Render helpers ────────────────────────────────────────────────────────
 
   function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
@@ -504,40 +609,154 @@ export default function AdminBoxConfigClient() {
 
         {/* B — HARDWARE */}
         <SectionCard title="Hardware">
-          {/* Camera */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-4">Camera</p>
-            <div className="space-y-4">
-              <FieldRow label="Camera actief">
-                <Toggle checked={cameraEnabled} onChange={setCameraEnabled} />
-              </FieldRow>
-              <FieldRow label="IP-adres">
-                <TextInput value={cameraIp} onChange={setCameraIp} placeholder="192.168.10.x" />
-              </FieldRow>
-              <FieldRow label="MAC-adres camera">
-                <TextInput value={cameraMac ?? "—"} disabled />
-              </FieldRow>
-              <FieldRow label="Gebruikersnaam">
-                <TextInput value={cameraUsername} onChange={setCameraUsername} placeholder="admin" />
-              </FieldRow>
-              <FieldRow label="Wachtwoord">
-                <TextInput
-                  type="password"
-                  value={cameraPassword}
-                  onChange={setCameraPassword}
-                  placeholder="Laat leeg om ongewijzigd te laten"
-                />
-              </FieldRow>
-              <FieldRow label="Snapshot interval (sec)">
-                <NumInput value={cameraSnapshotInterval} onChange={setCameraSnapshotInterval} placeholder="bijv. 5" />
-              </FieldRow>
-              <FieldRow label="Bewegingsdrempel (0–1)">
-                <NumInput value={cameraChangeThreshold} onChange={setCameraChangeThreshold} placeholder="bijv. 0.02" />
-              </FieldRow>
-              <FieldRow label="Snapshot duur na sluiten (sec)">
-                <NumInput value={cameraPostCloseDuration} onChange={setCameraPostCloseDuration} placeholder="bijv. 10" />
-              </FieldRow>
+          {/* Camera — toewijzingskaart */}
+          <div className="space-y-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Camera</p>
+
+            {/* Feedback camera-flow */}
+            {cameraFlowError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{cameraFlowError}</div>
+            )}
+            {cameraFlowSuccess && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{cameraFlowSuccess}</div>
+            )}
+
+            {/* Sectie 1 — Gedetecteerde camera */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Gedetecteerde camera</p>
+              {cameraContext === null ? (
+                <p className="text-sm text-slate-400">Nog niet opgeroepen — klik op "Zoek camera opnieuw"</p>
+              ) : cameraContext.detectedMac ? (
+                <>
+                  <KVRow label="Huidig netwerk-IP" value={cameraContext.detectedIp} />
+                  <KVRow label="MAC-adres" value={cameraContext.detectedMac} />
+                </>
+              ) : (
+                <p className="text-sm text-slate-400">Nog geen camera gedetecteerd</p>
+              )}
             </div>
+
+            {/* Sectie 2 — Huidige koppeling */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Huidige koppeling op deze box</p>
+              {cameraContext?.firestoreCamera ? (
+                <>
+                  <KVRow label="MAC-adres" value={cameraContext.firestoreCamera.mac} />
+                  <KVRow label="Vast IP op router" value={cameraContext.firestoreCamera.ip} />
+                  <KVRow label="Snapshot URL" value={cameraContext.firestoreCamera.snapshotUrl} />
+                  <KVRow label="Laatste update" value={formatDate(cameraContext.firestoreCamera.updatedAt)} />
+                </>
+              ) : (
+                <p className="text-sm text-slate-400">Nog geen camera gekoppeld</p>
+              )}
+            </div>
+
+            {/* Sectie 3 — Voorgesteld nieuw vast IP */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Voorgesteld nieuw vast IP</p>
+              {suggestedIp ? (
+                <KVRow label="Voorgesteld nieuw vast IP" value={suggestedIp} />
+              ) : (
+                <p className="text-sm text-slate-400">Nog niet bepaald — klik op "Stel vrij IP voor"</p>
+              )}
+            </div>
+
+            {/* Sectie 4 — RUT241 status */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">RUT241 status</p>
+              <div className="flex flex-wrap gap-2">
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
+                  cameraContext?.routerStatus === "online" ? "bg-emerald-100 text-emerald-800" :
+                  cameraContext?.routerStatus === "offline" ? "bg-red-100 text-red-800" :
+                  "bg-slate-200 text-slate-600"
+                }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${
+                    cameraContext?.routerStatus === "online" ? "bg-emerald-500" :
+                    cameraContext?.routerStatus === "offline" ? "bg-red-500" : "bg-slate-400"
+                  }`} />
+                  {cameraContext?.routerStatus === "online" ? "Online" :
+                   cameraContext?.routerStatus === "offline" ? "Offline" : "Onbekend"}
+                </span>
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
+                  cameraContext?.leaseStatus === "active" ? "bg-emerald-100 text-emerald-800" :
+                  cameraContext?.leaseStatus === "not_set" ? "bg-slate-200 text-slate-600" :
+                  cameraContext?.leaseStatus === "conflict" ? "bg-red-100 text-red-800" :
+                  "bg-slate-200 text-slate-600"
+                }`}>
+                  {cameraContext?.leaseStatus === "active" ? "Lease actief" :
+                   cameraContext?.leaseStatus === "not_set" ? "Lease nog niet gezet" :
+                   cameraContext?.leaseStatus === "conflict" ? "Lease conflict" : "Lease onbekend"}
+                </span>
+              </div>
+              {cameraContext?.routerStatus === "offline" && (
+                <p className="text-xs text-red-700 mt-1">RUT241 is offline — bovenstaande Firestore-data kan verouderd zijn.</p>
+              )}
+            </div>
+
+            {/* Acties */}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button
+                type="button"
+                onClick={loadCameraContext}
+                disabled={cameraContextBusy}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+              >
+                {cameraContextBusy ? "Bezig…" : "Zoek camera opnieuw"}
+              </button>
+              <button
+                type="button"
+                onClick={handleSuggestIp}
+                disabled={suggestBusy}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+              >
+                {suggestBusy ? "Bezig…" : "Stel vrij IP voor"}
+              </button>
+              <button
+                type="button"
+                onClick={handleCameraAssign}
+                disabled={assignBusy || !cameraContext?.detectedMac || !suggestedIp}
+                title={!cameraContext?.detectedMac ? "Geen gedetecteerde MAC — zoek eerst camera opnieuw" : !suggestedIp ? "Stel eerst een vrij IP voor" : ""}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-40"
+              >
+                {assignBusy ? "Bezig…" : "Bevestig en zet vast IP op router"}
+              </button>
+              <button
+                type="button"
+                onClick={handleTestSnapshot}
+                disabled={!cameraContext?.firestoreCamera?.snapshotUrl}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+              >
+                Test snapshot
+              </button>
+            </div>
+
+            <hr className="border-slate-100 my-2" />
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Camera-instellingen</p>
+
+            {/* Bestaande camera-instellingen (intervals, thresholds) */}
+            <FieldRow label="Camera actief">
+              <Toggle checked={cameraEnabled} onChange={setCameraEnabled} />
+            </FieldRow>
+            <FieldRow label="Snapshot interval (sec)">
+              <NumInput value={cameraSnapshotInterval} onChange={setCameraSnapshotInterval} placeholder="bijv. 5" />
+            </FieldRow>
+            <FieldRow label="Bewegingsdrempel (0–1)">
+              <NumInput value={cameraChangeThreshold} onChange={setCameraChangeThreshold} placeholder="bijv. 0.02" />
+            </FieldRow>
+            <FieldRow label="Snapshot duur na sluiten (sec)">
+              <NumInput value={cameraPostCloseDuration} onChange={setCameraPostCloseDuration} placeholder="bijv. 10" />
+            </FieldRow>
+            <FieldRow label="Gebruikersnaam">
+              <TextInput value={cameraUsername} onChange={setCameraUsername} placeholder="admin" />
+            </FieldRow>
+            <FieldRow label="Wachtwoord">
+              <TextInput
+                type="password"
+                value={cameraPassword}
+                onChange={setCameraPassword}
+                placeholder="Laat leeg om ongewijzigd te laten"
+              />
+            </FieldRow>
           </div>
 
           <hr className="border-slate-100" />
