@@ -100,6 +100,47 @@ function extractRmsSummary(rms: Record<string, unknown>) {
   };
 }
 
+type RpiConnectDevice = {
+  id: string;
+  online: boolean;
+  last_seen: string | null;
+  client_version: string | null;
+};
+
+async function fetchRpiConnectDevices(): Promise<Map<string, RpiConnectDevice>> {
+  const empty = new Map<string, RpiConnectDevice>();
+  if (!env.rpiConnectToken) return empty;
+
+  try {
+    const res = await fetch(`${env.rpiConnectApiBaseUrl}/organisation/devices`, {
+      headers: { Authorization: `Bearer ${env.rpiConnectToken}` }
+    });
+
+    if (!res.ok) {
+      console.warn(`fetchRpiConnectDevices: HTTP ${res.status}`);
+      return empty;
+    }
+
+    const data = await res.json() as { devices?: Array<Record<string, unknown>> };
+    if (!Array.isArray(data.devices)) return empty;
+
+    const byId = new Map<string, RpiConnectDevice>();
+    for (const d of data.devices) {
+      if (typeof d.id !== "string") continue;
+      byId.set(d.id, {
+        id: d.id,
+        online: d.online === true,
+        last_seen: typeof d.last_seen === "string" ? d.last_seen : null,
+        client_version: typeof d.client_version === "string" ? d.client_version : null,
+      });
+    }
+    return byId;
+  } catch (err) {
+    console.warn("fetchRpiConnectDevices fout:", err);
+    return empty;
+  }
+}
+
 function resolveRmsDevice(
   box: Record<string, unknown>,
   index: RmsIndex
@@ -146,17 +187,36 @@ router.get("/operations/boxes", async (req, res) => {
       ...(doc.data() as Record<string, unknown>)
     })) as Array<{ id: string } & Record<string, unknown>>;
 
-    const rmsIndex = await fetchAllRmsDevices();
+    const [rmsIndex, rpiConnectDevices] = await Promise.all([
+      fetchAllRmsDevices(),
+      fetchRpiConnectDevices(),
+    ]);
 
     const items = boxes.map((box) => {
       const rmsData = resolveRmsDevice(box, rmsIndex);
       const software = box["software"] as Record<string, unknown> | undefined;
       const lastHeartbeatAt = software?.["lastHeartbeatIso"] ?? box["lastHeartbeatAt"] ?? null;
 
+      const hardware = box["hardware"] as Record<string, unknown> | null | undefined;
+      const piConnectDeviceId = (hardware?.["piConnect"] as Record<string, unknown> | undefined)?.["deviceId"];
+      const piConnectDevice = typeof piConnectDeviceId === "string" && piConnectDeviceId && piConnectDeviceId !== "XXXXX"
+        ? rpiConnectDevices.get(piConnectDeviceId) ?? null
+        : null;
+
       return {
         ...box,
         lastHeartbeatAt,
-        rms: rmsData ? extractRmsSummary(rmsData) : null
+        rms: rmsData ? extractRmsSummary(rmsData) : null,
+        piConnect: piConnectDevice
+          ? {
+              deviceId: piConnectDevice.id,
+              online: piConnectDevice.online,
+              lastSeen: piConnectDevice.last_seen,
+              clientVersion: piConnectDevice.client_version,
+            }
+          : typeof piConnectDeviceId === "string" && piConnectDeviceId && piConnectDeviceId !== "XXXXX"
+            ? { deviceId: piConnectDeviceId, online: null, lastSeen: null, clientVersion: null }
+            : null,
       };
     });
 

@@ -58,6 +58,7 @@ type OperationsBoxItem = {
   gatewayMac?: string | null;
   software?: BoxSoftware | null;
   rms: RmsSummary | null;
+  piConnect?: { deviceId: string; online: boolean | null; lastSeen?: string | null; clientVersion?: string | null } | null;
   hardware?: {
     camera?: { ip?: string; mac?: string; snapshotUrl?: string; enabled?: boolean } | null;
     pi?: { mac?: string | null; ip?: string | null; serial?: string | null } | null;
@@ -547,14 +548,18 @@ export default function OperationsPage() {
                                 >
                                   {isOpen ? "Verberg diagnose" : "Diagnose"}
                                 </button>
-                                {box.hardware?.piConnect?.deviceId && box.hardware.piConnect.deviceId !== "XXXXX" && (
+                                {box.piConnect?.deviceId && (
                                   <a
-                                    href={`https://connect.raspberrypi.com/devices/${box.hardware.piConnect.deviceId}`}
+                                    href={`https://connect.raspberrypi.com/devices/${box.piConnect.deviceId}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition"
+                                    className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                                      box.piConnect.online === true
+                                        ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                                        : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                                    }`}
                                   >
-                                    Pi Connect
+                                    {box.piConnect.online === true ? "🟢" : "⚫"} Pi Connect
                                   </a>
                                 )}
                               </div>
