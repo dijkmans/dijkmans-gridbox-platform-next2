@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "crypto";
 import { Router } from "express";
 import { requirePortalUser } from "../auth/verifyBearerToken";
+import { env } from "../config/env";
 import { getMembershipByEmail } from "../repositories/membershipRepository";
 import { listSites } from "../repositories/siteRepository";
 import { getFirestore } from "firebase-admin/firestore";
@@ -2044,6 +2045,32 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
     const apiBaseUrl = `${req.protocol}://${host}`;
     const bootstrapVersion = "v1";
 
+    // Haal rpi-connect auth key op via Connect API (best-effort - script werkt ook zonder)
+    let rpiConnectAuthKey: string | null = null;
+    if (env.rpiConnectToken) {
+      try {
+        const akRes = await fetch(`${env.rpiConnectApiBaseUrl}/organisation/auth-keys`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${env.rpiConnectToken}`,
+            "Content-Type": "application/x-www-form-urlencoded"
+          },
+          body: `description=${encodeURIComponent(boxId)}&ttl_days=7`
+        });
+        if (akRes.ok) {
+          const akData = await akRes.json() as { secret?: string };
+          if (typeof akData.secret === "string" && akData.secret.startsWith("rpoak_")) {
+            rpiConnectAuthKey = akData.secret;
+            console.log(`generate-script: rpi-connect auth key aangevraagd voor ${boxId}`);
+          }
+        } else {
+          console.warn(`generate-script: rpi-connect API HTTP ${akRes.status} voor ${boxId}`);
+        }
+      } catch (err) {
+        console.warn(`generate-script: rpi-connect auth key aanvragen mislukt voor ${boxId}:`, err);
+      }
+    }
+
     const cloudInitUserData = [
       "#cloud-config",
       "hostname: " + boxId,
@@ -2125,10 +2152,40 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "      ",
       "      [Install]",
       "      WantedBy=multi-user.target",
+      "  - path: /usr/local/bin/rpi-connect-setup.sh",
+      "    owner: root:root",
+      "    permissions: '0755'",
+      "    content: |",
+      "      #!/bin/bash",
+      "      AUTH_KEY_FILE=\"/boot/firmware/rpi-connect-auth-key\"",
+      "      if [ ! -f \"$AUTH_KEY_FILE\" ]; then exit 0; fi",
+      "      rpi-connect on",
+      "      sleep 5",
+      "      rpi-connect signin --auth-key \"$(cat $AUTH_KEY_FILE)\"",
+      "      systemctl --user enable rpi-connect",
+      "      systemctl --user start rpi-connect",
+      "      sleep 3",
+      "      SERIAL=$(cat /proc/cpuinfo | grep Serial | awk '{print $3}')",
+      "      BOX_ID=$(python3 -c 'import json; print(json.load(open(\"/boot/firmware/box_bootstrap.json\"))[\"boxId\"])' 2>/dev/null || echo '')",
+      "      API_URL=$(python3 -c 'import json; print(json.load(open(\"/boot/firmware/box_bootstrap.json\"))[\"apiBaseUrl\"])' 2>/dev/null || echo '')",
+      "      RPI_ID=$(curl -sf \"$API_URL/device/rpi-connect-device-id?serial=$SERIAL\" | python3 -c 'import sys,json; print(json.load(sys.stdin).get(\"deviceId\") or \"\")' 2>/dev/null || echo '')",
+      "      if [ -n \"$RPI_ID\" ] && [ -n \"$BOX_ID\" ]; then",
+      "        curl -s -X PATCH \"$API_URL/device/rpi-connect-register\" \\",
+      "          -H \"Content-Type: application/json\" \\",
+      "          -d \"{\\\"boxId\\\":\\\"$BOX_ID\\\",\\\"deviceId\\\":\\\"$RPI_ID\\\"}\"",
+      "      fi",
+      "      rm -f \"$AUTH_KEY_FILE\"",
+      "  - path: /var/spool/cron/crontabs/pi",
+      "    owner: pi:pi",
+      "    permissions: '0600'",
+      "    content: |",
+      "      @reboot /usr/local/bin/rpi-connect-setup.sh >> /var/log/rpi-connect-setup.log 2>&1",
       "runcmd:",
       "  - systemctl daemon-reload",
       "  - systemctl enable gridbox-bootstrap-init.service",
-      "  - systemctl start gridbox-bootstrap-init.service"
+      "  - systemctl start gridbox-bootstrap-init.service",
+      "  - chmod 0600 /var/spool/cron/crontabs/pi",
+      "  - chown pi:crontab /var/spool/cron/crontabs/pi"
     ].join("\n");
 
     const bootstrapJson = JSON.stringify(
@@ -2404,6 +2461,13 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "    [System.IO.File]::WriteAllText($UserDataPath, $UserDataContent, (New-Object System.Text.UTF8Encoding $false))",
       "    Write-Host \"user-data geschreven naar $UserDataPath\"",
       "",
+      ...(rpiConnectAuthKey ? [
+        "    # rpi-connect auth key op bootpartitie schrijven",
+        "    # Op de Pi: /boot/firmware/rpi-connect-auth-key",
+        `    [System.IO.File]::WriteAllText("` + "${bootDriveLetter}:\\rpi-connect-auth-key" + `", "` + rpiConnectAuthKey + `", (New-Object System.Text.UTF8Encoding $false))`,
+        "    Write-Host \"[RPI Connect] auth key geschreven naar bootpartitie\" -ForegroundColor Green",
+        ""
+      ] : []),
       "    # meta-data schrijven naar bootpartitie (alleen als het nog niet bestaat)",
       "    $MetaDataPath = \"${bootDriveLetter}:\\meta-data\"",
       "    if (-not (Test-Path $MetaDataPath)) {",

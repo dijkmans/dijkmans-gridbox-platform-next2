@@ -10,4 +10,7 @@
 
   rmsApiToken: process.env.RMS_API_TOKEN || "",
   rmsApiBaseUrl: "https://rms.teltonika-networks.com/api",
+
+  rpiConnectToken: process.env.RPI_CONNECT_TOKEN || "",
+  rpiConnectApiBaseUrl: "https://api.connect.raspberrypi.com",
 };

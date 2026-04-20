@@ -425,4 +425,70 @@ router.post("/device/heartbeat", async (req, res) => {
   }
 });
 
+// GET /device/rpi-connect-device-id?serial=<serial>
+// Geen auth - aangeroepen door de Pi om het Pi Connect device ID op te halen.
+router.get("/device/rpi-connect-device-id", async (req, res) => {
+  const serial = typeof req.query.serial === "string" ? req.query.serial.trim().toLowerCase() : "";
+
+  if (!serial) {
+    return res.status(400).json({ error: "MISSING_SERIAL", message: "serial is verplicht" });
+  }
+
+  if (!env.rpiConnectToken) {
+    return res.json({ deviceId: null });
+  }
+
+  try {
+    const apiRes = await fetch(`${env.rpiConnectApiBaseUrl}/organisation/devices`, {
+      headers: { Authorization: `Bearer ${env.rpiConnectToken}` }
+    });
+
+    if (!apiRes.ok) {
+      console.warn(`rpi-connect-device-id: Connect API HTTP ${apiRes.status}`);
+      return res.json({ deviceId: null });
+    }
+
+    const data = await apiRes.json() as { devices?: Array<{ id: string; serial_number?: string }> };
+    const devices = Array.isArray(data.devices) ? data.devices : [];
+    const match = devices.find((d) => (d.serial_number ?? "").toLowerCase() === serial);
+
+    return res.json({ deviceId: match?.id ?? null });
+  } catch (err) {
+    console.warn("rpi-connect-device-id: fout:", err);
+    return res.json({ deviceId: null });
+  }
+});
+
+// PATCH /device/rpi-connect-register
+// Geen Firebase auth - aangeroepen door de Pi direct na rpi-connect signin.
+router.patch("/device/rpi-connect-register", async (req, res) => {
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const boxId = typeof body.boxId === "string" ? body.boxId.trim().toLowerCase() : "";
+    const deviceId = typeof body.deviceId === "string" ? body.deviceId.trim() : "";
+
+    if (!boxId || !deviceId) {
+      return res.status(400).json({
+        error: "MISSING_FIELDS",
+        message: "boxId en deviceId zijn verplicht"
+      });
+    }
+
+    const db = getFirestore();
+    await db.collection("boxes").doc(boxId).set(
+      { hardware: { piConnect: { deviceId } } },
+      { merge: true }
+    );
+
+    console.log(`rpi-connect-register: ${boxId} -> deviceId=${deviceId}`);
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("FOUT in PATCH /device/rpi-connect-register", error);
+    return res.status(500).json({
+      error: "RPI_CONNECT_REGISTER_FAILED",
+      message: "Kon deviceId niet opslaan"
+    });
+  }
+});
+
 export default router;
