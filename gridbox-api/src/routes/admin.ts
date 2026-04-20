@@ -4,6 +4,7 @@ import { requirePortalUser } from "../auth/verifyBearerToken";
 import { getMembershipByEmail } from "../repositories/membershipRepository";
 import { listSites } from "../repositories/siteRepository";
 import { getFirestore } from "firebase-admin/firestore";
+import { env } from "../config/env";
 
 const router = Router();
 
@@ -2044,6 +2045,32 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
     const apiBaseUrl = `${req.protocol}://${host}`;
     const bootstrapVersion = "v1";
 
+    // Haal rpi-connect auth key op (best-effort — script werkt ook zonder)
+    let rpiConnectAuthKey: string | null = null;
+    if (env.rpiConnectToken) {
+      try {
+        const akRes = await fetch(`${env.rpiConnectApiBaseUrl}/organisation/auth-keys`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${env.rpiConnectToken}`,
+            "Content-Type": "application/x-www-form-urlencoded"
+          },
+          body: `description=${encodeURIComponent(boxId)}&ttl_days=7`
+        });
+        if (akRes.ok) {
+          const akData = await akRes.json() as { secret?: string };
+          if (typeof akData.secret === "string" && akData.secret.startsWith("rpoak_")) {
+            rpiConnectAuthKey = akData.secret;
+            console.log(`generate-script: rpi-connect auth key aangevraagd voor ${boxId}`);
+          }
+        } else {
+          console.warn(`generate-script: rpi-connect API HTTP ${akRes.status} voor ${boxId}`);
+        }
+      } catch (err) {
+        console.warn(`generate-script: rpi-connect auth key aanvragen mislukt voor ${boxId}:`, err);
+      }
+    }
+
     const cloudInitUserData = [
       "#cloud-config",
       "hostname: " + boxId,
@@ -2124,10 +2151,36 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "      ",
       "      [Install]",
       "      WantedBy=multi-user.target",
+      ...(rpiConnectAuthKey ? [
+        "  - path: /etc/systemd/system/rpi-connect-setup.service",
+        "    owner: root:root",
+        "    permissions: '0644'",
+        "    content: |",
+        "      [Unit]",
+        "      Description=RPI Connect eerste-boot koppeling",
+        "      After=network-online.target systemd-user-sessions.service",
+        "      Wants=network-online.target",
+        "      ConditionPathExists=/boot/firmware/rpi-connect-auth-key",
+        "      ",
+        "      [Service]",
+        "      Type=oneshot",
+        "      User=pi",
+        "      Environment=XDG_RUNTIME_DIR=/run/user/1000",
+        "      ExecStartPre=loginctl enable-linger pi",
+        "      ExecStart=/bin/bash -c 'rpi-connect signin --auth-key $(cat /boot/firmware/rpi-connect-auth-key) && systemctl --user enable rpi-connect && systemctl --user start rpi-connect'",
+        "      ExecStartPost=/bin/rm -f /boot/firmware/rpi-connect-auth-key",
+        "      RemainAfterExit=yes",
+        "      ",
+        "      [Install]",
+        "      WantedBy=multi-user.target"
+      ] : []),
       "runcmd:",
       "  - systemctl daemon-reload",
       "  - systemctl enable gridbox-bootstrap-init.service",
-      "  - systemctl start gridbox-bootstrap-init.service"
+      "  - systemctl start gridbox-bootstrap-init.service",
+      ...(rpiConnectAuthKey ? [
+        "  - systemctl enable rpi-connect-setup.service"
+      ] : [])
     ].join("\n");
 
     const bootstrapJson = JSON.stringify(
@@ -2403,6 +2456,13 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "    [System.IO.File]::WriteAllText($UserDataPath, $UserDataContent, (New-Object System.Text.UTF8Encoding $false))",
       "    Write-Host \"user-data geschreven naar $UserDataPath\"",
       "",
+      ...(rpiConnectAuthKey ? [
+        "    # rpi-connect auth key op bootpartitie schrijven",
+        "    # Op de Pi: /boot/firmware/rpi-connect-auth-key",
+        "    [System.IO.File]::WriteAllText(\"${bootDriveLetter}:\\rpi-connect-auth-key\", \"" + rpiConnectAuthKey + "\", (New-Object System.Text.UTF8Encoding $false))",
+        "    Write-Host \"[RPI Connect] auth key geschreven naar bootpartitie\" -ForegroundColor Green",
+        ""
+      ] : []),
       "    # meta-data schrijven naar bootpartitie (alleen als het nog niet bestaat)",
       "    $MetaDataPath = \"${bootDriveLetter}:\\meta-data\"",
       "    if (-not (Test-Path $MetaDataPath)) {",
