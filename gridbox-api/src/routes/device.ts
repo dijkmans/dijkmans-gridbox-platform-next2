@@ -426,8 +426,7 @@ router.post("/device/heartbeat", async (req, res) => {
 });
 
 // GET /device/rpi-connect-device-id?serial=<serial>
-// Geen auth — aangeroepen door de Pi om het Pi Connect device ID op te halen.
-// Matcht het Pi serienummer tegen de organisatie-devices via de Connect API.
+// Geen auth - aangeroepen door de Pi om het Pi Connect device ID op te halen.
 router.get("/device/rpi-connect-device-id", async (req, res) => {
   const serial = typeof req.query.serial === "string" ? req.query.serial.trim().toLowerCase() : "";
 
@@ -461,8 +460,7 @@ router.get("/device/rpi-connect-device-id", async (req, res) => {
 });
 
 // PATCH /device/rpi-connect-register
-// Geen Firebase auth — aangeroepen door de Pi direct na rpi-connect signin.
-// Slaat het Pi Connect device ID op in Firestore.
+// Geen Firebase auth - aangeroepen door de Pi direct na rpi-connect signin.
 router.patch("/device/rpi-connect-register", async (req, res) => {
   try {
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -482,7 +480,7 @@ router.patch("/device/rpi-connect-register", async (req, res) => {
       { merge: true }
     );
 
-    console.log(`rpi-connect-register: ${boxId} → deviceId=${deviceId}`);
+    console.log(`rpi-connect-register: ${boxId} -> deviceId=${deviceId}`);
     return res.json({ ok: true });
   } catch (error) {
     console.error("FOUT in PATCH /device/rpi-connect-register", error);
