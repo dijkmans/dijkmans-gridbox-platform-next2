@@ -5,7 +5,6 @@ import { env } from "../config/env";
 import { getMembershipByEmail } from "../repositories/membershipRepository";
 import { listSites } from "../repositories/siteRepository";
 import { getFirestore } from "firebase-admin/firestore";
-import { env } from "../config/env";
 
 const router = Router();
 
