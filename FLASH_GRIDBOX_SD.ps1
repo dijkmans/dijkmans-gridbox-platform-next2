@@ -64,10 +64,44 @@ if ([string]::IsNullOrWhiteSpace($BOOTSTRAP_TOKEN)) {
 $CUSTOMER_ID = Read-Host "Customer ID (bijv. Powergrid)"
 $SITE_ID     = Read-Host "Site ID (bijv. powergrid-geel)"
 
-# ─── STAP 4: SD-KAART DETECTEREN ────────────────────────────────────────────
+# ─── STAP 4: RPI CONNECT AUTH KEY ───────────────────────────────────────────
 
 Write-Host ""
-Write-Host "STAP 4: SD-kaart detecteren..." -ForegroundColor Yellow
+Write-Host "STAP 4: Raspberry Pi Connect auth key aanvragen..." -ForegroundColor Yellow
+
+$RpiConnectAuthKey = $null
+$RpiConnectToken   = $env:RPI_CONNECT_TOKEN
+
+if (-not $RpiConnectToken) {
+    Write-Host "WAARSCHUWING: `$env:RPI_CONNECT_TOKEN niet ingesteld." -ForegroundColor Yellow
+    Write-Host "             Pi Connect koppeling overgeslagen — provisioning werkt gewoon verder." -ForegroundColor Yellow
+} else {
+    try {
+        $body     = "description=$([Uri]::EscapeDataString($BOX_ID))&ttl_days=7"
+        $response = Invoke-RestMethod `
+            -Uri "https://api.connect.raspberrypi.com/organisation/auth-keys" `
+            -Method Post `
+            -Headers @{ Authorization = "Bearer $RpiConnectToken" } `
+            -ContentType "application/x-www-form-urlencoded" `
+            -Body $body `
+            -ErrorAction Stop
+
+        $RpiConnectAuthKey = $response.secret
+        if (-not $RpiConnectAuthKey -or -not $RpiConnectAuthKey.StartsWith("rpoak_")) {
+            throw "Onverwacht response — geen rpoak_ secret gevonden: $($response | ConvertTo-Json -Compress)"
+        }
+        Write-Host "[RPI Connect] Auth key aangevraagd: $($RpiConnectAuthKey.Substring(0,12))..." -ForegroundColor Green
+    } catch {
+        Write-Host "WAARSCHUWING: Auth key aanvragen mislukt: $_" -ForegroundColor Yellow
+        Write-Host "             Pi Connect koppeling overgeslagen — provisioning werkt gewoon verder." -ForegroundColor Yellow
+        $RpiConnectAuthKey = $null
+    }
+}
+
+# ─── STAP 5: SD-KAART DETECTEREN ────────────────────────────────────────────
+
+Write-Host ""
+Write-Host "STAP 5: SD-kaart detecteren..." -ForegroundColor Yellow
 
 # Zoek bootpartitie (label 'bootfs' of eerste FAT32 niet C:)
 $bootDrive = $null
@@ -107,10 +141,10 @@ if (-not (Test-Path $bootDrive)) {
     exit 1
 }
 
-# ─── STAP 5: BESTANDEN SCHRIJVEN ────────────────────────────────────────────
+# ─── STAP 6: BESTANDEN SCHRIJVEN ────────────────────────────────────────────
 
 Write-Host ""
-Write-Host "STAP 5: Bestanden schrijven naar $bootDrive..." -ForegroundColor Yellow
+Write-Host "STAP 6: Bestanden schrijven naar $bootDrive..." -ForegroundColor Yellow
 
 # box_bootstrap.json — zonder BOM, correcte encoding
 $bootstrap = @{
@@ -130,7 +164,54 @@ Write-Host "OK: box_bootstrap.json geschreven" -ForegroundColor Green
 Copy-Item $KEY_SRC -Destination "$bootDrive\service-account.json" -Force
 Write-Host "OK: service-account.json gekopieerd" -ForegroundColor Green
 
-# user-data — generiek, zonder boxId in hostname
+# ── Auth key op bootpartitie schrijven ──────────────────────────────────────
+# Op de Pi: /boot/firmware/rpi-connect-auth-key (root van de FAT partitie)
+if ($RpiConnectAuthKey) {
+    [System.IO.File]::WriteAllText(
+        "$bootDrive\rpi-connect-auth-key",
+        $RpiConnectAuthKey,
+        [System.Text.UTF8Encoding]::new($false)
+    )
+    Write-Host "[RPI Connect] Auth key geschreven naar $bootDrive\rpi-connect-auth-key" -ForegroundColor Green
+}
+
+# ── user-data ────────────────────────────────────────────────────────────────
+# write_files + runcmd worden alleen ingesloten als er een auth key is.
+# De rpi-connect-setup.service leest de key van /boot/firmware/ (= de FAT partitie),
+# draait als User=pi met correcte XDG_RUNTIME_DIR en verwijdert de key na gebruik.
+$rpiConnectSection = ""
+if ($RpiConnectAuthKey) {
+    $rpiConnectSection = @"
+
+write_files:
+  - path: /etc/systemd/system/rpi-connect-setup.service
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=RPI Connect eerste-boot koppeling
+      After=network-online.target systemd-user-sessions.service
+      Wants=network-online.target
+      ConditionPathExists=/boot/firmware/rpi-connect-auth-key
+
+      [Service]
+      Type=oneshot
+      User=pi
+      Environment=XDG_RUNTIME_DIR=/run/user/1000
+      ExecStartPre=loginctl enable-linger pi
+      ExecStart=/bin/bash -c 'rpi-connect signin --auth-key `$(cat /boot/firmware/rpi-connect-auth-key) && systemctl --user enable rpi-connect && systemctl --user start rpi-connect'
+      ExecStartPost=/bin/rm -f /boot/firmware/rpi-connect-auth-key
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - systemctl enable rpi-connect-setup.service
+  - echo "[rpi-connect-setup] service geactiveerd voor eerste boot" >> /var/log/cloud-init-rpi-connect.log
+"@
+}
+
 $userData = @"
 #cloud-config
 hostname: gridbox
@@ -144,18 +225,34 @@ users:
     passwd: "`$6`$tg23.88YXBunN.r4`$6El6fTCo4xsXSMh97vjq887wBTRLNhoESpYrhh8r0aaL1FLcmAGHK1tz9nwddranvunS2CBoILivN559d/Byr0"
 ssh_pwauth: true
 chpasswd:
-  expire: false
+  expire: false$rpiConnectSection
 "@
 [System.IO.File]::WriteAllText("$bootDrive\user-data", $userData, [System.Text.UTF8Encoding]::new($false))
 Write-Host "OK: user-data geschreven" -ForegroundColor Green
+if ($RpiConnectAuthKey) {
+    Write-Host "[RPI Connect] user-data bevat write_files + runcmd voor automatische signin" -ForegroundColor Green
+}
 
-# ─── STAP 6: VERIFICATIE ────────────────────────────────────────────────────
+# ─── STAP 7: VERIFICATIE ────────────────────────────────────────────────────
 
 Write-Host ""
-Write-Host "STAP 6: Verificatie..." -ForegroundColor Yellow
+Write-Host "STAP 7: Verificatie..." -ForegroundColor Yellow
+
+# Print relevante secties ter controle
+Write-Host ""
+Write-Host "── user-data preview (eerste 30 regels) ──" -ForegroundColor DarkGray
+Get-Content "$bootDrive\user-data" | Select-Object -First 30 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+if ($RpiConnectAuthKey) {
+    Write-Host "── rpi-connect-auth-key aanwezig ──" -ForegroundColor DarkGray
+    Write-Host "  $(Get-Content "$bootDrive\rpi-connect-auth-key" | Select-Object -First 1 | ForEach-Object { $_.Substring(0, [Math]::Min(16, $_.Length)) + "..." })" -ForegroundColor DarkGray
+}
+Write-Host ""
+
+$coreFiles  = @("box_bootstrap.json", "service-account.json", "user-data")
+$rpiFiles   = if ($RpiConnectAuthKey) { @("rpi-connect-auth-key") } else { @() }
 
 $ok = $true
-foreach ($file in @("box_bootstrap.json", "service-account.json", "user-data")) {
+foreach ($file in ($coreFiles + $rpiFiles)) {
     if (Test-Path "$bootDrive\$file") {
         Write-Host "OK: $file aanwezig" -ForegroundColor Green
     } else {
