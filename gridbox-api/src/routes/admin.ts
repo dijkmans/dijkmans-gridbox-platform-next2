@@ -744,7 +744,6 @@ router.get("/admin/boxes/:boxId/camera-context", async (req, res) => {
       : null;
 
     const siteId: string | null = data?.siteId ?? null;
-    const rutCreds = await getRutCredentials(siteId, db);
 
     let detectedMac: string | null = null;
     let detectedIp: string | null = null;
@@ -752,41 +751,47 @@ router.get("/admin/boxes/:boxId/camera-context", async (req, res) => {
     let leaseStatus: "active" | "not_set" | "conflict" | "unknown" = "unknown";
     let lastError: string | null = null;
 
-    if (rutCreds) {
-      let leases: Array<{ ip: string; mac: string }> = [];
-      try {
-        leases = await fetchRut241Leases(rutCreds.ip, rutCreds.username, rutCreds.password);
-        routerStatus = "online";
-      } catch {
-        routerStatus = "offline";
-        lastError = `RUT241 op ${rutCreds.ip} niet bereikbaar`;
+    // Lees detectedDevices uit de laatste Pi-heartbeat (Pi schrijft dit elke 30s vanuit /proc/net/arp)
+    const detectedDevices: Array<{ mac: string; ip: string; seenAt?: string }> =
+      Array.isArray(data?.hardware?.detectedDevices) ? data.hardware.detectedDevices : [];
+
+    // Bepaal routerStatus op basis van hoe recent de heartbeat was
+    const lastHeartbeatUnix: number | null =
+      typeof data?.software?.lastHeartbeatUnix === "number" ? data.software.lastHeartbeatUnix : null;
+    const secondsSinceHeartbeat = lastHeartbeatUnix ? Math.floor(Date.now() / 1000) - lastHeartbeatUnix : null;
+    if (secondsSinceHeartbeat === null) {
+      routerStatus = "unknown";
+    } else if (secondsSinceHeartbeat <= 60) {
+      routerStatus = "online";
+    } else {
+      routerStatus = "offline";
+      lastError = `Laatste Pi-heartbeat ${secondsSinceHeartbeat}s geleden (meer dan 60s)`;
+    }
+
+    if (detectedDevices.length > 0) {
+      // Verzamel alle geregistreerde camera-MACs op deze site
+      const allBoxesSnap = await db.collection("boxes").get();
+      const registeredMacs = new Set<string>();
+      allBoxesSnap.docs.forEach((doc) => {
+        const d = doc.data() as Record<string, any>;
+        if (siteId && d?.siteId !== siteId) return;
+        const m = d?.hardware?.camera?.mac;
+        if (typeof m === "string") registeredMacs.add(m.toLowerCase());
+      });
+
+      // Detecteer eerste ARP-MAC die nog niet als camera in Firestore staat voor deze site
+      const unregistered = detectedDevices.find((d) => !registeredMacs.has(d.mac.toLowerCase()));
+      if (unregistered) {
+        detectedMac = unregistered.mac.toLowerCase();
+        detectedIp = unregistered.ip;
       }
 
-      if (routerStatus === "online") {
-        // Verzamel alle geregistreerde camera-MACs op deze site
-        const allBoxesSnap = await db.collection("boxes").get();
-        const registeredMacs = new Set<string>();
-        allBoxesSnap.docs.forEach((doc) => {
-          const d = doc.data() as Record<string, any>;
-          if (siteId && d?.siteId !== siteId) return;
-          const m = d?.hardware?.camera?.mac;
-          if (typeof m === "string") registeredMacs.add(m.toLowerCase());
-        });
-
-        // Detecteer eerste lease-MAC die nog niet in Firestore staat voor deze site
-        const unregistered = leases.find((l) => !registeredMacs.has(l.mac));
-        if (unregistered) {
-          detectedMac = unregistered.mac;
-          detectedIp = unregistered.ip;
-        }
-
-        // Bepaal leaseStatus voor de al gekoppelde camera (als die er is)
-        if (firestoreCamera?.mac) {
-          const hasLease = leases.some((l) => l.mac === firestoreCamera.mac);
-          leaseStatus = hasLease ? "active" : "not_set";
-        } else {
-          leaseStatus = "not_set";
-        }
+      // Bepaal leaseStatus: heeft de bekende camera-MAC een ARP-entry?
+      if (firestoreCamera?.mac) {
+        const seen = detectedDevices.some((d) => d.mac.toLowerCase() === firestoreCamera.mac!.toLowerCase());
+        leaseStatus = seen ? "active" : "not_set";
+      } else {
+        leaseStatus = "not_set";
       }
     }
 

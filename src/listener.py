@@ -1050,6 +1050,51 @@ def get_pi_serial():
     return None
 
 
+def get_local_arp_devices():
+    """Leest alle actieve apparaten uit de lokale ARP-tabel via /proc/net/arp.
+    Geeft lijst van { mac, ip, seenAt } terug, exclusief onvolledige entries.
+    """
+    if platform.system() == "Windows":
+        return []
+
+    devices = []
+    try:
+        with open("/proc/net/arp", "r") as f:
+            lines = f.readlines()[1:]  # skip header
+
+        for line in lines:
+            parts = line.split()
+            if len(parts) < 4:
+                continue
+            ip = parts[0]
+            flags = parts[2]
+            mac = parts[3].lower()
+
+            # Sla onvolledige entries over (flags 0x0 of nul-MAC)
+            if flags == "0x0" or mac == "00:00:00:00:00:00":
+                continue
+
+            if not re.match(r"^[0-9a-f]{2}(:[0-9a-f]{2}){5}$", mac):
+                continue
+
+            devices.append({"mac": mac, "ip": ip, "seenAt": now_iso()})
+    except Exception as e:
+        log(f"WARN: get_local_arp_devices: {e}")
+
+    return devices
+
+
+def update_detected_devices():
+    """Leest de lokale ARP-tabel en schrijft gevonden apparaten naar Firestore."""
+    try:
+        devices = get_local_arp_devices()
+        box_doc_ref.update({"hardware.detectedDevices": devices})
+        if devices:
+            log(f"INFO: detectedDevices bijgewerkt: {len(devices)} apparaat/apparaten")
+    except Exception as e:
+        log(f"WARN: update_detected_devices: {e}")
+
+
 def try_backend_heartbeat(version_raspberry, software_update):
     if not isinstance(runtime_config, dict) or not runtime_config:
         return False
@@ -1821,8 +1866,11 @@ if platform.system() != "Windows" and GPIO_AVAILABLE:
 # MAIN LOOP
 # =========================================================
 
+DEVICE_DETECT_INTERVAL_SECONDS = 30
+
 next_heartbeat_at = 0
 next_software_poll_at = 0
+next_device_detect_at = 0
 _claim_permanently_rejected = False
 
 try:
@@ -1834,6 +1882,10 @@ try:
             next_software_poll_at = now_ts + float(
                 box_config.get("software", {}).get("softwarePollIntervalSeconds", SOFTWARE_POLL_INTERVAL_SECONDS)
             )
+
+        if now_ts >= next_device_detect_at:
+            update_detected_devices()
+            next_device_detect_at = now_ts + DEVICE_DETECT_INTERVAL_SECONDS
 
         if now_ts >= next_heartbeat_at:
             if bootstrap_config and not runtime_config and not _claim_permanently_rejected:
