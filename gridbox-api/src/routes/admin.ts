@@ -2200,7 +2200,8 @@ router.post("/admin/provisioning/:id/generate-script", async (req, res) => {
       "  - systemctl enable gridbox-bootstrap-init.service",
       "  - systemctl start gridbox-bootstrap-init.service",
       ...(rpiConnectAuthKey ? [
-        "  - systemctl enable rpi-connect-setup.service"
+        "  - systemctl enable rpi-connect-setup.service",
+        "  - systemctl start rpi-connect-setup.service"
       ] : [])
     ].join("\n");
 
