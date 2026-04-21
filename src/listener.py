@@ -23,7 +23,7 @@ from db_manager import get_db
 
 # =========================================================
 # GRIDBOX SERVICE - MASTER v1.0.51
-# ÃƒÆ’Ã¢â‚¬Â°ÃƒÆ’Ã‚Â©n script:
+# ÃƒÆÃ¢â¬Â°ÃƒÆÃÂ©n script:
 # - bootstrap bij opstart
 # - runtime voor commands / knop / camera / heartbeat
 # - GEEN auto-update
@@ -206,7 +206,7 @@ def save_runtime_config(runtime_config):
     try:
         with open(RUNTIME_CONFIG_PATH, "w", encoding="utf-8") as f:
             json.dump(runtime_config, f, indent=2, ensure_ascii=False)
-        log(f"ðŸ’¾ Runtimeconfig opgeslagen in {RUNTIME_CONFIG_PATH}")
+        log(f"ðŸ¾ Runtimeconfig opgeslagen in {RUNTIME_CONFIG_PATH}")
     except Exception as e:
         log(f"âš ï¸ Runtimeconfig kon niet opgeslagen worden: {e}")
 
@@ -293,7 +293,7 @@ def refresh_cached_config():
         doc = box_doc_ref.get()
         cached_config = doc.to_dict() if doc.exists else {}
     except Exception as e:
-        log(f"ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â cached_config kon niet vernieuwd worden: {e}")
+        log(f"ÃƒÂ¢Ã…Â¡ÃÂ ÃƒÂ¯ÃÂ¸ÃÂ cached_config kon niet vernieuwd worden: {e}")
 
 def build_location_payload(location_cfg):
     payload = {
@@ -374,7 +374,7 @@ def get_latest_github_tag(force=False):
         return latest
 
     except Exception as e:
-        log(f"ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â GitHub tag uitlezen mislukt: {e}")
+        log(f"ÃƒÂ¢Ã…Â¡ÃÂ ÃƒÂ¯ÃÂ¸ÃÂ GitHub tag uitlezen mislukt: {e}")
         github_tag_cache = {
             "value": "error",
             "fetched_at": now_ts
@@ -541,7 +541,7 @@ def mark_update_failed(message, target_version=None):
         "lastError": message,
         "lastUpdateAttemptAt": now_iso()
     })
-    log(f"ÃƒÂ¢Ã‚ÂÃ…â€™ Software update mislukt: {message}")
+    log(f"ÃƒÂ¢ÃÂÃ…â€™ Software update mislukt: {message}")
 
 
 # =========================================================
@@ -623,7 +623,7 @@ def ensure_customer_exists():
         payload["createdBy"] = f"gridbox-service-{VERSION}"
 
     ref.set(payload, merge=True)
-    log(f"ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â¢ Customer verzekerd: customers/{customer_id}")
+    log(f"ÃƒÂ°Ã…Â¸ÃÂÃÂ¢ Customer verzekerd: customers/{customer_id}")
     return customer_id
 
 def ensure_site_exists(customer_id):
@@ -655,7 +655,7 @@ def ensure_site_exists(customer_id):
         payload["createdBy"] = f"gridbox-service-{VERSION}"
 
     ref.set(payload, merge=True)
-    log(f"ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â Site verzekerd: sites/{site_id}")
+    log(f"ÃƒÂ°Ã…Â¸Ã¢â¬ÅÃÂ Site verzekerd: sites/{site_id}")
     return site_id
 
 def ensure_bootstrap_admin_user():
@@ -690,7 +690,7 @@ def ensure_bootstrap_admin_user():
         payload["createdBy"] = f"gridbox-service-{VERSION}"
 
     ref.set(payload, merge=True)
-    log(f"ÃƒÂ°Ã…Â¸Ã¢â‚¬ËœÃ‚Â¤ Bootstrap admin verzekerd: boxes/{DOCUMENT_ID}/authorizedUsers/{user_id}")
+    log(f"ÃƒÂ°Ã…Â¸Ã¢â¬ËœÃÂ¤ Bootstrap admin verzekerd: boxes/{DOCUMENT_ID}/authorizedUsers/{user_id}")
 
 def ensure_legacy_mirror_if_enabled(customer_id, site_id):
     compatibility_cfg = box_config.get("compatibility", {})
@@ -706,7 +706,7 @@ def ensure_legacy_mirror_if_enabled(customer_id, site_id):
             "mirroredAt": now_iso(),
             "mirroredBy": f"gridbox-service-{VERSION}"
         }, merge=True)
-        log(f"ÃƒÂ°Ã…Â¸Ã‚ÂªÃ…Â¾ Legacy customer mirror gezet onder box: {customer_id}")
+        log(f"ÃƒÂ°Ã…Â¸ÃÂªÃ…Â¾ Legacy customer mirror gezet onder box: {customer_id}")
 
     if site_id and has_site_config():
         site_cfg = box_config.get("site", {})
@@ -722,7 +722,7 @@ def ensure_legacy_mirror_if_enabled(customer_id, site_id):
             site_payload["location"] = build_location_payload(site_cfg["location"])
 
         box_doc_ref.collection("sites").document(site_id).set(site_payload, merge=True)
-        log(f"ÃƒÂ°Ã…Â¸Ã‚ÂªÃ…Â¾ Legacy site mirror gezet onder box: {site_id}")
+        log(f"ÃƒÂ°Ã…Â¸ÃÂªÃ…Â¾ Legacy site mirror gezet onder box: {site_id}")
 
 def bootstrap_if_needed():
     if isinstance(runtime_config, dict) and runtime_config:
@@ -799,7 +799,7 @@ def bootstrap_if_needed():
     final_payload["updatedBy"] = f"gridbox-service-{VERSION}"
 
     box_doc_ref.set(final_payload, merge=True)
-    log(f"ÃƒÂ°Ã…Â¸Ã‚Â§Ã‚Â± Bootstrap gecontroleerd voor boxes/{DOCUMENT_ID}")
+    log(f"ÃƒÂ°Ã…Â¸ÃÂ§ÃÂ± Bootstrap gecontroleerd voor boxes/{DOCUMENT_ID}")
 
     ensure_bootstrap_admin_user()
     ensure_legacy_mirror_if_enabled(customer_id, site_id)
@@ -827,7 +827,7 @@ def update_box_state(is_open, action_source):
             }
         }, merge=True)
     except Exception as e:
-        log(f"ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Kon state niet opslaan: {e}")
+        log(f"ÃƒÂ¢Ã…Â¡ÃÂ ÃƒÂ¯ÃÂ¸ÃÂ Kon state niet opslaan: {e}")
 
 def load_box_state_from_firestore():
     global box_is_open
@@ -836,9 +836,9 @@ def load_box_state_from_firestore():
         data = doc.to_dict() if doc.exists else {}
         with state_lock:
             box_is_open = bool(data.get("state", {}).get("boxIsOpen", False))
-        log(f"ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â¦ Herstelde box_is_open = {box_is_open}")
+        log(f"ÃƒÂ°Ã…Â¸Ã¢â¬ÅÃÂ¦ Herstelde box_is_open = {box_is_open}")
     except Exception as e:
-        log(f"ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Kon box state niet laden: {e}")
+        log(f"ÃƒÂ¢Ã…Â¡ÃÂ ÃƒÂ¯ÃÂ¸ÃÂ Kon box state niet laden: {e}")
 
 
 # =========================================================
@@ -1324,13 +1324,13 @@ def update_pi_status():
 
         refresh_cached_config()
         log(
-            f"ÃƒÂ¢Ã…Â¡Ã¢â€žÂ¢ÃƒÂ¯Ã‚Â¸Ã‚Â Heartbeat OK | latestGithub={latest_github} | "
+            f"ÃƒÂ¢Ã…Â¡Ã¢â€žÂ¢ÃƒÂ¯ÃÂ¸ÃÂ Heartbeat OK | latestGithub={latest_github} | "
             f"versionRaspberry={version_raspberry} | targetVersion={target_version} | "
             f"deploymentStatus={deployment_status} | updateStatus={update_status}"
         )
 
     except Exception as e:
-        log(f"ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Sync fout: {e}")
+        log(f"ÃƒÂ¢Ã…Â¡ÃÂ ÃƒÂ¯ÃÂ¸ÃÂ Sync fout: {e}")
 
 
 # =========================================================
@@ -1367,7 +1367,7 @@ def maybe_process_software_request():
                 "lastError": None,
                 "lastUpdateAttemptAt": now_iso()
             })
-            log("ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¹ÃƒÂ¯Ã‚Â¸Ã‚Â softwareUpdateRequested was true, maar box draait al op targetVersion.")
+            log("ÃƒÂ¢Ã¢â¬Å¾ÃÂ¹ÃƒÂ¯ÃÂ¸ÃÂ softwareUpdateRequested was true, maar box draait al op targetVersion.")
             return
 
         log(f"ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ Software update gevraagd naar {target_version}")
@@ -1399,7 +1399,7 @@ def maybe_process_software_request():
             "lastRestartRequestedAt": now_iso()
         })
 
-        log(f"ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â Restart ingepland naar versie {target_version}")
+        log(f"ÃƒÂ°Ã…Â¸Ã¢â¬ÂÃÂ Restart ingepland naar versie {target_version}")
         schedule_service_restart()
 
         time.sleep(1)
@@ -1707,7 +1707,7 @@ def ensure_snapshot_thread():
 def stop_shutter_motors():
     shutter_open.off()
     shutter_close.off()
-    log("ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂºÃ¢â‚¬Ëœ Motor stroom uitgeschakeld")
+    log("ÃƒÂ°Ã…Â¸Ã¢â¬ÂºÃ¢â¬Ëœ Motor stroom uitgeschakeld")
 
 def mark_command(doc_ref, status, extra=None):
     if not doc_ref:
@@ -1731,7 +1731,7 @@ def mark_command(doc_ref, status, extra=None):
     try:
         doc_ref.set(payload, merge=True)
     except Exception as e:
-        log(f"ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Command status opslaan mislukt: {e}")
+        log(f"ÃƒÂ¢Ã…Â¡ÃÂ ÃƒÂ¯ÃÂ¸ÃÂ Command status opslaan mislukt: {e}")
 
 def handle_command(doc_ref, data):
     global shutter_motor_timer, light_off_timer, auto_close_timer
@@ -1845,7 +1845,7 @@ def handle_command(doc_ref, data):
                 mark_command(doc_ref, "completed")
 
         except Exception as e:
-            log(f"ÃƒÂ¢Ã‚ÂÃ…â€™ Commando fout: {e}")
+            log(f"ÃƒÂ¢ÃÂÃ…â€™ Commando fout: {e}")
             if doc_ref:
                 mark_command(doc_ref, "failed", {"error": str(e)})
 
@@ -1913,14 +1913,14 @@ try:
     bootstrap_if_needed()
     update_pi_status()
 
-    log("ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â¸ Startup test snapshot uitvoeren...")
+    log("ÃƒÂ°Ã…Â¸Ã¢â¬ÅÃÂ¸ Startup test snapshot uitvoeren...")
     threading.Thread(
         target=lambda: take_snapshot(phase="startup-test", sequence_number=0),
         daemon=True
     ).start()
 
 except Exception as e:
-    log(f"ÃƒÂ¢Ã‚ÂÃ…â€™ Bootstrap/init fout: {e}")
+    log(f"ÃƒÂ¢ÃÂÃ…â€™ Bootstrap/init fout: {e}")
 
 query = box_doc_ref.collection("commands").where(filter=FieldFilter("status", "==", "pending"))
 query_watch = query.on_snapshot(on_commands_snapshot)
@@ -1934,16 +1934,16 @@ def handle_physical_button():
     with state_lock:
         target = "CLOSE" if box_is_open else "OPEN"
 
-    log(f"ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‹Å“ Fysieke knop ingedrukt. Actie: {target}")
+    log(f"ÃƒÂ°Ã…Â¸Ã¢â¬ÂÃ‹Å Fysieke knop ingedrukt. Actie: {target}")
     handle_command(None, {"command": target, "source": "Fysieke Knop"})
 
 if platform.system() != "Windows" and GPIO_AVAILABLE:
     try:
         btn = Button(CLOSE_BUTTON_PIN, pin_factory=BUTTON_FACTORY, pull_up=True, bounce_time=0.2)
         btn.when_pressed = handle_physical_button
-        log(f"ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‹Å“ Slimme toggle-schakelaar actief op GPIO {CLOSE_BUTTON_PIN}")
+        log(f"ÃƒÂ°Ã…Â¸Ã¢â¬ÂÃ‹Å Slimme toggle-schakelaar actief op GPIO {CLOSE_BUTTON_PIN}")
     except Exception as e:
-        log(f"ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Schakelaar fout: {e}")
+        log(f"ÃƒÂ¢Ã…Â¡ÃÂ ÃƒÂ¯ÃÂ¸ÃÂ Schakelaar fout: {e}")
 
 
 # =========================================================
@@ -1993,7 +1993,7 @@ try:
         time.sleep(1)
 
 except Exception:
-    log("ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂºÃ¢â‚¬Ëœ Stop.")
+    log("ÃƒÂ°Ã…Â¸Ã¢â¬ÂºÃ¢â¬Ëœ Stop.")
 
 finally:
     cancel_timer(light_off_timer)
