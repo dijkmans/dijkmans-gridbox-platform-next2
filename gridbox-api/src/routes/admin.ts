@@ -609,15 +609,10 @@ router.put("/admin/boxes/:boxId/config", async (req, res) => {
   }
 });
 
-async function getRutCredentials(
-  siteId: string | null,
-  db: Firestore
-): Promise<{ ip: string; username: string; password: string } | null> {
-  if (!siteId) return null;
-  const siteDoc = await db.collection("sites").doc(siteId).get();
-  if (!siteDoc.exists) return null;
-  const d = siteDoc.data() as Record<string, any>;
-  const rut = d?.rut;
+function getRutCredentialsFromBoxData(
+  boxData: Record<string, any>
+): { ip: string; username: string; password: string } | null {
+  const rut = boxData?.hardware?.rut;
   if (!rut?.ip || !rut?.username || !rut?.password) return null;
   return { ip: String(rut.ip), username: String(rut.username), password: String(rut.password) };
 }
@@ -843,7 +838,7 @@ router.post("/admin/boxes/:boxId/camera-suggest-ip", async (req, res) => {
     });
 
     // Voeg live DHCP lease-IPs toe via RUT241 (best-effort — als router offline is gaan we door met Firestore-data)
-    const rutCreds = await getRutCredentials(siteId, db);
+    const rutCreds = getRutCredentialsFromBoxData(boxData);
     if (rutCreds) {
       try {
         const liveLeases = await fetchRut241Leases(rutCreds.ip, rutCreds.username, rutCreds.password);

@@ -65,7 +65,40 @@ export type AdminCameraData = {
   ip?: string | null;
   snapshotUrl?: string | null;
   username?: string | null;
+  password?: string | null;
   updatedAt?: string | null;
+  enabled?: boolean | null;
+  changeDetectionThreshold?: number | null;
+  snapshotIntervalSeconds?: number | null;
+  postCloseSnapshotDurationSeconds?: number | null;
+};
+
+export type AdminBoxHardware = {
+  camera?: AdminCameraData | null;
+  rut?: {
+    ip?: string | null;
+    mac?: string | null;
+    username?: string | null;
+    password?: string | null;
+    model?: string | null;
+  } | null;
+  pi?: {
+    ip?: string | null;
+    mac?: string | null;
+    serial?: string | null;
+  } | null;
+  piConnect?: {
+    deviceId?: string | null;
+  } | null;
+  lighting?: {
+    lightOffDelaySeconds?: number | null;
+    onWhenOpen?: boolean | null;
+  } | null;
+  shutter?: {
+    closeDurationSeconds?: number | null;
+    openDurationSeconds?: number | null;
+  } | null;
+  detectedDevices?: Array<{ mac: string; ip: string; seenAt?: string }> | null;
 };
 
 export type AdminSiteItem = {

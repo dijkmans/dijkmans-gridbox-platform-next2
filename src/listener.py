@@ -1095,23 +1095,16 @@ def update_detected_devices():
         log(f"WARN: update_detected_devices: {e}")
 
 
-def get_site_rut_credentials():
-    """Haalt RUT241-credentials op uit Firestore via boxes/{boxId}.siteId → sites/{siteId}.rut."""
+def get_box_rut_credentials():
+    """Haalt RUT241-credentials op uit boxes/{boxId}.hardware.rut."""
     try:
         box_data = box_doc_ref.get().to_dict() or {}
-        site_id = box_data.get("siteId")
-        if not site_id:
-            return None
-        site_doc = db.collection("sites").document(site_id).get()
-        if not site_doc.exists:
-            return None
-        site_data = site_doc.to_dict() or {}
-        rut = site_data.get("rut", {})
+        rut = (box_data.get("hardware") or {}).get("rut") or {}
         if not rut.get("ip") or not rut.get("username") or not rut.get("password"):
             return None
         return {"ip": rut["ip"], "username": rut["username"], "password": rut["password"]}
     except Exception as e:
-        log(f"WARN: get_site_rut_credentials: {e}")
+        log(f"WARN: get_box_rut_credentials: {e}")
         return None
 
 
@@ -1154,7 +1147,7 @@ def process_pending_command():
 
         log(f"INFO: pendingCommand set_dhcp_lease ontvangen: mac={mac} ip={ip}")
 
-        creds = get_site_rut_credentials()
+        creds = get_box_rut_credentials()
         if not creds:
             cmd_ref.update({"status": "error", "errorMessage": "Geen RUT241-credentials gevonden voor deze site"})
             return
