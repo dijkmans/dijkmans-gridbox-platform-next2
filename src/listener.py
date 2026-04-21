@@ -36,7 +36,7 @@ from db_manager import get_db
 # - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.66"
+VERSION = "v1.0.67"
 KEY_PATH = "service-account.json"
 BOOTSTRAP_PATH = "box_bootstrap.json"
 RUNTIME_CONFIG_PATH = "runtime_config.json"
@@ -1128,16 +1128,37 @@ def update_detected_devices():
 
 
 def get_box_rut_credentials():
-    """Haalt RUT241-credentials op uit boxes/{boxId}.hardware.rut."""
+    """Haalt RUT241-credentials op uit boxes/{boxId}.hardware.rut.config."""
     try:
         box_data = box_doc_ref.get().to_dict() or {}
-        rut = (box_data.get("hardware") or {}).get("rut") or {}
-        if not rut.get("ip") or not rut.get("username") or not rut.get("password"):
+        config = ((box_data.get("hardware") or {}).get("rut") or {}).get("config") or {}
+        if not config.get("ip") or not config.get("username") or not config.get("password"):
             return None
-        return {"ip": rut["ip"], "username": rut["username"], "password": rut["password"]}
+        return {"ip": config["ip"], "username": config["username"], "password": config["password"]}
     except Exception as e:
         log(f"WARN: get_box_rut_credentials: {e}")
         return None
+
+
+def fetch_rut241_leases(ip, username, password):
+    """Haalt DHCP leases op van de RUT241 via de lokale API."""
+    import base64
+    credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
+    headers = {"Authorization": f"Basic {credentials}"}
+    resp = requests.get(
+        f"http://{ip}/api/dhcp/leases",
+        headers=headers,
+        timeout=5
+    )
+    if not resp.ok:
+        return []
+    raw = resp.json()
+    items = raw if isinstance(raw, list) else (raw.get("data") or [] if isinstance(raw, dict) else [])
+    result = []
+    for item in items:
+        if isinstance(item, dict) and isinstance(item.get("ip"), str) and isinstance(item.get("mac"), str):
+            result.append({"ip": item["ip"], "mac": item["mac"].lower()})
+    return result
 
 
 def process_pending_command():
@@ -1334,6 +1355,16 @@ def update_pi_status():
             gateway_mac = get_gateway_mac_fallback()
             if gateway_mac:
                 hw_update["hardware.rut.observed.mac"] = gateway_mac
+
+        # Haal DHCP leases op van RUT241 en schrijf naar Firestore (voor camera-detectie via backend)
+        try:
+            rut_creds = get_box_rut_credentials()
+            if rut_creds:
+                leases = fetch_rut241_leases(rut_creds["ip"], rut_creds["username"], rut_creds["password"])
+                hw_update["hardware.rut.observed.leases"] = leases
+                hw_update["hardware.rut.observed.leasesUpdatedAt"] = now_iso()
+        except Exception as e:
+            log(f"WARN: lease-fetch RUT241 mislukt: {e}")
 
         pi_mac = get_pi_mac()
         if pi_mac:

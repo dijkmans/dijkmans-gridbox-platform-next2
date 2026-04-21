@@ -612,17 +612,16 @@ router.put("/admin/boxes/:boxId/config", async (req, res) => {
   }
 });
 
-async function getRutCredentials(
-  siteId: string | null,
-  db: Firestore
-): Promise<{ ip: string; username: string; password: string } | null> {
-  if (!siteId) return null;
-  const siteDoc = await db.collection("sites").doc(siteId).get();
-  if (!siteDoc.exists) return null;
-  const d = siteDoc.data() as Record<string, any>;
-  const rut = d?.rut;
-  if (!rut?.ip || !rut?.username || !rut?.password) return null;
-  return { ip: String(rut.ip), username: String(rut.username), password: String(rut.password) };
+function getRutCredentialsFromBoxData(
+  boxData: Record<string, any>
+): { ip: string; username: string; password: string } | null {
+  const rutConfig = boxData?.hardware?.rut?.config;
+  if (!rutConfig?.ip || !rutConfig?.username || !rutConfig?.password) return null;
+  return {
+    ip: String(rutConfig.ip),
+    username: String(rutConfig.username),
+    password: String(rutConfig.password)
+  };
 }
 
 async function fetchRut241Leases(
@@ -679,7 +678,7 @@ router.get("/admin/boxes/:boxId/camera-context", async (req, res) => {
       : null;
 
     const siteId: string | null = data?.siteId ?? null;
-    const rutCreds = await getRutCredentials(siteId, db);
+    const rutCreds = getRutCredentialsFromBoxData(data);
 
     let detectedMac: string | null = null;
     let detectedIp: string | null = null;
@@ -687,41 +686,53 @@ router.get("/admin/boxes/:boxId/camera-context", async (req, res) => {
     let leaseStatus: "active" | "not_set" | "conflict" | "unknown" = "unknown";
     let lastError: string | null = null;
 
-    if (rutCreds) {
-      let leases: Array<{ ip: string; mac: string }> = [];
-      try {
-        leases = await fetchRut241Leases(rutCreds.ip, rutCreds.username, rutCreds.password);
+    // Leases komen uit Firestore (geschreven door Pi bij elke heartbeat)
+    const storedLeases: Array<{ ip: string; mac: string }> =
+      Array.isArray(data?.hardware?.rut?.observed?.leases)
+        ? data.hardware.rut.observed.leases
+        : [];
+    const leasesUpdatedAt: string | null = data?.hardware?.rut?.observed?.leasesUpdatedAt ?? null;
+
+    if (!rutCreds) {
+      routerStatus = "unknown";
+      lastError = "Geen RUT241-credentials geconfigureerd voor deze box";
+    } else if (!leasesUpdatedAt) {
+      routerStatus = "unknown";
+      lastError = "Pi heeft nog geen lease-data gerapporteerd";
+    } else {
+      const ageSeconds = Math.floor((Date.now() - new Date(leasesUpdatedAt).getTime()) / 1000);
+      if (ageSeconds <= 300) {
         routerStatus = "online";
-      } catch {
+      } else {
         routerStatus = "offline";
-        lastError = `RUT241 op ${rutCreds.ip} niet bereikbaar`;
+        lastError = `Lease-data is ${ageSeconds}s oud (meer dan 300s)`;
+      }
+    }
+
+    if (routerStatus === "online" || storedLeases.length > 0) {
+      // Verzamel alle geregistreerde camera-MACs op deze site
+      const allBoxesSnap = await db.collection("boxes").get();
+      const registeredMacs = new Set<string>();
+      allBoxesSnap.docs.forEach((doc) => {
+        const d = doc.data() as Record<string, any>;
+        if (siteId && d?.siteId !== siteId) return;
+        const m = d?.hardware?.camera?.assignment?.mac;
+        if (typeof m === "string") registeredMacs.add(m.toLowerCase());
+      });
+
+      // Detecteer eerste lease-MAC die nog niet in Firestore staat voor deze site
+      const unregistered = storedLeases.find((l) => !registeredMacs.has(l.mac));
+      if (unregistered) {
+        detectedMac = unregistered.mac;
+        detectedIp = unregistered.ip;
       }
 
-      if (routerStatus === "online") {
-        // Verzamel alle geregistreerde camera-MACs op deze site
-        const allBoxesSnap = await db.collection("boxes").get();
-        const registeredMacs = new Set<string>();
-        allBoxesSnap.docs.forEach((doc) => {
-          const d = doc.data() as Record<string, any>;
-          if (siteId && d?.siteId !== siteId) return;
-          const m = d?.hardware?.camera?.assignment?.mac;
-          if (typeof m === "string") registeredMacs.add(m.toLowerCase());
-        });
-
-        // Detecteer eerste lease-MAC die nog niet in Firestore staat voor deze site
-        const unregistered = leases.find((l) => !registeredMacs.has(l.mac));
-        if (unregistered) {
-          detectedMac = unregistered.mac;
-          detectedIp = unregistered.ip;
-        }
-
-        // Bepaal leaseStatus voor de al gekoppelde camera (als die er is)
-        if (firestoreCamera?.mac) {
-          const hasLease = leases.some((l) => l.mac === firestoreCamera.mac);
-          leaseStatus = hasLease ? "active" : "not_set";
-        } else {
-          leaseStatus = "not_set";
-        }
+      // Bepaal leaseStatus voor de al gekoppelde camera (als die er is)
+      if (firestoreCamera?.mac) {
+        const hasLease = storedLeases.some((l) => l.mac === firestoreCamera.mac);
+        leaseStatus = hasLease ? "active" : "not_set";
+      } else {
+        leaseStatus = "not_set";
       }
     }
 
@@ -784,16 +795,12 @@ router.post("/admin/boxes/:boxId/camera-suggest-ip", async (req, res) => {
       if (typeof ip === "string") usedIps.add(ip);
     });
 
-    // Voeg live DHCP lease-IPs toe via RUT241 (best-effort — als router offline is gaan we door met Firestore-data)
-    const rutCreds = await getRutCredentials(siteId, db);
-    if (rutCreds) {
-      try {
-        const liveLeases = await fetchRut241Leases(rutCreds.ip, rutCreds.username, rutCreds.password);
-        liveLeases.forEach((l) => usedIps.add(l.ip));
-      } catch {
-        // Router offline — bereken IP alleen op basis van Firestore
-      }
-    }
+    // Voeg lease-IPs toe uit Firestore (geschreven door Pi — Cloud Run kan RUT241 niet bereiken)
+    const storedLeases: Array<{ ip: string; mac: string }> =
+      Array.isArray(boxData?.hardware?.rut?.observed?.leases)
+        ? boxData.hardware.rut.observed.leases
+        : [];
+    storedLeases.forEach((l) => usedIps.add(l.ip));
 
     let suggestedIp: string | null = null;
     let conflictsWith: string | null = null;
@@ -856,10 +863,10 @@ router.post("/admin/boxes/:boxId/camera-assign", async (req, res) => {
       }
     }
 
-    // Stap 2: zet static DHCP lease op de RUT241 via box → site → rut
+    // Stap 2: zet static DHCP lease op de RUT241 via box hardware.rut.config
     const boxForSiteDoc = allBoxesSnap.docs.find((d) => (d.data() as Record<string, any>)?.boxId === boxId || d.id === boxId);
-    const siteIdForRut: string | null = boxForSiteDoc ? ((boxForSiteDoc.data() as Record<string, any>)?.siteId ?? null) : null;
-    const rutCreds = await getRutCredentials(siteIdForRut, db);
+    const boxDataForRut = (boxForSiteDoc?.data() ?? {}) as Record<string, any>;
+    const rutCreds = getRutCredentialsFromBoxData(boxDataForRut);
 
     if (!rutCreds) {
       return res.status(502).json({
