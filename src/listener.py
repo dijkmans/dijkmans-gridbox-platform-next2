@@ -36,7 +36,7 @@ from db_manager import get_db
 # - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.69"
+VERSION = "v1.0.70"
 KEY_PATH = "service-account.json"
 BOOTSTRAP_PATH = "box_bootstrap.json"
 RUNTIME_CONFIG_PATH = "runtime_config.json"
@@ -1188,6 +1188,42 @@ def fetch_rut241_leases(ip, username, password):
         return []
 
 
+def set_rut241_static_lease_via_ssh(ip, username, password, mac, lease_ip, hostname="camera-gridbox"):
+    """Zet een statische DHCP lease op de RUT241 via SSH/UCI."""
+    import paramiko
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        ssh.connect(ip, port=22, username=username, password=password, timeout=10)
+        log(f"INFO: SSH verbonden met RUT241 op {ip}")
+
+        commands = [
+            f"uci add dhcp host",
+            f"uci set dhcp.@host[-1].mac='{mac}'",
+            f"uci set dhcp.@host[-1].ip='{lease_ip}'",
+            f"uci set dhcp.@host[-1].name='{hostname}'",
+            f"uci commit dhcp",
+            f"/etc/init.d/dnsmasq restart"
+        ]
+
+        for cmd in commands:
+            stdin, stdout, stderr = ssh.exec_command(cmd)
+            exit_code = stdout.channel.recv_exit_status()
+            err = stderr.read().decode().strip()
+            if exit_code != 0 and err:
+                raise RuntimeError(f"SSH commando mislukt: '{cmd}' → {err}")
+            log(f"INFO: SSH cmd ok: {cmd}")
+
+        log(f"INFO: Static lease gezet via SSH: mac={mac} → ip={lease_ip}")
+        return True
+
+    except Exception as e:
+        log(f"WARN: set_rut241_static_lease_via_ssh fout: {e}")
+        raise
+    finally:
+        ssh.close()
+
+
 def process_pending_command():
     """Controleert of er een pendingCommand klaarstaat en voert het uit."""
     try:
@@ -1233,36 +1269,19 @@ def process_pending_command():
             return
 
         try:
-            token = get_rut241_token(creds["ip"], creds["username"], creds["password"])
-            if not token:
-                msg = f"Kon geen token ophalen van RUT241 op {creds['ip']}"
-                log(f"WARN: {msg}")
-                cmd_ref.update({"status": "error", "errorMessage": msg})
-                return
-
-            resp = requests.post(
-                f"http://{creds['ip']}/api/dhcp/static_leases/config",
-                json={"data": {"mac": mac, "ip": ip, "name": "camera-gridbox"}},
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json"
-                },
-                timeout=8
+            set_rut241_static_lease_via_ssh(
+                ip=creds["ip"],
+                username=creds["username"],
+                password=creds["password"],
+                mac=mac,
+                lease_ip=ip,
+                hostname="camera-gridbox"
             )
-            if resp.ok:
-                log(f"INFO: DHCP lease gezet op RUT241: mac={mac} → ip={ip}")
-                cmd_ref.update({"status": "done", "completedAt": now_iso()})
-            else:
-                msg = f"RUT241 HTTP {resp.status_code}: {resp.text[:200]}"
-                log(f"WARN: DHCP lease mislukt: {msg}")
-                cmd_ref.update({"status": "error", "errorMessage": msg})
-        except requests.exceptions.Timeout:
-            msg = f"Timeout bij verbinding met RUT241 op {creds['ip']}"
-            log(f"WARN: {msg}")
-            cmd_ref.update({"status": "error", "errorMessage": msg})
+            log(f"INFO: DHCP lease gezet op RUT241 via SSH: mac={mac} → ip={ip}")
+            cmd_ref.update({"status": "done", "completedAt": now_iso()})
         except Exception as e:
-            msg = f"RUT241 fout: {type(e).__name__}: {e}"
-            log(f"WARN: {msg}")
+            msg = f"RUT241 SSH fout: {type(e).__name__}: {e}"
+            log(f"WARN: DHCP lease mislukt via SSH: {msg}")
             cmd_ref.update({"status": "error", "errorMessage": msg})
 
     except Exception as e:
