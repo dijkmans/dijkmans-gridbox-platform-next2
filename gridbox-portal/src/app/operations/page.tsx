@@ -60,10 +60,17 @@ type OperationsBoxItem = {
   rms: RmsSummary | null;
   piConnect?: { deviceId: string; online: boolean | null; lastSeen?: string | null; clientVersion?: string | null } | null;
   hardware?: {
-    camera?: { ip?: string; mac?: string; snapshotUrl?: string; enabled?: boolean } | null;
+    camera?: {
+      config?: { enabled?: boolean; username?: string | null; password?: string | null } | null;
+      assignment?: { ip?: string | null; mac?: string | null; snapshotUrl?: string | null; updatedAt?: string | null } | null;
+      observed?: { detectedMac?: string | null; detectedIp?: string | null; lastSeenAt?: string | null } | null;
+    } | null;
     pi?: { mac?: string | null; ip?: string | null; serial?: string | null } | null;
     piConnect?: { deviceId?: string | null } | null;
-    rut?: { ip?: string | null; mac?: string | null; serial?: string | null } | null;
+    rut?: {
+      config?: { ip?: string | null; username?: string | null; model?: string | null } | null;
+      observed?: { ip?: string | null; mac?: string | null; serial?: string | null } | null;
+    } | null;
   } | null;
 };
 
@@ -204,15 +211,15 @@ function DiagnosePanel({ sw, hardware, onClose }: { sw: BoxSoftware; hardware?: 
       <div className="space-y-0">
         <div className={row}>
           <span className={label}>IP</span>
-          <span className={mono}>{hardware?.rut?.ip || sw.gatewayIp || "-"}</span>
+          <span className={mono}>{hardware?.rut?.config?.ip || hardware?.rut?.observed?.ip || sw.gatewayIp || "-"}</span>
         </div>
         <div className={row}>
           <span className={label}>MAC</span>
-          <span className={mono}>{hardware?.rut?.mac || sw.gatewayMac || "-"}</span>
+          <span className={mono}>{hardware?.rut?.observed?.mac || sw.gatewayMac || "-"}</span>
         </div>
         <div className={row}>
           <span className={label}>Serial</span>
-          <span className={mono}>{hardware?.rut?.serial || "-"}</span>
+          <span className={mono}>{hardware?.rut?.observed?.serial || "-"}</span>
         </div>
       </div>
 
@@ -526,7 +533,7 @@ export default function OperationsPage() {
                                     <span className="font-semibold text-slate-900">{updateStatus}</span>
                                   </div>
                                 )}
-                                {box.hardware?.camera?.ip && (
+                                {box.hardware?.camera?.assignment?.ip && (
                                   <div className="flex justify-between gap-2">
                                     <span className="text-slate-500">Camera</span>
                                     <button
@@ -534,7 +541,7 @@ export default function OperationsPage() {
                                       onClick={() => openSnapshot(box.boxId || box.id)}
                                       className="font-semibold text-blue-600 hover:underline text-xs"
                                     >
-                                      📷 {box.hardware.camera.ip}
+                                      📷 {box.hardware.camera.assignment.ip}
                                     </button>
                                   </div>
                                 )}

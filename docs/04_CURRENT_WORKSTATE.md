@@ -1,5 +1,23 @@
 # CURRENT WORKSTATE
 
+## Status — 2026-04-21
+
+RUT-info herstructureerd naar `hardware.rut.config` + `hardware.rut.observed`. Camera-info herstructureerd naar `hardware.camera.config` + `assignment` + `observed`. Firestore migratiescript uitgevoerd voor RUT (7 boxes). Camera-config endpoint bijgewerkt; PUT /camera schrijft naar assignment.*; snapshot endpoint leest uit assignment + config.
+
+### Camera-flow herstructurering (april 2026)
+- `hardware.camera` opgesplitst in `config`, `assignment`, `observed`
+- credentials (username/password) verplaatst van plat niveau naar `config`
+- `suggestedIp` is niet persisted, alleen in backend response en UI state
+- `observed` wordt bijgewerkt bij elke `camera-context` aanroep (best-effort)
+- Platte velden `hardware.camera.ip/mac/snapshotUrl/username/password` zijn vervangen door geneste structuur
+- `detectionStatus`, `reservedAt`, `suggestedIp` als vaste Firestore-velden vervallen
+
+### RUT-flow herstructurering (april 2026)
+- `hardware.rut` opgesplitst in `config` (admin) en `observed` (listener)
+- Top-level `rut.*` op box-documenten verwijderd via migratie
+- Listener schrijft uitsluitend naar `hardware.rut.observed.*`
+- Admin schrijft uitsluitend naar `hardware.rut.config.*`
+
 ## Status — 2026-04-18
 
 Magic Link login toegevoegd naast Google login. PlatformAdmin fix: `requireCustomerContext` slaat `customerId`-check over voor platformAdmin — piet.dijkmans@gmail.com ziet nu alle boxen in de portal. Mobiele viewport fix: `Viewport` export in `layout.tsx`, `overflow-x: hidden` op html/body, header responsive padding. Camera beheer gebouwd (discovery endpoint op device, next-camera-ip + GET/PUT/snapshot op admin, conditioneel UI-blok in AdminBoxConfigClient). gridbox-api gedeployed naar Cloud Run revision `gridbox-api-00733-cs4`. gridbox-portal gedeployed naar Firebase Hosting.

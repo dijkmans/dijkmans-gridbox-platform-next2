@@ -455,7 +455,7 @@ router.get("/admin/boxes/next-camera-ip", async (req, res) => {
 
     boxesSnapshot.docs.forEach((boxDoc) => {
       const data = boxDoc.data() as Record<string, any>;
-      const ip = data?.hardware?.camera?.ip;
+      const ip = data?.hardware?.camera?.assignment?.ip;
       if (typeof ip === "string") usedIps.add(ip);
     });
 
@@ -511,12 +511,12 @@ router.get("/admin/boxes/:boxId", async (req, res) => {
       hardware: data.hardware ?? null,
       gatewayIp: typeof data.gatewayIp === "string" ? data.gatewayIp : null,
       gatewayMac: typeof data.gatewayMac === "string" ? data.gatewayMac : null,
-      rutIp: typeof data.hardware?.rut?.ip === "string" ? data.hardware.rut.ip : null,
-      rutMac: typeof data.hardware?.rut?.mac === "string" ? data.hardware.rut.mac : null,
-      rutSerial: typeof data.hardware?.rut?.serial === "string" ? data.hardware.rut.serial : null,
+      rutIp: typeof data.hardware?.rut?.config?.ip === "string" ? data.hardware.rut.config.ip : null,
+      rutMac: typeof data.hardware?.rut?.observed?.mac === "string" ? data.hardware.rut.observed.mac : null,
+      rutSerial: typeof data.hardware?.rut?.observed?.serial === "string" ? data.hardware.rut.observed.serial : null,
       piMac: typeof data.hardware?.pi?.mac === "string" ? data.hardware.pi.mac : null,
       piIp: typeof data.hardware?.pi?.ip === "string" ? data.hardware.pi.ip : null,
-      rut: data.rut ?? null,
+
       scriptVersion: typeof data.scriptVersion === "string"
         ? data.scriptVersion
         : typeof data.software?.currentVersion === "string"
@@ -564,12 +564,16 @@ router.put("/admin/boxes/:boxId/config", async (req, res) => {
       update["autoClose"] = body.autoClose;
     }
 
-    if (body.hardware?.camera !== undefined && typeof body.hardware.camera === "object") {
-      const cam = body.hardware.camera as Record<string, any>;
-      if (typeof cam.enabled === "boolean") update["hardware.camera.enabled"] = cam.enabled;
-      if (typeof cam.snapshotIntervalSeconds === "number") update["hardware.camera.snapshotIntervalSeconds"] = cam.snapshotIntervalSeconds;
-      if (typeof cam.changeDetectionThreshold === "number") update["hardware.camera.changeDetectionThreshold"] = cam.changeDetectionThreshold;
-      if (typeof cam.postCloseSnapshotDurationSeconds === "number") update["hardware.camera.postCloseSnapshotDurationSeconds"] = cam.postCloseSnapshotDurationSeconds;
+    if (body.hardware?.camera?.config !== undefined && typeof body.hardware.camera.config === "object") {
+      const cam = body.hardware.camera.config as Record<string, any>;
+      if (typeof cam.enabled === "boolean") update["hardware.camera.config.enabled"] = cam.enabled;
+      if (typeof cam.snapshotIntervalSeconds === "number") update["hardware.camera.config.snapshotIntervalSeconds"] = cam.snapshotIntervalSeconds;
+      if (typeof cam.changeDetectionThreshold === "number") update["hardware.camera.config.changeDetectionThreshold"] = cam.changeDetectionThreshold;
+      if (typeof cam.postCloseSnapshotDurationSeconds === "number") update["hardware.camera.config.postCloseSnapshotDurationSeconds"] = cam.postCloseSnapshotDurationSeconds;
+      if (typeof cam.saveCooldownSeconds === "number") update["hardware.camera.config.saveCooldownSeconds"] = cam.saveCooldownSeconds;
+      if (typeof cam.forceSaveThresholdMultiplier === "number") update["hardware.camera.config.forceSaveThresholdMultiplier"] = cam.forceSaveThresholdMultiplier;
+      if (typeof cam.username === "string") update["hardware.camera.config.username"] = cam.username;
+      if (typeof cam.password === "string" && cam.password.length > 0) update["hardware.camera.config.password"] = cam.password;
     }
 
     if (body.hardware?.lights !== undefined && typeof body.hardware.lights === "object") {
@@ -587,13 +591,12 @@ router.put("/admin/boxes/:boxId/config", async (req, res) => {
     if (typeof body.siteId === "string") update["siteId"] = body.siteId;
     if (typeof body.customerId === "string") update["customerId"] = body.customerId;
 
-    if (body.rut !== undefined && typeof body.rut === "object") {
-      const rut = body.rut as Record<string, any>;
-      if (typeof rut.ip === "string") update["rut.ip"] = rut.ip;
-      if (typeof rut.mac === "string" || rut.mac === null) update["rut.mac"] = rut.mac;
-      if (typeof rut.model === "string" || rut.model === null) update["rut.model"] = rut.model;
-      if (typeof rut.username === "string") update["rut.username"] = rut.username;
-      if (typeof rut.password === "string" && rut.password.length > 0) update["rut.password"] = rut.password;
+    if (body.hardware?.rut?.config !== undefined && typeof body.hardware.rut.config === "object") {
+      const rutConfig = body.hardware.rut.config as Record<string, any>;
+      if (typeof rutConfig.ip === "string") update["hardware.rut.config.ip"] = rutConfig.ip;
+      if (typeof rutConfig.model === "string" || rutConfig.model === null) update["hardware.rut.config.model"] = rutConfig.model;
+      if (typeof rutConfig.username === "string") update["hardware.rut.config.username"] = rutConfig.username;
+      if (typeof rutConfig.password === "string" && rutConfig.password.length > 0) update["hardware.rut.config.password"] = rutConfig.password;
     }
 
     await boxDocRef.update(update);
@@ -609,35 +612,17 @@ router.put("/admin/boxes/:boxId/config", async (req, res) => {
   }
 });
 
-function getRutCredentialsFromBoxData(
-  boxData: Record<string, any>
-): { ip: string; username: string; password: string } | null {
-  const rut = boxData?.hardware?.rut;
+async function getRutCredentials(
+  siteId: string | null,
+  db: Firestore
+): Promise<{ ip: string; username: string; password: string } | null> {
+  if (!siteId) return null;
+  const siteDoc = await db.collection("sites").doc(siteId).get();
+  if (!siteDoc.exists) return null;
+  const d = siteDoc.data() as Record<string, any>;
+  const rut = d?.rut;
   if (!rut?.ip || !rut?.username || !rut?.password) return null;
   return { ip: String(rut.ip), username: String(rut.username), password: String(rut.password) };
-}
-
-async function getRut241Token(rutIp: string, username: string, password: string): Promise<string | null> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`http://${rutIp}/api/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
-      signal: controller.signal as any
-    });
-    if (!res.ok) {
-      console.warn(`[RUT241] login HTTP ${res.status} op ${rutIp}`);
-      return null;
-    }
-    const data = await res.json() as Record<string, any>;
-    console.log(`[RUT241] login response van ${rutIp}:`, JSON.stringify(data));
-    const token = data?.data?.token ?? data?.ubus_rpc_session ?? null;
-    return typeof token === "string" ? token : null;
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 async function fetchRut241Leases(
@@ -645,69 +630,23 @@ async function fetchRut241Leases(
   username: string,
   password: string
 ): Promise<Array<{ ip: string; mac: string; hostname?: string }>> {
-  // BELANGRIJK: deze functie vereist dat de API-server het LAN-IP van de RUT241 kan bereiken.
-  // Bij Cloud Run deployment is 192.168.10.x NIET bereikbaar — calls zullen altijd timeout.
-  // Oplossing vereist: Pi als proxy, of ARP/lease data via heartbeat naar Firestore.
-
-  const token = await getRut241Token(rutIp, username, password);
-  const authHeader = token
-    ? `Bearer ${token}`
-    : `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
-
-  const leasePaths = [
-    `/api/dhcp/leases`,
-    `/api/network/leases`,
-  ];
-
-  for (const path of leasePaths) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    try {
-      const res = await fetch(`http://${rutIp}${path}`, {
-        headers: { Authorization: authHeader },
-        signal: controller.signal as any
-      });
-      const raw = await res.json() as unknown;
-      console.log(`[RUT241] ${path} HTTP ${res.status} van ${rutIp}:`, JSON.stringify(raw).slice(0, 500));
-      if (!res.ok) continue;
-      const list: unknown[] = Array.isArray(raw) ? raw : Array.isArray((raw as any)?.data) ? (raw as any).data : [];
-      const leases = list
-        .filter((l): l is Record<string, any> => !!l && typeof l === "object" && typeof (l as any).ip === "string" && typeof (l as any).mac === "string")
-        .map((l) => ({ ip: l.ip as string, mac: (l.mac as string).toLowerCase(), hostname: typeof l.hostname === "string" ? l.hostname : undefined }));
-      if (leases.length > 0 || res.ok) return leases;
-    } catch (err) {
-      console.warn(`[RUT241] ${path} op ${rutIp} mislukt:`, err instanceof Error ? err.message : String(err));
-    } finally {
-      clearTimeout(timeout);
-    }
+  const credentials = Buffer.from(`${username}:${password}`).toString("base64");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(`http://${rutIp}/api/dhcp/leases`, {
+      headers: { Authorization: `Basic ${credentials}` },
+      signal: controller.signal as any
+    });
+    if (!res.ok) return [];
+    const raw = await res.json() as unknown;
+    const list: unknown[] = Array.isArray(raw) ? raw : Array.isArray((raw as any)?.data) ? (raw as any).data : [];
+    return list
+      .filter((l): l is Record<string, any> => !!l && typeof l === "object" && typeof (l as any).ip === "string" && typeof (l as any).mac === "string")
+      .map((l) => ({ ip: l.ip as string, mac: (l.mac as string).toLowerCase(), hostname: typeof l.hostname === "string" ? l.hostname : undefined }));
+  } finally {
+    clearTimeout(timeout);
   }
-
-  // Fallback: probeer ARP-tabel
-  const arpPaths = [`/api/network/arptable`, `/api/system/arptable`];
-  for (const path of arpPaths) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    try {
-      const res = await fetch(`http://${rutIp}${path}`, {
-        headers: { Authorization: authHeader },
-        signal: controller.signal as any
-      });
-      const raw = await res.json() as unknown;
-      console.log(`[RUT241] ARP fallback ${path} HTTP ${res.status} van ${rutIp}:`, JSON.stringify(raw).slice(0, 500));
-      if (!res.ok) continue;
-      const list: unknown[] = Array.isArray(raw) ? raw : Array.isArray((raw as any)?.data) ? (raw as any).data : [];
-      const entries = list
-        .filter((l): l is Record<string, any> => !!l && typeof l === "object" && typeof (l as any).ip === "string" && typeof (l as any).mac === "string")
-        .map((l) => ({ ip: l.ip as string, mac: (l.mac as string).toLowerCase() }));
-      if (entries.length > 0) return entries;
-    } catch (err) {
-      console.warn(`[RUT241] ARP ${path} op ${rutIp} mislukt:`, err instanceof Error ? err.message : String(err));
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  return [];
 }
 
 router.get("/admin/boxes/:boxId/camera-context", async (req, res) => {
@@ -726,19 +665,21 @@ router.get("/admin/boxes/:boxId/camera-context", async (req, res) => {
     }
 
     const data = boxDoc.data() as Record<string, any>;
-    const cam = data?.hardware?.camera ?? null;
+    const camAssignment = data?.hardware?.camera?.assignment ?? null;
+    const camConfig = data?.hardware?.camera?.config ?? null;
 
-    const firestoreCamera = cam
+    const firestoreCamera = camAssignment
       ? {
-          ip: cam.ip ?? null,
-          mac: cam.mac ?? null,
-          snapshotUrl: cam.snapshotUrl ?? null,
-          updatedAt: cam.updatedAt ?? null,
-          enabled: cam.enabled ?? null
+          ip: camAssignment.ip ?? null,
+          mac: camAssignment.mac ?? null,
+          snapshotUrl: camAssignment.snapshotUrl ?? null,
+          updatedAt: camAssignment.updatedAt ?? null,
+          enabled: camConfig?.enabled ?? null
         }
       : null;
 
     const siteId: string | null = data?.siteId ?? null;
+    const rutCreds = await getRutCredentials(siteId, db);
 
     let detectedMac: string | null = null;
     let detectedIp: string | null = null;
@@ -746,47 +687,53 @@ router.get("/admin/boxes/:boxId/camera-context", async (req, res) => {
     let leaseStatus: "active" | "not_set" | "conflict" | "unknown" = "unknown";
     let lastError: string | null = null;
 
-    // Lees detectedDevices uit de laatste Pi-heartbeat (Pi schrijft dit elke 30s vanuit /proc/net/arp)
-    const detectedDevices: Array<{ mac: string; ip: string; seenAt?: string }> =
-      Array.isArray(data?.hardware?.detectedDevices) ? data.hardware.detectedDevices : [];
-
-    // Bepaal routerStatus op basis van hoe recent de heartbeat was
-    const lastHeartbeatUnix: number | null =
-      typeof data?.software?.lastHeartbeatUnix === "number" ? data.software.lastHeartbeatUnix : null;
-    const secondsSinceHeartbeat = lastHeartbeatUnix ? Math.floor(Date.now() / 1000) - lastHeartbeatUnix : null;
-    if (secondsSinceHeartbeat === null) {
-      routerStatus = "unknown";
-    } else if (secondsSinceHeartbeat <= 60) {
-      routerStatus = "online";
-    } else {
-      routerStatus = "offline";
-      lastError = `Laatste Pi-heartbeat ${secondsSinceHeartbeat}s geleden (meer dan 60s)`;
-    }
-
-    if (detectedDevices.length > 0) {
-      // Verzamel alle geregistreerde camera-MACs op deze site
-      const allBoxesSnap = await db.collection("boxes").get();
-      const registeredMacs = new Set<string>();
-      allBoxesSnap.docs.forEach((doc) => {
-        const d = doc.data() as Record<string, any>;
-        if (siteId && d?.siteId !== siteId) return;
-        const m = d?.hardware?.camera?.mac;
-        if (typeof m === "string") registeredMacs.add(m.toLowerCase());
-      });
-
-      // Detecteer eerste ARP-MAC die nog niet als camera in Firestore staat voor deze site
-      const unregistered = detectedDevices.find((d) => !registeredMacs.has(d.mac.toLowerCase()));
-      if (unregistered) {
-        detectedMac = unregistered.mac.toLowerCase();
-        detectedIp = unregistered.ip;
+    if (rutCreds) {
+      let leases: Array<{ ip: string; mac: string }> = [];
+      try {
+        leases = await fetchRut241Leases(rutCreds.ip, rutCreds.username, rutCreds.password);
+        routerStatus = "online";
+      } catch {
+        routerStatus = "offline";
+        lastError = `RUT241 op ${rutCreds.ip} niet bereikbaar`;
       }
 
-      // Bepaal leaseStatus: heeft de bekende camera-MAC een ARP-entry?
-      if (firestoreCamera?.mac) {
-        const seen = detectedDevices.some((d) => d.mac.toLowerCase() === firestoreCamera.mac!.toLowerCase());
-        leaseStatus = seen ? "active" : "not_set";
-      } else {
-        leaseStatus = "not_set";
+      if (routerStatus === "online") {
+        // Verzamel alle geregistreerde camera-MACs op deze site
+        const allBoxesSnap = await db.collection("boxes").get();
+        const registeredMacs = new Set<string>();
+        allBoxesSnap.docs.forEach((doc) => {
+          const d = doc.data() as Record<string, any>;
+          if (siteId && d?.siteId !== siteId) return;
+          const m = d?.hardware?.camera?.assignment?.mac;
+          if (typeof m === "string") registeredMacs.add(m.toLowerCase());
+        });
+
+        // Detecteer eerste lease-MAC die nog niet in Firestore staat voor deze site
+        const unregistered = leases.find((l) => !registeredMacs.has(l.mac));
+        if (unregistered) {
+          detectedMac = unregistered.mac;
+          detectedIp = unregistered.ip;
+        }
+
+        // Bepaal leaseStatus voor de al gekoppelde camera (als die er is)
+        if (firestoreCamera?.mac) {
+          const hasLease = leases.some((l) => l.mac === firestoreCamera.mac);
+          leaseStatus = hasLease ? "active" : "not_set";
+        } else {
+          leaseStatus = "not_set";
+        }
+      }
+    }
+
+    if (detectedMac && detectedIp) {
+      try {
+        await boxDoc.ref.update({
+          "hardware.camera.observed.detectedMac": detectedMac,
+          "hardware.camera.observed.detectedIp": detectedIp,
+          "hardware.camera.observed.lastSeenAt": new Date().toISOString()
+        });
+      } catch {
+        // best-effort — niet blokkeren als write faalt
       }
     }
 
@@ -833,12 +780,12 @@ router.post("/admin/boxes/:boxId/camera-suggest-ip", async (req, res) => {
     allBoxesSnap.docs.forEach((doc) => {
       const d = doc.data() as Record<string, any>;
       if (siteId && d?.siteId !== siteId) return;
-      const ip = d?.hardware?.camera?.ip;
+      const ip = d?.hardware?.camera?.assignment?.ip;
       if (typeof ip === "string") usedIps.add(ip);
     });
 
     // Voeg live DHCP lease-IPs toe via RUT241 (best-effort — als router offline is gaan we door met Firestore-data)
-    const rutCreds = getRutCredentialsFromBoxData(boxData);
+    const rutCreds = await getRutCredentials(siteId, db);
     if (rutCreds) {
       try {
         const liveLeases = await fetchRut241Leases(rutCreds.ip, rutCreds.username, rutCreds.password);
@@ -899,7 +846,7 @@ router.post("/admin/boxes/:boxId/camera-assign", async (req, res) => {
     const allBoxesSnap = await db.collection("boxes").get();
     for (const doc of allBoxesSnap.docs) {
       const d = doc.data() as Record<string, any>;
-      const existingMac = d?.hardware?.camera?.mac;
+      const existingMac = d?.hardware?.camera?.assignment?.mac;
       const existingBoxId = d?.boxId ?? doc.id;
       if (existingMac === mac && existingBoxId !== boxId) {
         return res.status(409).json({
@@ -909,7 +856,51 @@ router.post("/admin/boxes/:boxId/camera-assign", async (req, res) => {
       }
     }
 
-    // Haal box document ref op
+    // Stap 2: zet static DHCP lease op de RUT241 via box → site → rut
+    const boxForSiteDoc = allBoxesSnap.docs.find((d) => (d.data() as Record<string, any>)?.boxId === boxId || d.id === boxId);
+    const siteIdForRut: string | null = boxForSiteDoc ? ((boxForSiteDoc.data() as Record<string, any>)?.siteId ?? null) : null;
+    const rutCreds = await getRutCredentials(siteIdForRut, db);
+
+    if (!rutCreds) {
+      return res.status(502).json({
+        error: "NO_RUT_CREDENTIALS",
+        message: "Geen RUT241-gegevens gevonden voor deze site — Firestore niet bijgewerkt"
+      });
+    }
+
+    const leaseCredentials = Buffer.from(`${rutCreds.username}:${rutCreds.password}`).toString("base64");
+    const leaseController = new AbortController();
+    const leaseTimeout = setTimeout(() => leaseController.abort(), 8000);
+    let leaseRes: Response;
+    try {
+      leaseRes = await fetch(`http://${rutCreds.ip}/api/dhcp/static`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Basic ${leaseCredentials}`
+        },
+        body: JSON.stringify({ mac, ip: chosenIp }),
+        signal: leaseController.signal as any
+      });
+    } catch {
+      clearTimeout(leaseTimeout);
+      return res.status(502).json({
+        error: "RUT_UNREACHABLE",
+        message: `RUT241 op ${rutCreds.ip} niet bereikbaar — Firestore niet bijgewerkt`
+      });
+    } finally {
+      clearTimeout(leaseTimeout);
+    }
+
+    if (!leaseRes.ok) {
+      const leaseErr = await leaseRes.json().catch(() => ({})) as Record<string, any>;
+      return res.status(502).json({
+        error: "LEASE_FAILED",
+        message: leaseErr?.message || `RUT241 gaf HTTP ${leaseRes.status} terug — Firestore niet bijgewerkt`
+      });
+    }
+
+    // Stap 3: schrijf naar Firestore pas na bevestigde lease
     const boxSnap = await db.collection("boxes").where("boxId", "==", boxId).limit(1).get();
     const boxDocRef = !boxSnap.empty
       ? boxSnap.docs[0].ref
@@ -918,68 +909,41 @@ router.post("/admin/boxes/:boxId/camera-assign", async (req, res) => {
         : null;
 
     if (!boxDocRef) {
-      return res.status(404).json({ error: "BOX_NOT_FOUND", message: "Box niet gevonden" });
-    }
-
-    // Stap 2: schrijf pendingCommand naar Firestore — Pi pikt dit op en belt de RUT241 lokaal
-    const cmdRef = boxDocRef.collection("pendingCommand").doc("current");
-    const createdAt = new Date().toISOString();
-    await cmdRef.set({
-      type: "set_dhcp_lease",
-      mac,
-      ip: chosenIp,
-      createdAt,
-      status: "pending"
-    });
-
-    console.log(`camera-assign: pendingCommand geschreven voor ${boxId} — wacht op Pi`);
-
-    // Stap 3: poll maximaal 15s op status, elke 2s
-    const pollIntervalMs = 2000;
-    const pollMaxMs = 15000;
-    const pollStart = Date.now();
-    let finalStatus: string | null = null;
-    let errorMessage: string | null = null;
-
-    while (Date.now() - pollStart < pollMaxMs) {
-      await new Promise((r) => setTimeout(r, pollIntervalMs));
-      const snap = await cmdRef.get();
-      if (!snap.exists) break;
-      const d = snap.data() as Record<string, any>;
-      if (d.status === "done" || d.status === "error") {
-        finalStatus = d.status;
-        errorMessage = typeof d.errorMessage === "string" ? d.errorMessage : null;
-        break;
-      }
-    }
-
-    if (finalStatus === null) {
-      return res.status(504).json({
-        error: "PI_TIMEOUT",
-        message: "Pi heeft niet gereageerd binnen 15 seconden — lease niet bevestigd, Firestore niet bijgewerkt"
+      // Lease is gezet maar box niet gevonden — log expliciet
+      console.error(`camera-assign: lease gezet maar box ${boxId} niet gevonden in Firestore`);
+      return res.status(404).json({
+        error: "BOX_NOT_FOUND",
+        message: "Lease gezet op router maar box niet gevonden in Firestore — controleer handmatig"
       });
     }
 
-    if (finalStatus === "error") {
-      return res.status(502).json({
-        error: "LEASE_FAILED",
-        message: errorMessage || "Pi kon de DHCP lease niet instellen — Firestore niet bijgewerkt"
-      });
-    }
-
-    // Stap 4: Pi bevestigde success — schrijf camera-koppeling naar Firestore
     const snapshotUrl = `http://${chosenIp}/cgi-bin/snapshot.cgi`;
     const now = new Date().toISOString();
 
-    await boxDocRef.update({
-      "hardware.camera.mac": mac,
-      "hardware.camera.ip": chosenIp,
-      "hardware.camera.snapshotUrl": snapshotUrl,
-      "hardware.camera.updatedAt": now
-    });
+    try {
+      await boxDocRef.update({
+        "hardware.camera.assignment.mac": mac,
+        "hardware.camera.assignment.ip": chosenIp,
+        "hardware.camera.assignment.snapshotUrl": snapshotUrl,
+        "hardware.camera.assignment.updatedAt": now
+      });
+    } catch (firestoreErr) {
+      // Lease is gezet maar Firestore schrijven mislukt — log expliciet
+      console.error(`camera-assign: lease gezet voor ${boxId} maar Firestore schrijven mislukt:`, firestoreErr);
+      return res.status(500).json({
+        error: "FIRESTORE_WRITE_FAILED",
+        message: "Lease is ingesteld op de router maar Firestore kon niet bijgewerkt worden — controleer handmatig"
+      });
+    }
 
-    console.log(`camera-assign: ${boxId} → mac=${mac} ip=${chosenIp} (via Pi)`);
-    return res.json({ ok: true, mac, ip: chosenIp, snapshotUrl, updatedAt: now });
+    console.log(`camera-assign: ${boxId} → mac=${mac} ip=${chosenIp}`);
+    return res.json({
+      ok: true,
+      mac,
+      ip: chosenIp,
+      snapshotUrl,
+      updatedAt: now
+    });
   } catch (error) {
     const statusCode = getStatusCode(error);
     if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
@@ -1008,7 +972,14 @@ router.get("/admin/boxes/:boxId/camera", async (req, res) => {
     const camera = data?.hardware?.camera ?? null;
 
     console.log("ADMIN GET CAMERA", { boxId, hasCamera: !!camera, user: context.portalUser.email });
-    return res.json({ ok: true, item: camera });
+    return res.json({
+      ok: true,
+      item: camera ? {
+        config: camera.config ?? null,
+        assignment: camera.assignment ?? null,
+        observed: camera.observed ?? null
+      } : null
+    });
   } catch (error) {
     const statusCode = getStatusCode(error);
     if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
@@ -1053,13 +1024,13 @@ router.put("/admin/boxes/:boxId/camera", async (req, res) => {
 
     const snapshotUrl = `http://${ip}/cgi-bin/snapshot.cgi`;
     const updateData: Record<string, any> = {
-      "hardware.camera.mac": mac.toLowerCase(),
-      "hardware.camera.ip": ip,
-      "hardware.camera.snapshotUrl": snapshotUrl,
-      "hardware.camera.updatedAt": new Date().toISOString()
+      "hardware.camera.assignment.mac": mac.toLowerCase(),
+      "hardware.camera.assignment.ip": ip,
+      "hardware.camera.assignment.snapshotUrl": snapshotUrl,
+      "hardware.camera.assignment.updatedAt": new Date().toISOString()
     };
-    if (username !== undefined) updateData["hardware.camera.username"] = username || null;
-    if (password !== undefined) updateData["hardware.camera.password"] = password || null;
+    if (username !== undefined) updateData["hardware.camera.config.username"] = username || null;
+    if (password !== undefined && password.length > 0) updateData["hardware.camera.config.password"] = password;
 
     await boxDocRef.update(updateData);
 
@@ -1094,18 +1065,21 @@ router.get("/admin/boxes/:boxId/camera/snapshot", async (req, res) => {
 
     const data = boxDoc.data() as Record<string, any>;
     const camera = data?.hardware?.camera;
+    const snapshotUrl = camera?.assignment?.snapshotUrl;
+    const username = camera?.config?.username;
+    const password = camera?.config?.password;
 
-    if (!camera?.snapshotUrl) {
-      return res.status(404).json({ error: "NO_CAMERA", message: "Geen camera geconfigureerd voor deze box" });
+    if (!snapshotUrl) {
+      return res.status(404).json({ error: "NO_CAMERA", message: "Geen camera gekoppeld aan deze box — bevestig eerst de camera-toewijzing" });
     }
 
     const headers: Record<string, string> = {};
-    if (camera.username && camera.password) {
-      const credentials = Buffer.from(`${camera.username}:${camera.password}`).toString("base64");
+    if (username && password) {
+      const credentials = Buffer.from(`${username}:${password}`).toString("base64");
       headers["Authorization"] = `Basic ${credentials}`;
     }
 
-    const cameraRes = await fetch(camera.snapshotUrl, { headers });
+    const cameraRes = await fetch(snapshotUrl, { headers });
 
     if (!cameraRes.ok) {
       return res.status(502).json({ error: "CAMERA_FETCH_FAILED", message: `Camera gaf HTTP ${cameraRes.status} terug` });

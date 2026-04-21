@@ -111,22 +111,35 @@ Velden (kern):
 - updatedAt
 - hardware (object):
   - camera (object):
-    - mac
-    - ip
-    - detectedIp
-    - suggestedIp
-    - detectionStatus (`detected` / `ip_suggested` / `reserved`)
-    - snapshotUrl
-    - detectedAt
-    - reservedAt
-    - enabled
-    - username
-    - password
-    - snapshotIntervalSeconds (default 5)
-    - changeDetectionThreshold (default 6.0)
-    - saveCooldownSeconds (default 10)
-    - forceSaveThresholdMultiplier (default 2.0)
-    - postCloseSnapshotDurationSeconds (default 30)
+    - config (object) — instelbaar door admin:
+      - enabled
+      - username
+      - password
+      - snapshotIntervalSeconds (default 5)
+      - changeDetectionThreshold (default 6.0)
+      - saveCooldownSeconds (default 10)
+      - forceSaveThresholdMultiplier (default 2.0)
+      - postCloseSnapshotDurationSeconds (default 30)
+    - assignment (object) — geschreven na bevestigde Pi-lease:
+      - mac
+      - ip
+      - snapshotUrl
+      - updatedAt
+    - observed (object) — tijdelijk bijgewerkt bij camera-context aanroep:
+      - detectedMac
+      - detectedIp
+      - lastSeenAt
+  - rut (object):
+    - config (object) — handmatig ingesteld door admin:
+      - ip
+      - username
+      - password
+      - model
+    - observed (object) — automatisch gedetecteerd door listener:
+      - ip
+      - mac
+      - serial
+      - lastSeenAt
   - lights (object)
   - shutter (object)
   - rmsDeviceId

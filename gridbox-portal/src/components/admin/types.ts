@@ -61,26 +61,44 @@ export type AdminBoxItem = {
 };
 
 export type AdminCameraData = {
-  mac?: string | null;
-  ip?: string | null;
-  snapshotUrl?: string | null;
-  username?: string | null;
-  password?: string | null;
-  updatedAt?: string | null;
-  enabled?: boolean | null;
-  changeDetectionThreshold?: number | null;
-  snapshotIntervalSeconds?: number | null;
-  postCloseSnapshotDurationSeconds?: number | null;
+  config?: {
+    enabled?: boolean | null;
+    username?: string | null;
+    password?: string | null;
+    snapshotIntervalSeconds?: number | null;
+    changeDetectionThreshold?: number | null;
+    postCloseSnapshotDurationSeconds?: number | null;
+    saveCooldownSeconds?: number | null;
+    forceSaveThresholdMultiplier?: number | null;
+  } | null;
+  assignment?: {
+    mac?: string | null;
+    ip?: string | null;
+    snapshotUrl?: string | null;
+    updatedAt?: string | null;
+  } | null;
+  observed?: {
+    detectedMac?: string | null;
+    detectedIp?: string | null;
+    lastSeenAt?: string | null;
+  } | null;
 };
 
 export type AdminBoxHardware = {
   camera?: AdminCameraData | null;
   rut?: {
-    ip?: string | null;
-    mac?: string | null;
-    username?: string | null;
-    password?: string | null;
-    model?: string | null;
+    config?: {
+      ip?: string | null;
+      username?: string | null;
+      password?: string | null;
+      model?: string | null;
+    } | null;
+    observed?: {
+      ip?: string | null;
+      mac?: string | null;
+      serial?: string | null;
+      lastSeenAt?: string | null;
+    } | null;
   } | null;
   pi?: {
     ip?: string | null;

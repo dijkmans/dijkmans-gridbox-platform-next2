@@ -1294,13 +1294,14 @@ def update_pi_status():
 
         gateway_ip = get_gateway_ip()
         if gateway_ip:
-            hw_update["hardware.rut.ip"] = gateway_ip
+            hw_update["hardware.rut.observed.ip"] = gateway_ip
+            hw_update["hardware.rut.observed.lastSeenAt"] = now_iso()
             gateway_serial = get_gateway_serial()
             if gateway_serial:
-                hw_update["hardware.rut.serial"] = gateway_serial
+                hw_update["hardware.rut.observed.serial"] = gateway_serial
             gateway_mac = get_gateway_mac_fallback()
             if gateway_mac:
-                hw_update["hardware.rut.mac"] = gateway_mac
+                hw_update["hardware.rut.observed.mac"] = gateway_mac
 
         pi_mac = get_pi_mac()
         if pi_mac:
