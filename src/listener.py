@@ -36,7 +36,7 @@ from db_manager import get_db
 # - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.67"
+VERSION = "v1.0.68"
 KEY_PATH = "service-account.json"
 BOOTSTRAP_PATH = "box_bootstrap.json"
 RUNTIME_CONFIG_PATH = "runtime_config.json"
@@ -1140,25 +1140,52 @@ def get_box_rut_credentials():
         return None
 
 
+def get_rut241_token(ip, username, password):
+    """Haalt een Bearer token op van de RUT241 via POST /api/login."""
+    try:
+        resp = requests.post(
+            f"http://{ip}/api/login",
+            json={"username": username, "password": password},
+            timeout=5
+        )
+        if not resp.ok:
+            log(f"WARN: RUT241 login mislukt HTTP {resp.status_code}: {resp.text[:200]}")
+            return None
+        data = resp.json()
+        token = (data.get("data") or {}).get("token")
+        if not token:
+            log(f"WARN: RUT241 login gaf geen token terug: {str(data)[:200]}")
+            return None
+        return token
+    except Exception as e:
+        log(f"WARN: get_rut241_token fout: {e}")
+        return None
+
+
 def fetch_rut241_leases(ip, username, password):
-    """Haalt DHCP leases op van de RUT241 via de lokale API."""
-    import base64
-    credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
-    headers = {"Authorization": f"Basic {credentials}"}
-    resp = requests.get(
-        f"http://{ip}/api/dhcp/leases",
-        headers=headers,
-        timeout=5
-    )
-    if not resp.ok:
+    """Haalt DHCP leases op van de RUT241 via de lokale API (Bearer token auth)."""
+    token = get_rut241_token(ip, username, password)
+    if not token:
         return []
-    raw = resp.json()
-    items = raw if isinstance(raw, list) else (raw.get("data") or [] if isinstance(raw, dict) else [])
-    result = []
-    for item in items:
-        if isinstance(item, dict) and isinstance(item.get("ip"), str) and isinstance(item.get("mac"), str):
-            result.append({"ip": item["ip"], "mac": item["mac"].lower()})
-    return result
+    try:
+        resp = requests.get(
+            f"http://{ip}/api/dhcp/leases",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5
+        )
+        if not resp.ok:
+            log(f"WARN: fetch_rut241_leases HTTP {resp.status_code}: {resp.text[:200]}")
+            return []
+        raw = resp.json()
+        items = raw if isinstance(raw, list) else (raw.get("data") or [] if isinstance(raw, dict) else [])
+        result = []
+        for item in items:
+            if isinstance(item, dict) and isinstance(item.get("ip"), str) and isinstance(item.get("mac"), str):
+                result.append({"ip": item["ip"], "mac": item["mac"].lower()})
+        return result
+    except Exception as e:
+        log(f"WARN: fetch_rut241_leases fout: {e}")
+        return []
 
 
 def process_pending_command():
@@ -1206,10 +1233,17 @@ def process_pending_command():
             return
 
         try:
+            token = get_rut241_token(creds["ip"], creds["username"], creds["password"])
+            if not token:
+                msg = f"Kon geen token ophalen van RUT241 op {creds['ip']}"
+                log(f"WARN: {msg}")
+                cmd_ref.update({"status": "error", "errorMessage": msg})
+                return
+
             resp = requests.post(
                 f"http://{creds['ip']}/api/dhcp/static",
                 json={"mac": mac, "ip": ip},
-                auth=(creds["username"], creds["password"]),
+                headers={"Authorization": f"Bearer {token}"},
                 timeout=8
             )
             if resp.ok:
