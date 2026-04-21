@@ -36,7 +36,7 @@ from db_manager import get_db
 # - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.60"
+VERSION = "v1.0.66"
 KEY_PATH = "service-account.json"
 BOOTSTRAP_PATH = "box_bootstrap.json"
 RUNTIME_CONFIG_PATH = "runtime_config.json"
@@ -429,6 +429,20 @@ def ensure_repo_clean_for_checkout():
             )
         log("INFO: git reset --hard geslaagd")
 
+    # Extra: log untracked files als waarschuwing (blokkeren niet, maar wel zichtbaar maken)
+    untracked = run_cmd(
+        ["git", "status", "--porcelain", "--untracked-files=normal"],
+        cwd=REPO_ROOT
+    )
+    untracked_lines = [
+        l.strip() for l in (untracked.stdout or "").splitlines()
+        if l.strip().startswith("??")
+    ]
+    if untracked_lines:
+        log(f"WARN: {len(untracked_lines)} untracked bestanden gevonden (worden genegeerd bij checkout):")
+        for l in untracked_lines[:5]:
+            log(f"  {l}")
+
     # Stap 2: verwijder __pycache__ directories zodat Python bytecode de repo niet dirty maakt
     # Dit is nodig omdat bij oude git-commits .pyc bestanden getrackt waren (nu verwijderd uit git)
     for dirpath, dirnames, _ in os.walk(REPO_ROOT):
@@ -479,10 +493,28 @@ def maybe_install_requirements():
 
 def schedule_service_restart():
     sw_cfg = box_config.get("software", {})
-    service_name = sw_cfg.get("serviceName", "gridbox-listener.service")
+    service_name = sw_cfg.get("serviceName", "gridbox.service")
     restart_delay = float(sw_cfg.get("restartDelaySeconds", 2))
 
-    command = f"sleep {restart_delay}; sudo -n systemctl restart {shlex.quote(service_name)}"
+    # Preflight: controleer of service bestaat voordat restart ingepland wordt
+    if platform.system() != "Windows":
+        check = subprocess.run(
+            ["systemctl", "cat", service_name],
+            capture_output=True
+        )
+        if check.returncode != 0:
+            log(f"WARN: service '{service_name}' bestaat niet of is niet leesbaar — restart geannuleerd")
+            return
+
+    log(f"INFO: restart ingepland voor service '{service_name}' na {restart_delay}s")
+
+    log_path = "/tmp/gridbox-restart.log"
+    command = (
+        f"sleep {restart_delay}; "
+        f"sudo -n systemctl restart {shlex.quote(service_name)} "
+        f"> {log_path} 2>&1; "
+        f"echo \"exit=$?\" >> {log_path}"
+    )
     subprocess.Popen(
         ["bash", "-lc", command],
         stdout=subprocess.DEVNULL,
@@ -596,7 +628,7 @@ def build_software_defaults_from_box_config():
         "updateStatus": "UNKNOWN",
         "deploymentStatus": "UNKNOWN",
         "lastError": None,
-        "serviceName": sw_cfg.get("serviceName", "gridbox-listener.service"),
+        "serviceName": sw_cfg.get("serviceName", "gridbox.service"),
         "pipInstallOnDeploy": sw_cfg.get("pipInstallOnDeploy", True),
         "restartDelaySeconds": sw_cfg.get("restartDelaySeconds", 2)
     }
@@ -1265,7 +1297,7 @@ def update_pi_status():
             "softwareUpdateRequested": software_update_requested,
             "updateStatus": update_status,
             "githubTagPattern": sw_cfg.get("githubTagPattern", get_github_tag_pattern()),
-            "serviceName": sw_cfg.get("serviceName", "gridbox-listener.service"),
+            "serviceName": sw_cfg.get("serviceName", "gridbox.service"),
             "pipInstallOnDeploy": sw_cfg.get("pipInstallOnDeploy", True),
             "restartDelaySeconds": sw_cfg.get("restartDelaySeconds", 2),
             "gitCommitLocal": get_running_commit(),

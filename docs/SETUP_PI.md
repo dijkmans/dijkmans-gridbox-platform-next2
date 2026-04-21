@@ -108,3 +108,23 @@ Controleer in het Operations Center (`/operations`) of de box online komt.
 - `runtime_config.json` wordt automatisch aangemaakt door de bootstrap flow als de box via een provisioning is aangemeld
 - De Pi update zichzelf automatisch naar de `targetVersion` die in Firestore staat
 - Bij problemen: `sudo journalctl -u gridbox.service -n 100`
+
+---
+
+## Service-naam
+
+De service heet `gridbox.service`. Dit is de naam waarmee systemd de listener beheert.
+
+In Firestore staat onder `software.serviceName` de te gebruiken naam. Als dit veld niet gezet is, gebruikt de listener `gridbox.service` als standaard.
+
+Controleer op de Pi:
+
+```bash
+sudo systemctl status gridbox.service
+```
+
+Bij een gefaalde update kun je het restart-log inzien:
+
+```bash
+cat /tmp/gridbox-restart.log
+```
