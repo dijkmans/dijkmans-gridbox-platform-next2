@@ -36,7 +36,7 @@ from db_manager import get_db
 # - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.70"
+VERSION = "v1.0.71"
 KEY_PATH = "service-account.json"
 BOOTSTRAP_PATH = "box_bootstrap.json"
 RUNTIME_CONFIG_PATH = "runtime_config.json"
@@ -1224,6 +1224,54 @@ def set_rut241_static_lease_via_ssh(ip, username, password, mac, lease_ip, hostn
         ssh.close()
 
 
+def _handle_test_snapshot_command(cmd_ref, data):
+    """Haalt een snapshot op van de camera en schrijft die naar Firebase Storage."""
+    try:
+        box_data = box_doc_ref.get().to_dict() or {}
+        cam_assignment = (box_data.get("hardware") or {}).get("camera", {}).get("assignment") or {}
+        cam_config = (box_data.get("hardware") or {}).get("camera", {}).get("config") or {}
+
+        snapshot_url = cam_assignment.get("snapshotUrl")
+        username = cam_config.get("username")
+        password = cam_config.get("password")
+
+        if not snapshot_url:
+            cmd_ref.update({"status": "error", "errorMessage": "Geen snapshotUrl gevonden in camera assignment"})
+            return
+
+        log(f"INFO: test_snapshot aanvraag voor {snapshot_url}")
+
+        auth = None
+        if username and password:
+            auth = HTTPBasicAuth(username, password)
+
+        resp = requests.get(snapshot_url, auth=auth, timeout=10)
+        if resp.status_code != 200:
+            cmd_ref.update({"status": "error", "errorMessage": f"Camera HTTP {resp.status_code}"})
+            return
+
+        timestamp_ms = int(time.time() * 1000)
+        filename = f"test_snapshot_{timestamp_ms}.jpg"
+        storage_path = f"snapshots/{DOCUMENT_ID}/{filename}"
+        bucket = storage_client.bucket(BUCKET_NAME)
+        blob = bucket.blob(storage_path)
+        blob.upload_from_string(resp.content, content_type="image/jpeg")
+        blob.make_public()
+        public_url = blob.public_url
+
+        log(f"INFO: test_snapshot opgeslagen: {public_url}")
+        cmd_ref.update({
+            "status": "done",
+            "completedAt": now_iso(),
+            "snapshotUrl": public_url
+        })
+
+    except Exception as e:
+        msg = f"test_snapshot fout: {type(e).__name__}: {e}"
+        log(f"WARN: {msg}")
+        cmd_ref.update({"status": "error", "errorMessage": msg})
+
+
 def process_pending_command():
     """Controleert of er een pendingCommand klaarstaat en voert het uit."""
     try:
@@ -1252,7 +1300,12 @@ def process_pending_command():
             return
 
         cmd_type = data.get("type")
-        if cmd_type != "set_dhcp_lease":
+        if cmd_type == "set_dhcp_lease":
+            pass  # verder verwerkt hieronder
+        elif cmd_type == "test_snapshot":
+            _handle_test_snapshot_command(cmd_ref, data)
+            return
+        else:
             return
 
         mac = data.get("mac", "")

@@ -285,6 +285,11 @@ export default function AdminBoxConfigClient() {
 
       // Site: exact match volstaat (site IDs zijn consistent lowercase)
       setSelectedSiteId(b.siteId ?? "");
+
+      // Laad camera-context automatisch als box een camera assignment heeft
+      if (b.hardware?.camera?.assignment?.snapshotUrl) {
+        loadCameraContext();
+      }
     } catch (err) {
       console.error(err);
       setErrorMessage("Fout bij laden van boxgegevens");
@@ -435,15 +440,25 @@ export default function AdminBoxConfigClient() {
   }
 
   async function handleTestSnapshot() {
-    const token = await auth.currentUser?.getIdToken();
-    if (!token || !boxId) return;
-    const res = await fetch(
-      apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/camera/snapshot`),
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!res.ok) { setCameraFlowError("Snapshot ophalen mislukt"); return; }
-    const blob = await res.blob();
-    window.open(URL.createObjectURL(blob), "_blank");
+    setCameraFlowError("");
+    setCameraFlowSuccess("");
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/camera/snapshot`), {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json() as { ok?: boolean; snapshotUrl?: string; message?: string };
+      if (!res.ok) {
+        setCameraFlowError(data.message || "Snapshot ophalen mislukt");
+        return;
+      }
+      if (data.snapshotUrl) {
+        window.open(data.snapshotUrl, "_blank");
+        setCameraFlowSuccess("Snapshot succesvol opgehaald — geopend in nieuw tabblad");
+      }
+    } catch {
+      setCameraFlowError("Netwerkfout bij ophalen snapshot");
+    }
   }
 
   // ── Render helpers ────────────────────────────────────────────────────────

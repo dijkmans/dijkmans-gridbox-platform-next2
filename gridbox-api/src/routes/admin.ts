@@ -1077,48 +1077,52 @@ router.get("/admin/boxes/:boxId/camera/snapshot", async (req, res) => {
     const db = getFirestore();
 
     const boxSnap = await db.collection("boxes").where("boxId", "==", boxId).limit(1).get();
-    const boxDoc = !boxSnap.empty
-      ? boxSnap.docs[0]
-      : await db.collection("boxes").doc(boxId).get();
+    const boxDocRef = !boxSnap.empty
+      ? boxSnap.docs[0].ref
+      : (await db.collection("boxes").doc(boxId).get()).exists
+        ? db.collection("boxes").doc(boxId)
+        : null;
 
-    if (!boxDoc.exists) {
+    if (!boxDocRef) {
       return res.status(404).json({ error: "BOX_NOT_FOUND", message: "Box niet gevonden" });
     }
 
-    const data = boxDoc.data() as Record<string, any>;
-    const camera = data?.hardware?.camera;
-    const snapshotUrl = camera?.assignment?.snapshotUrl;
-    const username = camera?.config?.username;
-    const password = camera?.config?.password;
-
-    if (!snapshotUrl) {
-      return res.status(404).json({ error: "NO_CAMERA", message: "Geen camera gekoppeld aan deze box — bevestig eerst de camera-toewijzing" });
+    const boxData = (await boxDocRef.get()).data() as Record<string, any>;
+    if (!boxData?.hardware?.camera?.assignment?.snapshotUrl) {
+      return res.status(404).json({ error: "NO_CAMERA", message: "Geen camera gekoppeld aan deze box" });
     }
 
-    const headers: Record<string, string> = {};
-    if (username && password) {
-      const credentials = Buffer.from(`${username}:${password}`).toString("base64");
-      headers["Authorization"] = `Basic ${credentials}`;
+    // Schrijf pendingCommand — Pi haalt snapshot lokaal op en uploadt naar Storage
+    const cmdRef = boxDocRef.collection("pendingCommand").doc("current");
+    await cmdRef.set({
+      type: "test_snapshot",
+      createdAt: new Date().toISOString(),
+      status: "pending"
+    });
+
+    // Poll max 15s op resultaat van Pi
+    const pollStart = Date.now();
+    while (Date.now() - pollStart < 15000) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const snap = await cmdRef.get();
+      if (!snap.exists) break;
+      const d = snap.data() as Record<string, any>;
+      if (d.status === "done") {
+        return res.json({ ok: true, snapshotUrl: d.snapshotUrl });
+      }
+      if (d.status === "error") {
+        return res.status(502).json({ error: "SNAPSHOT_FAILED", message: d.errorMessage || "Snapshot mislukt" });
+      }
     }
 
-    const cameraRes = await fetch(snapshotUrl, { headers });
+    return res.status(504).json({ error: "PI_TIMEOUT", message: "Pi reageerde niet binnen 15 seconden" });
 
-    if (!cameraRes.ok) {
-      return res.status(502).json({ error: "CAMERA_FETCH_FAILED", message: `Camera gaf HTTP ${cameraRes.status} terug` });
-    }
-
-    const contentType = cameraRes.headers.get("content-type") || "image/jpeg";
-    res.setHeader("Content-Type", contentType);
-    res.setHeader("Cache-Control", "no-store");
-
-    const buffer = await cameraRes.arrayBuffer();
-    return res.send(Buffer.from(buffer));
   } catch (error) {
     const statusCode = getStatusCode(error);
     if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
     if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
     console.error("FOUT in GET /admin/boxes/:boxId/camera/snapshot", error);
-    return res.status(502).json({ error: "SNAPSHOT_FAILED", message: "Kon snapshot niet ophalen" });
+    return res.status(500).json({ error: "SNAPSHOT_FAILED", message: "Snapshot ophalen mislukt" });
   }
 });
 
