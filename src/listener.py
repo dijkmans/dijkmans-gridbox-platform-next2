@@ -36,7 +36,7 @@ from db_manager import get_db
 # - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.68"
+VERSION = "v1.0.69"
 KEY_PATH = "service-account.json"
 BOOTSTRAP_PATH = "box_bootstrap.json"
 RUNTIME_CONFIG_PATH = "runtime_config.json"
@@ -1241,9 +1241,12 @@ def process_pending_command():
                 return
 
             resp = requests.post(
-                f"http://{creds['ip']}/api/dhcp/static",
-                json={"mac": mac, "ip": ip},
-                headers={"Authorization": f"Bearer {token}"},
+                f"http://{creds['ip']}/api/dhcp/static_leases/config",
+                json={"data": {"mac": mac, "ip": ip, "name": "camera-gridbox"}},
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json"
+                },
                 timeout=8
             )
             if resp.ok:
