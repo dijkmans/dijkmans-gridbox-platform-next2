@@ -709,31 +709,52 @@ router.get("/admin/boxes/:boxId/camera-context", async (req, res) => {
       }
     }
 
-    if (routerStatus === "online" || storedLeases.length > 0) {
-      // Verzamel alle geregistreerde camera-MACs op deze site
-      const allBoxesSnap = await db.collection("boxes").get();
-      const registeredMacs = new Set<string>();
-      allBoxesSnap.docs.forEach((doc) => {
-        const d = doc.data() as Record<string, any>;
-        if (siteId && d?.siteId !== siteId) return;
-        const m = d?.hardware?.camera?.assignment?.mac;
-        if (typeof m === "string") registeredMacs.add(m.toLowerCase());
-      });
+    // Gebruik detectedDevices (ARP, elke 30s) als primaire bron
+    // Verrijk met leases (DHCP, elke 120s) voor IP-bevestiging
+    const detectedDevices: Array<{ mac: string; ip: string; seenAt?: string }> =
+      Array.isArray(data?.hardware?.detectedDevices)
+        ? data.hardware.detectedDevices
+        : [];
 
-      // Detecteer eerste lease-MAC die nog niet in Firestore staat voor deze site
-      const unregistered = storedLeases.find((l) => !registeredMacs.has(l.mac));
-      if (unregistered) {
-        detectedMac = unregistered.mac;
-        detectedIp = unregistered.ip;
-      }
+    // Combineer: ARP als basis, lease-IP heeft voorrang als beide beschikbaar
+    const combinedCandidates = new Map<string, { mac: string; ip: string }>();
 
-      // Bepaal leaseStatus voor de al gekoppelde camera (als die er is)
-      if (firestoreCamera?.mac) {
-        const hasLease = storedLeases.some((l) => l.mac === firestoreCamera.mac);
-        leaseStatus = hasLease ? "active" : "not_set";
-      } else {
-        leaseStatus = "not_set";
+    for (const d of detectedDevices) {
+      const mac = d.mac.toLowerCase();
+      combinedCandidates.set(mac, { mac, ip: d.ip });
+    }
+
+    for (const l of storedLeases) {
+      const mac = l.mac.toLowerCase();
+      combinedCandidates.set(mac, { mac, ip: l.ip });
+    }
+
+    // Verzamel geregistreerde camera-MACs op deze site
+    const allBoxesSnap = await db.collection("boxes").get();
+    const registeredMacs = new Set<string>();
+    allBoxesSnap.docs.forEach((doc) => {
+      const d = doc.data() as Record<string, any>;
+      if (siteId && d?.siteId !== siteId) return;
+      const m = d?.hardware?.camera?.assignment?.mac;
+      if (typeof m === "string") registeredMacs.add(m.toLowerCase());
+    });
+
+    // Eerste onbekende kandidaat
+    for (const [mac, candidate] of combinedCandidates) {
+      if (!registeredMacs.has(mac)) {
+        detectedMac = candidate.mac;
+        detectedIp = candidate.ip;
+        break;
       }
+    }
+
+    // leaseStatus voor al gekoppelde camera
+    if (firestoreCamera?.mac) {
+      const hasLease = storedLeases.some((l) => l.mac === firestoreCamera.mac) ||
+                       detectedDevices.some((d) => d.mac.toLowerCase() === firestoreCamera.mac!.toLowerCase());
+      leaseStatus = hasLease ? "active" : "not_set";
+    } else {
+      leaseStatus = "not_set";
     }
 
     if (detectedMac && detectedIp) {
