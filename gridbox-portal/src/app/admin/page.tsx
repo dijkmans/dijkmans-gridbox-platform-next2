@@ -498,14 +498,14 @@ export default function AdminPage() {
       const existing: AdminCameraData | null = cameraRes.ok ? (cameraData.item ?? null) : null;
       setBoxCameras((prev) => ({ ...prev, [boxId]: existing }));
 
-      if (existing?.mac) setNewCameraMac(existing.mac);
-      if (existing?.ip) {
-        setNewCameraIp(existing.ip);
+      if (existing?.assignment?.mac) setNewCameraMac(existing.assignment.mac);
+      if (existing?.assignment?.ip) {
+        setNewCameraIp(existing.assignment.ip);
       } else {
         const nextIpData = nextIpRes.ok ? await nextIpRes.json() : null;
         if (nextIpData?.ip) setNewCameraIp(nextIpData.ip);
       }
-      if (existing?.username) setNewCameraUsername(existing.username);
+      if (existing?.config?.username) setNewCameraUsername(existing.config.username);
     } catch {
       setErrorMessage("Netwerkfout bij ophalen camera");
     } finally {
@@ -1476,7 +1476,7 @@ export default function AdminPage() {
                                         >
                                           Opslaan
                                         </button>
-                                        {boxCameras[box.boxId || box.id]?.ip && (
+                                        {boxCameras[box.boxId || box.id]?.assignment?.ip && (
                                           <button
                                             type="button"
                                             onClick={() => openCameraSnapshot(box.boxId || box.id)}
