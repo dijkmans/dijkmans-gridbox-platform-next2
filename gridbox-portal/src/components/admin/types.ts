@@ -61,11 +61,27 @@ export type AdminBoxItem = {
 };
 
 export type AdminCameraData = {
-  mac?: string | null;
-  ip?: string | null;
-  snapshotUrl?: string | null;
-  username?: string | null;
-  updatedAt?: string | null;
+  config?: {
+    enabled?: boolean | null;
+    username?: string | null;
+    password?: string | null;
+    snapshotIntervalSeconds?: number | null;
+    changeDetectionThreshold?: number | null;
+    postCloseSnapshotDurationSeconds?: number | null;
+    saveCooldownSeconds?: number | null;
+    forceSaveThresholdMultiplier?: number | null;
+  } | null;
+  assignment?: {
+    mac?: string | null;
+    ip?: string | null;
+    snapshotUrl?: string | null;
+    updatedAt?: string | null;
+  } | null;
+  observed?: {
+    detectedMac?: string | null;
+    detectedIp?: string | null;
+    lastSeenAt?: string | null;
+  } | null;
 };
 
 export type AdminSiteItem = {

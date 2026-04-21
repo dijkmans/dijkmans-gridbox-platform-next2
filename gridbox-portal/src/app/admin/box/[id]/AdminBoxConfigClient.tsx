@@ -25,13 +25,24 @@ type CameraContext = {
 };
 
 type BoxCamera = {
-  enabled?: boolean;
-  mac?: string | null;
-  ip?: string | null;
-  username?: string | null;
-  snapshotIntervalSeconds?: number | null;
-  changeDetectionThreshold?: number | null;
-  postCloseSnapshotDurationSeconds?: number | null;
+  config?: {
+    enabled?: boolean | null;
+    username?: string | null;
+    snapshotIntervalSeconds?: number | null;
+    changeDetectionThreshold?: number | null;
+    postCloseSnapshotDurationSeconds?: number | null;
+  } | null;
+  assignment?: {
+    mac?: string | null;
+    ip?: string | null;
+    snapshotUrl?: string | null;
+    updatedAt?: string | null;
+  } | null;
+  observed?: {
+    detectedMac?: string | null;
+    detectedIp?: string | null;
+    lastSeenAt?: string | null;
+  } | null;
 };
 
 type BoxLights = {
@@ -50,7 +61,10 @@ type BoxHardware = {
   lighting?: BoxLights | null;
   shutter?: BoxShutter | null;
   pi?: { mac?: string | null; ip?: string | null } | null;
-  rut?: { ip?: string | null; mac?: string | null; serial?: string | null } | null;
+  rut?: {
+    config?: { ip?: string | null; username?: string | null; password?: string | null; model?: string | null } | null;
+    observed?: { ip?: string | null; mac?: string | null; serial?: string | null; lastSeenAt?: string | null } | null;
+  } | null;
 };
 
 type BoxAutoClose = {
@@ -155,6 +169,7 @@ export default function AdminBoxConfigClient() {
   // RUT router
   const [rutIp, setRutIp] = useState("");
   const [rutMac, setRutMac] = useState<string | null>(null);
+  const [rutSerial, setRutSerial] = useState<string | null>(null);
   const [rutModel, setRutModel] = useState<string | null>(null);
   const [rutUsername, setRutUsername] = useState("");
   const [rutPassword, setRutPassword] = useState("");
@@ -232,15 +247,16 @@ export default function AdminBoxConfigClient() {
       setAutoCloseEnabled(b.autoClose?.enabled ?? false);
       setAutoCloseDelay(numField(b.autoClose?.delaySeconds));
 
-      const cam = b.hardware?.camera;
-      setCameraEnabled(cam?.enabled ?? false);
-      setCameraIp(cam?.ip ?? "");
-      setCameraMac(cam?.mac ?? null);
-      setCameraUsername(cam?.username ?? "");
+      const camConfig = b.hardware?.camera?.config;
+      const camAssignment = b.hardware?.camera?.assignment;
+      setCameraEnabled(camConfig?.enabled ?? false);
+      setCameraIp(camAssignment?.ip ?? "");
+      setCameraMac(camAssignment?.mac ?? null);
+      setCameraUsername(camConfig?.username ?? "");
       setCameraPassword("");
-      setCameraSnapshotInterval(numField(cam?.snapshotIntervalSeconds));
-      setCameraChangeThreshold(numField(cam?.changeDetectionThreshold));
-      setCameraPostCloseDuration(numField(cam?.postCloseSnapshotDurationSeconds));
+      setCameraSnapshotInterval(numField(camConfig?.snapshotIntervalSeconds));
+      setCameraChangeThreshold(numField(camConfig?.changeDetectionThreshold));
+      setCameraPostCloseDuration(numField(camConfig?.postCloseSnapshotDurationSeconds));
 
       const lights = b.hardware?.lighting as BoxLights | null | undefined;
       setLightsOnWhenOpen(lights?.onWhenOpen ?? false);
@@ -250,12 +266,14 @@ export default function AdminBoxConfigClient() {
       setShutterClose(numField(shutter?.closeDurationSeconds));
       setShutterOpen(numField(shutter?.openDurationSeconds));
 
-      const rut = (b as any).rut as { ip?: string; mac?: string; model?: string; username?: string; password?: string } | null | undefined;
-      setRutIp(rut?.ip ?? "");
-      setRutMac(rut?.mac ?? null);
-      setRutModel(rut?.model ?? null);
-      setRutUsername(rut?.username ?? "");
+      const rutConfig = b.hardware?.rut?.config;
+      const rutObserved = b.hardware?.rut?.observed;
+      setRutIp(rutConfig?.ip ?? "");
+      setRutModel(rutConfig?.model ?? null);
+      setRutUsername(rutConfig?.username ?? "");
       setRutPassword("");
+      setRutMac(rutObserved?.mac ?? null);
+      setRutSerial(rutObserved?.serial ?? null);
 
       setDisplayName(b.displayName ?? "");
 
@@ -289,25 +307,6 @@ export default function AdminBoxConfigClient() {
         return;
       }
 
-      // Persist camera ip/username/password via existing camera endpoint if changed
-      if (cameraIp && box?.hardware?.camera?.mac) {
-        const camRes = await fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/camera`), {
-          method: "PUT",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            mac: box.hardware.camera.mac,
-            ip: cameraIp,
-            username: cameraUsername,
-            ...(cameraPassword ? { password: cameraPassword } : {})
-          })
-        });
-        if (!camRes.ok) {
-          const err = await camRes.json().catch(() => ({}));
-          setErrorMessage((err as { message?: string }).message || "Fout bij opslaan camera");
-          return;
-        }
-      }
-
       const configRes = await fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/config`), {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -315,23 +314,28 @@ export default function AdminBoxConfigClient() {
           displayName,
           siteId: selectedSiteId,
           customerId: selectedCustomerId,
-          rut: {
-            ip: rutIp,
-            mac: rutMac,
-            model: rutModel,
-            username: rutUsername,
-            ...(rutPassword ? { password: rutPassword } : {})
-          },
           autoClose: {
             enabled: autoCloseEnabled,
             delaySeconds: parseNum(autoCloseDelay)
           },
           hardware: {
+            rut: {
+              config: {
+                ip: rutIp,
+                model: rutModel,
+                username: rutUsername,
+                ...(rutPassword ? { password: rutPassword } : {})
+              }
+            },
             camera: {
-              enabled: cameraEnabled,
-              snapshotIntervalSeconds: parseNum(cameraSnapshotInterval),
-              changeDetectionThreshold: parseNum(cameraChangeThreshold),
-              postCloseSnapshotDurationSeconds: parseNum(cameraPostCloseDuration)
+              config: {
+                enabled: cameraEnabled,
+                snapshotIntervalSeconds: parseNum(cameraSnapshotInterval),
+                changeDetectionThreshold: parseNum(cameraChangeThreshold),
+                postCloseSnapshotDurationSeconds: parseNum(cameraPostCloseDuration),
+                username: cameraUsername,
+                ...(cameraPassword ? { password: cameraPassword } : {})
+              }
             },
             lighting: {
               onWhenOpen: lightsOnWhenOpen,
@@ -768,11 +772,8 @@ export default function AdminBoxConfigClient() {
               <FieldRow label="IP-adres RUT">
                 <TextInput value={rutIp} onChange={setRutIp} placeholder="192.168.10.1" />
               </FieldRow>
-              <FieldRow label="MAC-adres RUT">
-                <TextInput value={rutMac ?? "—"} disabled />
-              </FieldRow>
               <FieldRow label="Model">
-                <TextInput value={rutModel ?? "—"} disabled />
+                <TextInput value={rutModel ?? ""} onChange={(v) => setRutModel(v || null)} placeholder="RUT241" />
               </FieldRow>
               <FieldRow label="Gebruikersnaam">
                 <TextInput value={rutUsername} onChange={setRutUsername} placeholder="admin" />
@@ -784,6 +785,12 @@ export default function AdminBoxConfigClient() {
                   onChange={setRutPassword}
                   placeholder="Laat leeg om ongewijzigd te laten"
                 />
+              </FieldRow>
+              <FieldRow label="Gedetecteerde MAC">
+                <TextInput value={rutMac ?? "—"} disabled />
+              </FieldRow>
+              <FieldRow label="Gedetecteerd serienummer">
+                <TextInput value={rutSerial ?? "—"} disabled />
               </FieldRow>
             </div>
           </div>
@@ -821,9 +828,9 @@ export default function AdminBoxConfigClient() {
 
         {/* C — NETWERK & INFO */}
         <SectionCard title="Netwerk & info">
-          <KVRow label="IP RUT" value={box?.rutIp ?? box?.gatewayIp} />
-          <KVRow label="MAC RUT" value={box?.rutMac ?? box?.gatewayMac} />
-          <KVRow label="Serial RUT" value={box?.rutSerial} />
+          <KVRow label="IP RUT (config)" value={box?.rutIp ?? box?.gatewayIp} />
+          <KVRow label="MAC RUT (gedetecteerd)" value={box?.rutMac ?? box?.gatewayMac} />
+          <KVRow label="Serial RUT (gedetecteerd)" value={box?.rutSerial} />
           <KVRow label="MAC Pi" value={box?.piMac} />
           <KVRow label="IP Pi" value={box?.piIp} />
           <KVRow label="Software versie Pi" value={box?.scriptVersion} />
