@@ -1471,24 +1471,22 @@ def update_pi_status():
         nu = now_dt()
 
         software_update = {
-            "latestGithub": latest_github,
             "versionRaspberry": version_raspberry,
             "targetVersion": target_version,
-            "deploymentMode": deployment_mode,
             "deploymentStatus": deployment_status,
             "softwareUpdateRequested": software_update_requested,
             "updateStatus": update_status,
-            "githubTagPattern": sw_cfg.get("githubTagPattern", get_github_tag_pattern()),
-            "serviceName": sw_cfg.get("serviceName", "gridbox.service"),
-            "pipInstallOnDeploy": sw_cfg.get("pipInstallOnDeploy", True),
-            "restartDelaySeconds": sw_cfg.get("restartDelaySeconds", 2),
             "gitCommitLocal": get_running_commit(),
             "lastHeartbeatIso": nu.isoformat(),
             "lastHeartbeatUnix": int(nu.timestamp()),
+            "lastError": last_error
+        }
+
+        runtime_update = {
             "piModel": read_pi_model(),
             "platform": platform.platform(),
             "pythonVersion": platform.python_version(),
-            "lastError": last_error
+            "serviceName": sw_cfg.get("serviceName", "gridbox.service"),
         }
 
         backend_heartbeat_ok = try_backend_heartbeat(version_raspberry, software_update)
@@ -1498,6 +1496,7 @@ def update_pi_status():
 
         box_doc_ref.set({
             "software": software_update,
+            "runtime": runtime_update,
             "status": "online",
             "updatedAt": nu.isoformat(),
             "updatedBy": f"gridbox-service-{VERSION}"
@@ -1624,7 +1623,6 @@ def maybe_process_software_request():
             "updateStatus": "APPLYING",
             "deploymentStatus": "MISMATCH",
             "lastError": None,
-            "lastRequestedTargetVersion": target_version,
             "lastUpdateAttemptAt": now_iso()
         })
 
@@ -1641,7 +1639,6 @@ def maybe_process_software_request():
             "updateStatus": "RESTARTING",
             "deploymentStatus": "MISMATCH",
             "lastError": None,
-            "lastPreparedTargetVersion": target_version,
             "lastRestartRequestedAt": now_iso()
         })
 

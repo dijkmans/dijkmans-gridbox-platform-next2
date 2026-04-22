@@ -94,7 +94,6 @@ type BoxDetail = {
   software?: {
     versionRaspberry?: string | null;
     targetVersion?: string | null;
-    latestGithub?: string | null;
     deploymentStatus?: string | null;
     updateStatus?: string | null;
     lastHeartbeatIso?: string | null;
@@ -639,13 +638,12 @@ export default function AdminBoxConfigClient() {
 
   const isOnline       = box?.status === "online";
   const piVersion      = box?.software?.versionRaspberry ?? box?.scriptVersion ?? "—";
-  const latestVersion  = box?.software?.latestGithub ?? "—";
   const targetVersion  = box?.software?.targetVersion ?? "—";
   const deployStatus   = box?.software?.deploymentStatus;
   const lastHeartbeat  = box?.software?.lastHeartbeatIso ?? box?.updatedAt;
   const boxIsOpen      = box?.state?.boxIsOpen;
   const lastActionSrc  = box?.state?.lastActionSource;
-  const versionOk      = deployStatus === "ON_TARGET" || (piVersion !== "—" && piVersion === latestVersion);
+  const versionOk      = deployStatus === "ON_TARGET" || (piVersion !== "—" && piVersion === targetVersion);
 
   const rutColor: "green" | "red" | "gray" =
     cameraContext?.routerStatus === "online" ? "green" :
@@ -1086,7 +1084,7 @@ export default function AdminBoxConfigClient() {
             badge={
               versionOk
                 ? <Pill color="green">✓ Up to date</Pill>
-                : piVersion !== "—" && latestVersion !== "—"
+                : piVersion !== "—" && targetVersion !== "—"
                   ? <Pill color="amber">Update beschikbaar</Pill>
                   : undefined
             }
@@ -1099,8 +1097,8 @@ export default function AdminBoxConfigClient() {
               </div>
               <div className="text-center text-xl text-slate-300">→</div>
               <div className={`border rounded-2xl p-4 text-center ${versionOk ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-200"}`}>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">Beschikbaar (GitHub)</p>
-                <p className={`text-xl font-bold ${versionOk ? "text-emerald-600" : "text-slate-900"}`}>{latestVersion}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">Doelversie (GitHub)</p>
+                <p className={`text-xl font-bold ${versionOk ? "text-emerald-600" : "text-slate-900"}`}>{targetVersion}</p>
               </div>
             </div>
 
