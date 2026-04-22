@@ -1140,7 +1140,7 @@ router.post("/admin/boxes/:boxId/software/update", async (req, res) => {
 
     // Haal de laatste GitHub release tag op
     const ghRes = await fetch(
-      "https://api.github.com/repos/dijkmans/dijkmans-gridbox-platform-next2/releases/latest",
+      "https://api.github.com/repos/dijkmans/dijkmans-gridbox-platform-next2/tags",
       { headers: { "User-Agent": "gridbox-api" } }
     );
     if (!ghRes.ok) {
@@ -1148,10 +1148,10 @@ router.post("/admin/boxes/:boxId/software/update", async (req, res) => {
       return res.status(502).json({ error: "GITHUB_ERROR", message: `GitHub API antwoordde ${ghRes.status}` });
     }
 
-    const ghData = await ghRes.json() as { tag_name?: string };
-    const targetVersion = ghData.tag_name;
+    const ghData = await ghRes.json() as Array<{ name: string }>;
+    const targetVersion = ghData?.[0]?.name;
     if (!targetVersion) {
-      return res.status(502).json({ error: "GITHUB_ERROR", message: "Geen tag_name in GitHub response" });
+      return res.status(502).json({ error: "GITHUB_ERROR", message: "Geen tags gevonden in GitHub response" });
     }
 
     await boxRef.set(

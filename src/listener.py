@@ -1521,9 +1521,10 @@ def update_pi_status():
             rut_config = ((box_data_fresh.get("hardware") or {}).get("rut") or {}).get("config") or {}
             rut_observed_fresh = ((box_data_fresh.get("hardware") or {}).get("rut") or {}).get("observed") or {}
 
-            if not rut_config.get("ip"):
+            current_rut_ip = rut_config.get("ip")
+            if not current_rut_ip or current_rut_ip != gateway_ip:
                 hw_update["hardware.rut.config.ip"] = gateway_ip
-                log(f"INFO: rut.config.ip automatisch ingesteld op {gateway_ip}")
+                log(f"INFO: rut.config.ip bijgewerkt van {current_rut_ip} naar {gateway_ip}")
 
             if not rut_config.get("username"):
                 hw_update["hardware.rut.config.username"] = "root"
