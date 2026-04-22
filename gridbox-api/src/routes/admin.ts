@@ -519,12 +519,21 @@ router.get("/admin/boxes/:boxId", async (req, res) => {
 
       scriptVersion: typeof data.scriptVersion === "string"
         ? data.scriptVersion
-        : typeof data.software?.currentVersion === "string"
-          ? data.software.currentVersion
+        : typeof data.software?.versionRaspberry === "string"
+          ? data.software.versionRaspberry
           : null,
       lastProvisionedAt: data.lastProvisionedAt
         || data.state?.lastHeartbeatAt
-        || null
+        || null,
+      status: data.status ?? null,
+      state: data.state ?? null,
+      software: {
+        versionRaspberry: data.software?.versionRaspberry ?? null,
+        targetVersion: data.software?.targetVersion ?? null,
+        updateStatus: data.software?.updateStatus ?? null,
+        deploymentStatus: data.software?.deploymentStatus ?? null,
+        lastHeartbeatIso: data.software?.lastHeartbeatIso ?? null,
+      }
     };
 
     console.log("ADMIN GET BOX", { boxId, user: context.portalUser.email });
