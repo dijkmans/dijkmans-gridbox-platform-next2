@@ -91,7 +91,8 @@ if platform.system() != "Windows":
         try:
             from gpiozero.pins.lgpio import LGPIOFactory
             BUTTON_FACTORY = LGPIOFactory()
-        except Exception:
+        except Exception as lgpio_err:
+            log(f"[WARN] lgpio niet beschikbaar, fallback naar standaard pin factory: {lgpio_err}")
             BUTTON_FACTORY = None
     except Exception:
         GPIO_AVAILABLE = False
@@ -2116,7 +2117,9 @@ if platform.system() != "Windows" and GPIO_AVAILABLE:
         btn.when_pressed = handle_physical_button
         log(f"ÃƒÂ°Ã…Â¸Ã¢â¬ÂÃ‹Å Slimme toggle-schakelaar actief op GPIO {CLOSE_BUTTON_PIN}")
     except Exception as e:
-        log(f"ÃƒÂ¢Ã…Â¡ÃÂ ÃƒÂ¯ÃÂ¸ÃÂ Schakelaar fout: {e}")
+        log(f"[ERROR] Fysieke knop kon NIET geregistreerd worden op GPIO {CLOSE_BUTTON_PIN}: {e}")
+        log("[ERROR] Mogelijke oorzaak: service-gebruiker zit niet in de gpio/i2c groep.")
+        log("[ERROR] Fix: sudo usermod -a -G gpio,i2c pi  -- daarna service herstarten.")
 
 
 # =========================================================
