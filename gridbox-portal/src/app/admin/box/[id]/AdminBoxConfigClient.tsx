@@ -973,13 +973,19 @@ export default function AdminBoxConfigClient() {
           >
             <SubLabel>Configuratie</SubLabel>
             <FieldRow label="IP-adres RUT">
-              <TextInput value={rutIp} onChange={setRutIp} placeholder="192.168.10.1" />
+              <div className="flex items-center gap-2">
+                <TextInput value={rutIp || "—"} disabled />
+                <span className="text-xs text-slate-400 shrink-0">automatisch</span>
+              </div>
             </FieldRow>
             <FieldRow label="Model">
               <TextInput value={rutModel ?? ""} onChange={(v) => setRutModel(v || null)} placeholder="RUT241" />
             </FieldRow>
             <FieldRow label="Gebruikersnaam">
-              <TextInput value={rutUsername} onChange={setRutUsername} placeholder="admin" />
+              <div className="flex items-center gap-2">
+                <TextInput value={rutUsername || "root"} disabled />
+                <span className="text-xs text-slate-400 shrink-0">automatisch</span>
+              </div>
             </FieldRow>
             <FieldRow label="Wachtwoord">
               <TextInput type="password" value={rutPassword} onChange={setRutPassword} placeholder="Laat leeg om ongewijzigd te laten" />

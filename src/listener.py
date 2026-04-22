@@ -1129,13 +1129,29 @@ def update_detected_devices():
 
 
 def get_box_rut_credentials():
-    """Haalt RUT241-credentials op uit boxes/{boxId}.hardware.rut.config."""
+    """Haalt RUT241-credentials op uit boxes/{boxId}.hardware.rut.config.
+    Als IP ontbreekt: valt terug op het automatisch gedetecteerde gateway IP.
+    Als username ontbreekt: gebruikt 'root' als Teltonika-standaard.
+    Password blijft altijd verplicht.
+    """
     try:
         box_data = box_doc_ref.get().to_dict() or {}
         config = ((box_data.get("hardware") or {}).get("rut") or {}).get("config") or {}
-        if not config.get("ip") or not config.get("username") or not config.get("password"):
+        observed = ((box_data.get("hardware") or {}).get("rut") or {}).get("observed") or {}
+
+        ip = config.get("ip") or observed.get("ip") or get_gateway_ip()
+        if not ip:
+            log("WARN: get_box_rut_credentials: geen RUT IP beschikbaar")
             return None
-        return {"ip": config["ip"], "username": config["username"], "password": config["password"]}
+
+        username = config.get("username") or "root"
+
+        password = config.get("password")
+        if not password:
+            log("WARN: get_box_rut_credentials: geen wachtwoord geconfigureerd voor RUT241")
+            return None
+
+        return {"ip": ip, "username": username, "password": password}
     except Exception as e:
         log(f"WARN: get_box_rut_credentials: {e}")
         return None
@@ -1187,6 +1203,40 @@ def fetch_rut241_leases(ip, username, password):
     except Exception as e:
         log(f"WARN: fetch_rut241_leases fout: {e}")
         return []
+
+
+def _herstel_camera_lease_na_routerwissel(box_data: dict, gateway_ip: str, rut_config: dict) -> None:
+    """Herstelt de camera static lease op een nieuwe RUT241 na routerwissel."""
+    try:
+        cam_assignment = ((box_data.get("hardware") or {}).get("camera") or {}).get("assignment") or {}
+        cam_mac = cam_assignment.get("mac")
+        cam_ip = cam_assignment.get("ip")
+
+        if not cam_mac or not cam_ip:
+            log("INFO: _herstel_camera_lease: geen camera assignment — niets te herstellen")
+            return
+
+        creds = get_box_rut_credentials()
+        if not creds:
+            log("WARN: _herstel_camera_lease: geen RUT credentials")
+            return
+
+        log(f"INFO: _herstel_camera_lease: lease herstellen voor camera {cam_mac} -> {cam_ip}")
+        set_rut241_static_lease_via_ssh(
+            ip=creds["ip"],
+            username=creds["username"],
+            password=creds["password"],
+            mac=cam_mac,
+            lease_ip=cam_ip,
+            hostname="camera-gridbox"
+        )
+        log("INFO: _herstel_camera_lease: static lease hersteld na routerwissel")
+        box_doc_ref.update({
+            "hardware.rut.observed.leaseRestoredAt": now_iso(),
+            "hardware.rut.observed.leaseRestoredReason": "routerwissel"
+        })
+    except Exception as e:
+        log(f"WARN: _herstel_camera_lease fout: {type(e).__name__}: {e}")
 
 
 def set_rut241_static_lease_via_ssh(ip, username, password, mac, lease_ip, hostname="camera-gridbox"):
@@ -1466,6 +1516,27 @@ def update_pi_status():
             gateway_mac = get_gateway_mac_fallback()
             if gateway_mac:
                 hw_update["hardware.rut.observed.mac"] = gateway_mac
+
+            # Auto-sync rut.config: vul IP en username automatisch in als die ontbreken
+            box_data_fresh = box_doc_ref.get().to_dict() or {}
+            rut_config = ((box_data_fresh.get("hardware") or {}).get("rut") or {}).get("config") or {}
+            rut_observed_fresh = ((box_data_fresh.get("hardware") or {}).get("rut") or {}).get("observed") or {}
+
+            if not rut_config.get("ip"):
+                hw_update["hardware.rut.config.ip"] = gateway_ip
+                log(f"INFO: rut.config.ip automatisch ingesteld op {gateway_ip}")
+
+            if not rut_config.get("username"):
+                hw_update["hardware.rut.config.username"] = "root"
+                log("INFO: rut.config.username automatisch ingesteld op root")
+
+            # Detecteer routerwissel via serienummer
+            if gateway_serial:
+                vorig_serial = rut_observed_fresh.get("serial")
+                nieuwe_router = vorig_serial and vorig_serial != gateway_serial
+                if nieuwe_router:
+                    log(f"INFO: Nieuwe RUT241 gedetecteerd! Oud serial: {vorig_serial} -> Nieuw: {gateway_serial}")
+                    _herstel_camera_lease_na_routerwissel(box_data_fresh, gateway_ip, rut_config)
 
         # Haal DHCP leases op van RUT241 en schrijf naar Firestore (voor camera-detectie via backend)
         try:
