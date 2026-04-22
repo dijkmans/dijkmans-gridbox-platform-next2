@@ -1126,6 +1126,57 @@ router.get("/admin/boxes/:boxId/camera/snapshot", async (req, res) => {
   }
 });
 
+router.post("/admin/boxes/:boxId/software/update", async (req, res) => {
+  try {
+    const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
+    const { boxId } = req.params as { boxId: string };
+    const db = getFirestore();
+
+    const boxRef = db.collection("boxes").doc(boxId);
+    const boxSnap = await boxRef.get();
+    if (!boxSnap.exists) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Box niet gevonden" });
+    }
+
+    // Haal de laatste GitHub release tag op
+    const ghRes = await fetch(
+      "https://api.github.com/repos/dijkmans/dijkmans-gridbox-platform-next2/releases/latest",
+      { headers: { "User-Agent": "gridbox-api" } }
+    );
+    if (!ghRes.ok) {
+      console.error(`software/update: GitHub API fout ${ghRes.status} voor ${boxId}`);
+      return res.status(502).json({ error: "GITHUB_ERROR", message: `GitHub API antwoordde ${ghRes.status}` });
+    }
+
+    const ghData = await ghRes.json() as { tag_name?: string };
+    const targetVersion = ghData.tag_name;
+    if (!targetVersion) {
+      return res.status(502).json({ error: "GITHUB_ERROR", message: "Geen tag_name in GitHub response" });
+    }
+
+    await boxRef.set(
+      {
+        software: {
+          targetVersion,
+          softwareUpdateRequested: true,
+        },
+        updatedAt: new Date().toISOString(),
+        updatedBy: `admin:${context.portalUser.email}`,
+      },
+      { merge: true }
+    );
+
+    console.log(`software/update: ${boxId} → targetVersion=${targetVersion} door ${context.portalUser.email}`);
+    return res.json({ ok: true, targetVersion });
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen admin-toegang" });
+    console.error("FOUT in POST /admin/boxes/:boxId/software/update", error);
+    return res.status(500).json({ error: "UPDATE_FAILED", message: "Software update starten mislukt" });
+  }
+});
+
 router.get("/admin/roles", async (req, res) => {
   try {
     const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
