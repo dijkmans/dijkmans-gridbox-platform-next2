@@ -47,6 +47,12 @@ type BoxSoftware = {
   lastHeartbeatUnix?: number | null;
 };
 
+type LocalRutSummary = {
+  rutIp: string | null;
+  rutMac: string | null;
+  rutSerial: string | null;
+};
+
 type OperationsBoxItem = {
   id: string;
   boxId?: string;
@@ -58,6 +64,7 @@ type OperationsBoxItem = {
   gatewayMac?: string | null;
   software?: BoxSoftware | null;
   rms: RmsSummary | null;
+  localRut?: LocalRutSummary | null;
   piConnect?: { deviceId: string; online: boolean | null; lastSeen?: string | null; clientVersion?: string | null } | null;
   hardware?: {
     camera?: {
@@ -77,6 +84,7 @@ type OperationsBoxItem = {
 type RouterGroup = {
   key: string;
   rms: RmsSummary | null;
+  localRut: LocalRutSummary | null;
   boxes: OperationsBoxItem[];
 };
 
@@ -125,15 +133,30 @@ function isCreditExpiringSoon(dateStr: string | null): boolean {
 function buildGroups(boxes: OperationsBoxItem[]): RouterGroup[] {
   const map = new Map<string, RouterGroup>();
   for (const box of boxes) {
-    const key = box.rms?.rmsDeviceId != null ? String(box.rms.rmsDeviceId) : "__unknown__";
+    // Groepeer eerst op RMS device ID, daarna op lokale RUT serial/mac/ip als fallback
+    let key: string;
+    if (box.rms?.rmsDeviceId != null) {
+      key = `rms-${box.rms.rmsDeviceId}`;
+    } else if (box.localRut?.rutSerial) {
+      key = `serial-${box.localRut.rutSerial}`;
+    } else if (box.localRut?.rutMac) {
+      key = `mac-${box.localRut.rutMac}`;
+    } else if (box.localRut?.rutIp) {
+      key = `ip-${box.localRut.rutIp}`;
+    } else {
+      key = "__unknown__";
+    }
     if (!map.has(key)) {
-      map.set(key, { key, rms: box.rms, boxes: [] });
+      map.set(key, { key, rms: box.rms, localRut: box.localRut ?? null, boxes: [] });
     }
     map.get(key)!.boxes.push(box);
   }
   return Array.from(map.values()).sort((a, b) => {
     if (a.key === "__unknown__") return 1;
     if (b.key === "__unknown__") return -1;
+    // RMS-groepen voor niet-RMS-groepen
+    if (a.key.startsWith("rms-") && !b.key.startsWith("rms-")) return -1;
+    if (!a.key.startsWith("rms-") && b.key.startsWith("rms-")) return 1;
     return (a.rms?.rmsDeviceId ?? 0) - (b.rms?.rmsDeviceId ?? 0);
   });
 }
@@ -395,7 +418,13 @@ export default function OperationsPage() {
               const creditDays = creditDaysRemaining(rms?.creditExpireDate ?? null);
               const creditWarn = creditDays !== null && creditDays <= 30;
               const rmsOnline = rms?.rmsStatus === "online";
-              const routerTitle = rms?.rmsName || (rms?.rmsDeviceId ? `Router ${rms.rmsDeviceId}` : "Onbekende router");
+              const localRut = group.localRut;
+              const routerTitle = rms?.rmsName
+                || (rms?.rmsDeviceId ? `Router ${rms.rmsDeviceId}` : null)
+                || (localRut?.rutSerial ? `RUT241 – ${localRut.rutSerial}` : null)
+                || (localRut?.rutIp ? `RUT241 – ${localRut.rutIp}` : null)
+                || (localRut?.rutMac ? `RUT241 – ${localRut.rutMac}` : null)
+                || "Onbekende router";
 
               return (
                 <div key={group.key}>
@@ -479,7 +508,35 @@ export default function OperationsPage() {
                         )}
                       </div>
                     ) : (
-                      <div className="text-xs text-slate-400">Geen RMS-data beschikbaar</div>
+                      <div className="space-y-2">
+                        {localRut && (localRut.rutIp || localRut.rutMac || localRut.rutSerial) ? (
+                          <div className="grid grid-cols-3 gap-x-4 gap-y-2 text-sm">
+                            {localRut.rutSerial && (
+                              <div>
+                                <div className="text-xs text-slate-500">Serial</div>
+                                <div className="font-semibold text-slate-900 text-xs">{localRut.rutSerial}</div>
+                              </div>
+                            )}
+                            {localRut.rutIp && (
+                              <div>
+                                <div className="text-xs text-slate-500">IP</div>
+                                <div className="font-semibold text-slate-900 text-xs">{localRut.rutIp}</div>
+                              </div>
+                            )}
+                            {localRut.rutMac && (
+                              <div>
+                                <div className="text-xs text-slate-500">MAC</div>
+                                <div className="font-semibold text-slate-900 text-xs">{localRut.rutMac}</div>
+                              </div>
+                            )}
+                            <div className="col-span-3 mt-1 text-xs text-amber-600 font-medium">
+                              ⚠ Lokale RUT-data beschikbaar maar nog niet gekoppeld aan RMS
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-slate-400">Geen RMS-data beschikbaar</div>
+                        )}
+                      </div>
                     )}
                   </div>
 

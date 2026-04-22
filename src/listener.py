@@ -1366,7 +1366,8 @@ def try_backend_heartbeat(version_raspberry, software_update):
     gateway_ip = get_gateway_ip()
     if gateway_ip:
         ping_gateway(gateway_ip)
-    gateway_mac = get_gateway_mac()
+    # Probeer eerst de snelle methode, daarna de robuustere fallback
+    gateway_mac = get_gateway_mac() or get_gateway_mac_fallback()
     if gateway_mac:
         payload["gatewayMac"] = gateway_mac
 

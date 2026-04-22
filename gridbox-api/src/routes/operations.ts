@@ -100,6 +100,24 @@ function extractRmsSummary(rms: Record<string, unknown>) {
   };
 }
 
+// Extraheert de lokaal bekende RUT-info als RMS-linking ontbreekt
+function extractLocalRutSummary(box: Record<string, unknown>): {
+  rutIp: string | null;
+  rutMac: string | null;
+  rutSerial: string | null;
+} {
+  const hardware = (box["hardware"] ?? {}) as Record<string, unknown>;
+  const rut = (hardware["rut"] ?? {}) as Record<string, unknown>;
+  const observed = (rut["observed"] ?? {}) as Record<string, unknown>;
+  const config = (rut["config"] ?? {}) as Record<string, unknown>;
+  return {
+    rutIp: (typeof observed["ip"] === "string" ? observed["ip"] : null)
+        ?? (typeof config["ip"] === "string" ? config["ip"] : null),
+    rutMac: typeof observed["mac"] === "string" ? observed["mac"] : null,
+    rutSerial: typeof observed["serial"] === "string" ? observed["serial"] : null,
+  };
+}
+
 type RpiConnectDevice = {
   id: string;
   online: boolean;
@@ -146,6 +164,8 @@ function resolveRmsDevice(
   index: RmsIndex
 ): Record<string, unknown> | null {
   const hardware = box["hardware"] as Record<string, unknown> | null | undefined;
+
+  // 1. Probeer via hardware.rmsDeviceId (gezet door tryLinkRmsDevice)
   const rmsDeviceIdRaw = hardware?.["rmsDeviceId"];
   const rmsDeviceId = typeof rmsDeviceIdRaw === "number"
     ? rmsDeviceIdRaw
@@ -157,16 +177,28 @@ function resolveRmsDevice(
     return index.byId.get(rmsDeviceId)!;
   }
 
+  // 2. Bouw een lijst van alle mogelijke MAC-adressen voor deze box
   const software = box["software"] as Record<string, unknown> | undefined;
-  const gatewayMac =
-    typeof box["gatewayMac"] === "string" && box["gatewayMac"]
-      ? box["gatewayMac"]
-      : typeof software?.["gatewayMac"] === "string" && software["gatewayMac"]
-        ? software["gatewayMac"] as string
-        : null;
+  const rut = (hardware?.["rut"] ?? {}) as Record<string, unknown>;
+  const rutObserved = (rut["observed"] ?? {}) as Record<string, unknown>;
 
-  if (gatewayMac) {
-    const normalized = normalizeMac(gatewayMac);
+  const macCandidates: string[] = [];
+
+  // top-level gatewayMac (gezet door heartbeat)
+  if (typeof box["gatewayMac"] === "string" && box["gatewayMac"])
+    macCandidates.push(box["gatewayMac"] as string);
+  // software.gatewayMac (fallback heartbeat path)
+  if (typeof software?.["gatewayMac"] === "string" && software["gatewayMac"])
+    macCandidates.push(software["gatewayMac"] as string);
+  // hardware.rut.observed.mac (gezet door listener.py hardware-detectie)
+  if (typeof rutObserved["mac"] === "string" && rutObserved["mac"])
+    macCandidates.push(rutObserved["mac"] as string);
+  // hardware.rmsDeviceMac (gezet door een eerdere succesvolle tryLinkRmsDevice)
+  if (typeof hardware?.["rmsDeviceMac"] === "string" && hardware["rmsDeviceMac"])
+    macCandidates.push(hardware["rmsDeviceMac"] as string);
+
+  for (const mac of macCandidates) {
+    const normalized = normalizeMac(mac);
     if (index.byMac.has(normalized)) {
       return index.byMac.get(normalized)!;
     }
@@ -203,10 +235,12 @@ router.get("/operations/boxes", async (req, res) => {
         ? rpiConnectDevices.get(piConnectDeviceId) ?? null
         : null;
 
+      const localRut = extractLocalRutSummary(box);
       return {
         ...box,
         lastHeartbeatAt,
         rms: rmsData ? extractRmsSummary(rmsData) : null,
+        localRut,
         piConnect: piConnectDevice
           ? {
               deviceId: piConnectDevice.id,
