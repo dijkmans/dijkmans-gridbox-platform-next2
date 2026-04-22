@@ -226,8 +226,13 @@ router.get("/operations/boxes", async (req, res) => {
 
     const items = boxes.map((box) => {
       const rmsData = resolveRmsDevice(box, rmsIndex);
-      const software = box["software"] as Record<string, unknown> | undefined;
-      const lastHeartbeatAt = software?.["lastHeartbeatIso"] ?? box["lastHeartbeatAt"] ?? null;
+      const rawSoftware = box["software"] as Record<string, unknown> | undefined;
+      const software: Record<string, unknown> = {
+        ...(rawSoftware ?? {}),
+        currentVersion: rawSoftware?.["currentVersion"] ?? rawSoftware?.["versionRaspberry"] ?? null,
+        updateStatus: rawSoftware?.["deploymentStatus"] ?? rawSoftware?.["updateStatus"] ?? null,
+      };
+      const lastHeartbeatAt = rawSoftware?.["lastHeartbeatIso"] ?? box["lastHeartbeatAt"] ?? null;
 
       const hardware = box["hardware"] as Record<string, unknown> | null | undefined;
       const piConnectDeviceId = (hardware?.["piConnect"] as Record<string, unknown> | undefined)?.["deviceId"];
@@ -238,6 +243,7 @@ router.get("/operations/boxes", async (req, res) => {
       const localRut = extractLocalRutSummary(box);
       return {
         ...box,
+        software,
         lastHeartbeatAt,
         rms: rmsData ? extractRmsSummary(rmsData) : null,
         localRut,

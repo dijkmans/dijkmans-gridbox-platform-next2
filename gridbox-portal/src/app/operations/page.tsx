@@ -30,7 +30,6 @@ type RmsSummary = {
 
 type BoxSoftware = {
   currentVersion?: string | null;
-  versionRaspberry?: string | null;
   targetVersion?: string | null;
   updateStatus?: string | null;
   deploymentStatus?: string | null;
@@ -175,7 +174,7 @@ function DiagnosePanel({ sw, hardware, onClose }: { sw: BoxSoftware; hardware?: 
       <div className="space-y-0">
         <div className={row}>
           <span className={label}>Huidige versie</span>
-          <span className={mono}>{sw.currentVersion || sw.versionRaspberry || "-"}</span>
+          <span className={mono}>{sw.currentVersion || "-"}</span>
         </div>
         <div className={row}>
           <span className={label}>Target versie</span>
@@ -547,7 +546,7 @@ export default function OperationsPage() {
                       {group.boxes.map((box) => {
                         const piOnline = isPiOnline(box.lastHeartbeatAt);
                         const sw = box.software ?? {};
-                        const version = sw.currentVersion || sw.versionRaspberry || "-";
+                        const version = sw.currentVersion || "-";
                         const updateStatus = sw.updateStatus;
                         const hasError = !!(sw.lastError);
                         const isOpen = diagnoseOpen[box.id] ?? false;
