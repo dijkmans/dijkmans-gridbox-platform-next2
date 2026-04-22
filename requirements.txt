@@ -1,3 +1,5 @@
 firebase-admin
 Pillow
 paramiko
+gpiozero
+lgpio

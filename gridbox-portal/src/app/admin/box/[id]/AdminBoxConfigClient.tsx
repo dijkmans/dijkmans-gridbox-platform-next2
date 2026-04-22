@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, type ReactNode } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/firebase";
@@ -60,7 +60,7 @@ type BoxHardware = {
   lights?: BoxLights | null;
   lighting?: BoxLights | null;
   shutter?: BoxShutter | null;
-  pi?: { mac?: string | null; ip?: string | null } | null;
+  pi?: { mac?: string | null; ip?: string | null; serial?: string | null } | null;
   rut?: {
     config?: { ip?: string | null; username?: string | null; password?: string | null; model?: string | null } | null;
     observed?: { ip?: string | null; mac?: string | null; serial?: string | null; lastSeenAt?: string | null } | null;
@@ -79,6 +79,7 @@ type BoxDetail = {
   siteId?: string | null;
   customerId?: string | null;
   updatedAt?: string | null;
+  status?: string | null;
   autoClose?: BoxAutoClose | null;
   hardware?: BoxHardware | null;
   gatewayIp?: string | null;
@@ -90,6 +91,19 @@ type BoxDetail = {
   piIp?: string | null;
   scriptVersion?: string | null;
   lastProvisionedAt?: string | null;
+  software?: {
+    versionRaspberry?: string | null;
+    targetVersion?: string | null;
+    latestGithub?: string | null;
+    deploymentStatus?: string | null;
+    updateStatus?: string | null;
+    lastHeartbeatIso?: string | null;
+  } | null;
+  state?: {
+    boxIsOpen?: boolean | null;
+    lastActionSource?: string | null;
+    lastActionAt?: string | null;
+  } | null;
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -119,6 +133,35 @@ function formatDate(val: string | null | undefined): string {
   }
 }
 
+// ── Nav config ─────────────────────────────────────────────────────────────
+
+const NAV_GROUPS = [
+  {
+    label: "Configuratie",
+    items: [
+      { id: "gedrag",     label: "Gedrag",           emoji: "⚙️" },
+      { id: "camera",     label: "Camera",            emoji: "🎥" },
+      { id: "rut",        label: "Router (RUT241)",   emoji: "🌐" },
+      { id: "verlichting",label: "Verlichting",       emoji: "💡" },
+      { id: "motor",      label: "Sluiter / motor",   emoji: "⚡" },
+    ],
+  },
+  {
+    label: "Info & Beheer",
+    items: [
+      { id: "netwerk", label: "Netwerk & info", emoji: "📡" },
+      { id: "beheer",  label: "Beheer",         emoji: "🏷️" },
+    ],
+  },
+  {
+    label: "Systeem",
+    items: [
+      { id: "update", label: "Software update", emoji: "🔄" },
+      { id: "gevaar", label: "Gevarenzone",     emoji: "⚠️" },
+    ],
+  },
+];
+
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function AdminBoxConfigClient() {
@@ -130,6 +173,9 @@ export default function AdminBoxConfigClient() {
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [activeSection, setActiveSection] = useState("gedrag");
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState("");
 
   const [box, setBox] = useState<BoxDetail | null>(null);
   const [customers, setCustomers] = useState<CustomerItem[]>([]);
@@ -182,20 +228,35 @@ export default function AdminBoxConfigClient() {
   // ── Load ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!boxId) {
-      setLoading(false);
-      return;
-    }
+    if (!boxId) { setLoading(false); return; }
     let active = true;
     const unsubscribe = auth.onAuthStateChanged(async () => {
       if (active) await loadData();
     });
-    return () => {
-      active = false;
-      unsubscribe();
-    };
+    return () => { active = false; unsubscribe(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boxId]);
+
+  // ── IntersectionObserver — actieve nav-sectie ─────────────────────────────
+
+  useEffect(() => {
+    if (loading) return;
+    const allIds = NAV_GROUPS.flatMap((g) => g.items.map((i) => i.id));
+    const observers: IntersectionObserver[] = [];
+
+    allIds.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const obs = new IntersectionObserver(
+        ([entry]) => { if (entry.isIntersecting) setActiveSection(id); },
+        { threshold: 0, rootMargin: "-10% 0px -80% 0px" }
+      );
+      obs.observe(el);
+      observers.push(obs);
+    });
+
+    return () => { observers.forEach((obs) => obs.disconnect()); };
+  }, [loading]);
 
   async function loadData() {
     try {
@@ -203,22 +264,12 @@ export default function AdminBoxConfigClient() {
       setErrorMessage("");
 
       const token = await auth.currentUser?.getIdToken();
-      if (!token) {
-        setErrorMessage("Niet aangemeld");
-        setLoading(false);
-        return;
-      }
+      if (!token) { setErrorMessage("Niet aangemeld"); setLoading(false); return; }
 
       const [boxRes, customersRes, sitesRes] = await Promise.all([
-        fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}`), {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        fetch(apiUrl("/admin/customers"), {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        fetch(apiUrl("/admin/sites"), {
-          headers: { Authorization: `Bearer ${token}` }
-        })
+        fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}`), { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(apiUrl("/admin/customers"), { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(apiUrl("/admin/sites"), { headers: { Authorization: `Bearer ${token}` } })
       ]);
 
       if (!boxRes.ok) {
@@ -243,7 +294,6 @@ export default function AdminBoxConfigClient() {
       setCustomers(nextCustomers);
       setSites(nextSites);
 
-      // Populate form
       setAutoCloseEnabled(b.autoClose?.enabled ?? false);
       setAutoCloseDelay(numField(b.autoClose?.delaySeconds));
 
@@ -277,16 +327,12 @@ export default function AdminBoxConfigClient() {
 
       setDisplayName(b.displayName ?? "");
 
-      // Fix 1: case-insensitieve klant matching (Firestore doc ID kan afwijken van opgeslagen waarde)
       const matchedCustomer = nextCustomers.find(
         (c) => c.id.toLowerCase() === (b.customerId ?? "").toLowerCase()
       );
       setSelectedCustomerId(matchedCustomer?.id ?? b.customerId ?? "");
-
-      // Site: exact match volstaat (site IDs zijn consistent lowercase)
       setSelectedSiteId(b.siteId ?? "");
 
-      // Laad camera-context automatisch als box een camera assignment heeft
       if (b.hardware?.camera?.assignment?.snapshotUrl) {
         loadCameraContext();
       }
@@ -307,10 +353,7 @@ export default function AdminBoxConfigClient() {
       setSuccessMessage("");
 
       const token = await auth.currentUser?.getIdToken();
-      if (!token) {
-        setErrorMessage("Niet aangemeld");
-        return;
-      }
+      if (!token) { setErrorMessage("Niet aangemeld"); return; }
 
       const configRes = await fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/config`), {
         method: "PUT",
@@ -319,10 +362,7 @@ export default function AdminBoxConfigClient() {
           displayName,
           siteId: selectedSiteId,
           customerId: selectedCustomerId,
-          autoClose: {
-            enabled: autoCloseEnabled,
-            delaySeconds: parseNum(autoCloseDelay)
-          },
+          autoClose: { enabled: autoCloseEnabled, delaySeconds: parseNum(autoCloseDelay) },
           hardware: {
             rut: {
               config: {
@@ -342,14 +382,8 @@ export default function AdminBoxConfigClient() {
                 ...(cameraPassword ? { password: cameraPassword } : {})
               }
             },
-            lighting: {
-              onWhenOpen: lightsOnWhenOpen,
-              lightOffDelaySeconds: parseNum(lightsOffDelay)
-            },
-            shutter: {
-              closeDurationSeconds: parseNum(shutterClose),
-              openDurationSeconds: parseNum(shutterOpen)
-            }
+            lighting: { onWhenOpen: lightsOnWhenOpen, lightOffDelaySeconds: parseNum(lightsOffDelay) },
+            shutter: { closeDurationSeconds: parseNum(shutterClose), openDurationSeconds: parseNum(shutterOpen) }
           }
         })
       });
@@ -402,7 +436,7 @@ export default function AdminBoxConfigClient() {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` }
       });
-      const data = await res.json() as { suggestedIp?: string; conflictsWith?: string | null; message?: string };
+      const data = await res.json() as { suggestedIp?: string; message?: string };
       if (!res.ok) { setCameraFlowError(data.message || "Vrij IP bepalen mislukt"); return; }
       setSuggestedIp(data.suggestedIp ?? null);
     } catch {
@@ -427,7 +461,7 @@ export default function AdminBoxConfigClient() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ mac, chosenIp: suggestedIp })
       });
-      const data = await res.json() as { ok?: boolean; ip?: string; mac?: string; message?: string; error?: string };
+      const data = await res.json() as { ok?: boolean; ip?: string; mac?: string; message?: string };
       if (!res.ok) { setCameraFlowError(data.message || "Toewijzen camera mislukt"); return; }
       setCameraFlowSuccess(`Camera gekoppeld: MAC ${data.mac} → vast IP ${data.ip}`);
       await loadCameraContext();
@@ -448,10 +482,7 @@ export default function AdminBoxConfigClient() {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json() as { ok?: boolean; snapshotUrl?: string; message?: string };
-      if (!res.ok) {
-        setCameraFlowError(data.message || "Snapshot ophalen mislukt");
-        return;
-      }
+      if (!res.ok) { setCameraFlowError(data.message || "Snapshot ophalen mislukt"); return; }
       if (data.snapshotUrl) {
         window.open(data.snapshotUrl, "_blank");
         setCameraFlowSuccess("Snapshot succesvol opgehaald — geopend in nieuw tabblad");
@@ -461,23 +492,68 @@ export default function AdminBoxConfigClient() {
     }
   }
 
+  // ── Software update ───────────────────────────────────────────────────────
+
+  async function handleTriggerUpdate() {
+    try {
+      setUpdateBusy(true);
+      setUpdateMessage("");
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) { setUpdateMessage("Niet aangemeld"); return; }
+      const res = await fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/software/update`), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setUpdateMessage((data as { message?: string }).message || "Update starten mislukt");
+        return;
+      }
+      setUpdateMessage("Update gestart — Pi herstart binnen enkele seconden");
+      await loadData();
+    } catch {
+      setUpdateMessage("Netwerkfout bij starten update");
+    } finally {
+      setUpdateBusy(false);
+    }
+  }
+
+  // ── Nav ───────────────────────────────────────────────────────────────────
+
+  function scrollToSection(id: string) {
+    setActiveSection(id);
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   // ── Render helpers ────────────────────────────────────────────────────────
 
-  function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+  function SectionCard({ id, title, subtitle, badge, children }: {
+    id?: string;
+    title: string;
+    subtitle?: string;
+    badge?: ReactNode;
+    children: ReactNode;
+  }) {
     return (
-      <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
+      <div id={id} className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden scroll-mt-6">
         <div className="px-6 py-6 border-b border-slate-200">
-          <h2 className="text-lg font-bold text-slate-900">{title}</h2>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">{title}</h2>
+              {subtitle && <p className="text-sm text-slate-500 mt-0.5 leading-relaxed">{subtitle}</p>}
+            </div>
+            {badge && <div className="flex-shrink-0 pt-0.5">{badge}</div>}
+          </div>
         </div>
-        <div className="px-6 py-6 space-y-5">{children}</div>
+        <div className="px-6 py-6 space-y-4">{children}</div>
       </div>
     );
   }
 
-  function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
+  function FieldRow({ label, children }: { label: string; children: ReactNode }) {
     return (
-      <div className="flex items-center justify-between gap-4">
-        <label className="text-sm font-semibold text-slate-700 shrink-0 w-64">{label}</label>
+      <div className="flex items-center justify-between gap-4 py-2 border-b border-slate-50 last:border-0">
+        <label className="text-sm font-semibold text-slate-600 shrink-0 w-56">{label}</label>
         <div className="flex-1">{children}</div>
       </div>
     );
@@ -488,46 +564,26 @@ export default function AdminBoxConfigClient() {
       <button
         type="button"
         onClick={() => onChange(!checked)}
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-          checked ? "bg-slate-900" : "bg-slate-200"
-        }`}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${checked ? "bg-slate-900" : "bg-slate-200"}`}
       >
-        <span
-          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-            checked ? "translate-x-6" : "translate-x-1"
-          }`}
-        />
+        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${checked ? "translate-x-6" : "translate-x-1"}`} />
       </button>
     );
   }
 
-  function NumInput({
-    value,
-    onChange,
-    placeholder
-  }: {
-    value: string;
-    onChange: (v: string) => void;
-    placeholder?: string;
-  }) {
+  function NumInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
     return (
       <input
         type="number"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900"
+        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-900"
       />
     );
   }
 
-  function TextInput({
-    value,
-    onChange,
-    placeholder,
-    disabled,
-    type = "text"
-  }: {
+  function TextInput({ value, onChange, placeholder, disabled, type = "text" }: {
     value: string;
     onChange?: (v: string) => void;
     placeholder?: string;
@@ -541,21 +597,69 @@ export default function AdminBoxConfigClient() {
         onChange={onChange ? (e) => onChange(e.target.value) : undefined}
         placeholder={placeholder}
         disabled={disabled}
-        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900 disabled:bg-slate-50 disabled:text-slate-400"
+        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-900 disabled:bg-slate-50 disabled:text-slate-400"
       />
     );
   }
 
-  function KVRow({ label, value }: { label: string; value: string | null | undefined }) {
+  function KVRow({ label, value, mono }: { label: string; value: string | null | undefined; mono?: boolean }) {
     return (
       <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
         <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</span>
-        <span className="text-sm font-semibold text-slate-900 text-right">{value || "—"}</span>
+        <span className={`text-sm font-semibold text-slate-900 text-right ${mono ? "font-mono text-xs" : ""}`}>
+          {value || "—"}
+        </span>
       </div>
     );
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  function SubLabel({ children }: { children: ReactNode }) {
+    return (
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 pt-3 pb-1 first:pt-0">
+        {children}
+      </p>
+    );
+  }
+
+  function Pill({ color, children }: { color: "green" | "red" | "amber" | "gray"; children: ReactNode }) {
+    const cls = {
+      green: "bg-emerald-100 text-emerald-800 border-emerald-200",
+      red:   "bg-red-100 text-red-800 border-red-200",
+      amber: "bg-amber-100 text-amber-800 border-amber-200",
+      gray:  "bg-slate-100 text-slate-600 border-slate-200",
+    }[color];
+    return (
+      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${cls}`}>
+        {children}
+      </span>
+    );
+  }
+
+  // ── Derived values ────────────────────────────────────────────────────────
+
+  const isOnline       = box?.status === "online";
+  const piVersion      = box?.software?.versionRaspberry ?? box?.scriptVersion ?? "—";
+  const latestVersion  = box?.software?.latestGithub ?? "—";
+  const targetVersion  = box?.software?.targetVersion ?? "—";
+  const deployStatus   = box?.software?.deploymentStatus;
+  const lastHeartbeat  = box?.software?.lastHeartbeatIso ?? box?.updatedAt;
+  const boxIsOpen      = box?.state?.boxIsOpen;
+  const lastActionSrc  = box?.state?.lastActionSource;
+  const versionOk      = deployStatus === "ON_TARGET" || (piVersion !== "—" && piVersion === latestVersion);
+
+  const rutColor: "green" | "red" | "gray" =
+    cameraContext?.routerStatus === "online" ? "green" :
+    cameraContext?.routerStatus === "offline" ? "red" : "gray";
+
+  const camColor: "green" | "amber" | "gray" =
+    cameraContext?.routerStatus === "online" && !!cameraContext?.firestoreCamera ? "green" :
+    cameraContext?.routerStatus === "offline" ? "amber" : "gray";
+
+  const camText =
+    camColor === "green"  ? "Online" :
+    camColor === "amber"  ? "⚠ Offline" : "—";
+
+  // ── Loading ───────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -565,104 +669,209 @@ export default function AdminBoxConfigClient() {
     );
   }
 
-  const title = box?.displayName || box?.boxId || boxId;
+  const boxTitle = box?.displayName || box?.boxId || boxId;
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-3xl px-6 py-10 space-y-8">
+    <div className="min-h-screen bg-slate-50 flex">
 
-        {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-sm text-slate-500">
-          <Link href="/admin" className="hover:text-slate-900 transition">Admin</Link>
-          <span>›</span>
-          <button
-            type="button"
-            onClick={() => router.push("/admin")}
-            className="hover:text-slate-900 transition"
-          >
-            Boxen
-          </button>
-          <span>›</span>
-          <span className="text-slate-900 font-semibold">{box?.boxId || boxId} configuratie</span>
-        </nav>
+      {/* ── SIDEBAR ─────────────────────────────────────────────────────── */}
+      <aside className="w-72 flex-shrink-0 bg-slate-900 text-slate-100 sticky top-0 h-screen overflow-y-auto flex flex-col">
 
         {/* Header */}
-        <div>
-          <h1 className="text-4xl font-bold text-slate-900">{title} — configuratie</h1>
-          <div className="mt-2 flex items-center gap-3 text-sm text-slate-500">
-            {box?.displayName && <span className="font-semibold text-slate-700">{box.displayName}</span>}
-            {box?.displayName && box?.siteId && <span>·</span>}
-            {box?.siteId && <span>{box.siteId}</span>}
-            {box?.siteId && box?.customerId && <span>·</span>}
-            {box?.customerId && <span>{box.customerId}</span>}
-            <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-slate-300" />
-              <span>status onbekend</span>
-            </span>
-          </div>
+        <div className="border-b border-slate-800 p-6">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 font-semibold mb-1.5">
+            Gridbox Platform
+          </p>
+          <p className="text-2xl font-bold text-slate-100 mb-1">
+            {(box?.boxId ?? boxId).toUpperCase()}
+          </p>
+          <p className="text-sm text-slate-400 leading-relaxed">
+            {box?.displayName ?? "—"}
+            {box?.siteId && <><br />{box.siteId}</>}
+          </p>
+          <span className={`mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold ${
+            isOnline
+              ? "bg-emerald-500/15 border border-emerald-500/25 text-emerald-400"
+              : "bg-slate-700 border border-slate-600 text-slate-400"
+          }`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? "bg-emerald-400" : "bg-slate-500"}`} />
+            {isOnline ? "Online" : box?.status ?? "Onbekend"}
+          </span>
         </div>
 
-        {/* Feedback */}
-        {errorMessage && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
-            {errorMessage}
-          </div>
-        )}
-        {successMessage && (
-          <div className="rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-4 text-sm leading-7 text-emerald-800">
-            {successMessage}
-          </div>
-        )}
+        {/* Nav */}
+        <nav className="flex-1 p-4 space-y-5">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.label}>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 font-semibold px-3 pb-1">
+                {group.label}
+              </p>
+              {group.items.map(({ id, label, emoji }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => scrollToSection(id)}
+                  className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-colors text-left ${
+                    activeSection === id
+                      ? "bg-white text-slate-900 font-semibold"
+                      : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                  }`}
+                >
+                  <span>{emoji}</span>
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
 
-        {/* A — GEDRAG */}
-        <SectionCard title="Gedrag">
-          <FieldRow label="Automatisch sluiten">
-            <Toggle checked={autoCloseEnabled} onChange={setAutoCloseEnabled} />
-          </FieldRow>
-          {autoCloseEnabled && (
-            <FieldRow label="Vertraging (seconden)">
-              <NumInput value={autoCloseDelay} onChange={setAutoCloseDelay} placeholder="bijv. 30" />
-            </FieldRow>
+        {/* Footer */}
+        <div className="p-4 border-t border-slate-800">
+          <Link
+            href="/admin"
+            className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-slate-700 text-[13px] font-semibold text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+          >
+            ↗&nbsp; Operations Center
+          </Link>
+        </div>
+      </aside>
+
+      {/* ── MAIN ────────────────────────────────────────────────────────── */}
+      <main className="flex-1 min-w-0 py-10 px-12">
+        <div className="max-w-3xl space-y-6">
+
+          {/* Breadcrumb */}
+          <nav className="flex items-center gap-2 text-sm text-slate-500">
+            <Link href="/admin" className="hover:text-slate-900 transition">Admin</Link>
+            <span>›</span>
+            <button type="button" onClick={() => router.push("/admin")} className="hover:text-slate-900 transition">
+              Boxen
+            </button>
+            <span>›</span>
+            <span className="text-slate-900 font-semibold">{box?.boxId ?? boxId} configuratie</span>
+          </nav>
+
+          {/* Title */}
+          <div>
+            <h1 className="text-4xl font-bold text-slate-900 leading-tight">{boxTitle} — configuratie</h1>
+            <div className="mt-2 flex items-center gap-2 text-sm text-slate-500 flex-wrap">
+              {box?.displayName && <span className="font-semibold text-slate-700">{box.displayName}</span>}
+              {box?.displayName && box?.siteId && <span className="text-slate-300">·</span>}
+              {box?.siteId && <span>{box.siteId}</span>}
+              {box?.updatedAt && <span className="text-slate-300">·</span>}
+              {box?.updatedAt && <span>Bijgewerkt {formatDate(box.updatedAt)}</span>}
+              <span className="text-slate-300">·</span>
+              <span className="flex items-center gap-1.5">
+                <span className={`h-2 w-2 rounded-full ${isOnline ? "bg-emerald-500" : "bg-slate-300"}`} />
+                <span className={isOnline ? "text-emerald-600 font-semibold" : ""}>{isOnline ? "Online" : "Offline"}</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Status pills */}
+          <div className="grid grid-cols-4 gap-3">
+            <div className="bg-white border border-slate-200 rounded-3xl px-4 py-3.5 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-1">Positie</p>
+              <p className="text-sm font-bold text-slate-900">
+                {boxIsOpen === true ? "Open" : boxIsOpen === false ? "Dicht" : "—"}
+              </p>
+              {lastActionSrc && <p className="text-[11px] text-slate-400 mt-0.5">{lastActionSrc}</p>}
+            </div>
+            <div className="bg-white border border-slate-200 rounded-3xl px-4 py-3.5 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-1">Versie Pi</p>
+              <p className={`text-sm font-bold ${versionOk ? "text-slate-900" : "text-amber-600"}`}>{piVersion}</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {versionOk ? "up to date" : `target: ${targetVersion}`}
+              </p>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-3xl px-4 py-3.5 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-1">Heartbeat</p>
+              <p className="text-xs font-bold text-slate-900 leading-snug">{formatDate(lastHeartbeat)}</p>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-3xl px-4 py-3.5 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-1">Camera</p>
+              <p className={`text-sm font-bold ${
+                camColor === "green" ? "text-emerald-600" :
+                camColor === "amber" ? "text-amber-600" : "text-slate-900"
+              }`}>{camText}</p>
+              {camColor === "amber" && <p className="text-[11px] text-slate-400 mt-0.5">RUT offline</p>}
+            </div>
+          </div>
+
+          {/* Feedback */}
+          {errorMessage && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-relaxed text-amber-900">
+              {errorMessage}
+            </div>
           )}
-        </SectionCard>
+          {successMessage && (
+            <div className="rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-4 text-sm leading-relaxed text-emerald-800">
+              {successMessage}
+            </div>
+          )}
 
-        {/* B — HARDWARE */}
-        <SectionCard title="Hardware">
-          {/* Camera — toewijzingskaart */}
-          <div className="space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Camera</p>
+          {/* ── A: GEDRAG ─────────────────────────────────────────────── */}
+          <SectionCard id="gedrag" title="Gedrag" subtitle="Automatisch sluiten en tijdsinstellingen voor de box">
+            <FieldRow label="Automatisch sluiten">
+              <Toggle checked={autoCloseEnabled} onChange={setAutoCloseEnabled} />
+            </FieldRow>
+            {autoCloseEnabled && (
+              <FieldRow label="Vertraging (seconden)">
+                <NumInput value={autoCloseDelay} onChange={setAutoCloseDelay} placeholder="bijv. 300" />
+              </FieldRow>
+            )}
+          </SectionCard>
 
-            {/* Feedback camera-flow */}
+          {/* ── B: CAMERA ────────────────────────────────────────────── */}
+          <SectionCard
+            id="camera"
+            title="Camera"
+            subtitle="Koppeling van de camera via MAC-adres aan een vast IP op de RUT241 router"
+            badge={
+              cameraContext ? (
+                <Pill color={camColor === "amber" ? "amber" : camColor === "green" ? "green" : "gray"}>
+                  {camColor === "amber" ? "⚠ RUT offline" : camColor === "green" ? "✓ Online" : "Onbekend"}
+                </Pill>
+              ) : undefined
+            }
+          >
             {cameraFlowError && (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{cameraFlowError}</div>
             )}
             {cameraFlowSuccess && (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{cameraFlowSuccess}</div>
             )}
+            {cameraContext?.routerStatus === "offline" && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                ⚠ RUT241 router is niet bereikbaar. Camera-koppeling beheren is tijdelijk niet mogelijk.
+              </div>
+            )}
 
-            {/* Sectie 1 — Gedetecteerde camera */}
+            <SubLabel>Gedetecteerde camera (live via RUT241)</SubLabel>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Gedetecteerde camera</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Huidig gedetecteerd op het netwerk</p>
               {cameraContext === null ? (
                 <p className="text-sm text-slate-400">Nog niet opgeroepen — klik op "Zoek camera opnieuw"</p>
               ) : cameraContext.detectedMac ? (
                 <>
-                  <KVRow label="Huidig netwerk-IP" value={cameraContext.detectedIp} />
-                  <KVRow label="MAC-adres" value={cameraContext.detectedMac} />
+                  <KVRow label="Huidig netwerk-IP" value={cameraContext.detectedIp} mono />
+                  <KVRow label="MAC-adres" value={cameraContext.detectedMac} mono />
                 </>
               ) : (
-                <p className="text-sm text-slate-400">Nog geen camera gedetecteerd</p>
+                <p className="text-sm text-slate-400">Geen camera gedetecteerd</p>
               )}
             </div>
 
-            {/* Sectie 2 — Huidige koppeling */}
+            <SubLabel>Huidige koppeling op deze box (Firestore)</SubLabel>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Huidige koppeling op deze box</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Vastgelegd in de database</p>
               {cameraContext?.firestoreCamera ? (
                 <>
-                  <KVRow label="MAC-adres" value={cameraContext.firestoreCamera.mac} />
-                  <KVRow label="Vast IP op router" value={cameraContext.firestoreCamera.ip} />
-                  <KVRow label="Snapshot URL" value={cameraContext.firestoreCamera.snapshotUrl} />
+                  <KVRow label="MAC-adres" value={cameraContext.firestoreCamera.mac} mono />
+                  <KVRow label="Vast IP op router" value={cameraContext.firestoreCamera.ip} mono />
+                  <KVRow label="Snapshot URL" value={cameraContext.firestoreCamera.snapshotUrl} mono />
                   <KVRow label="Laatste update" value={formatDate(cameraContext.firestoreCamera.updatedAt)} />
                 </>
               ) : (
@@ -670,89 +879,61 @@ export default function AdminBoxConfigClient() {
               )}
             </div>
 
-            {/* Sectie 3 — Voorgesteld nieuw vast IP */}
+            <SubLabel>Voorgesteld nieuw vast IP</SubLabel>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Voorgesteld nieuw vast IP</p>
-              {suggestedIp ? (
-                <KVRow label="Voorgesteld nieuw vast IP" value={suggestedIp} />
-              ) : (
-                <p className="text-sm text-slate-400">Nog niet bepaald — klik op "Stel vrij IP voor"</p>
-              )}
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Beschikbaar IP via RUT241 DHCP</p>
+              {suggestedIp
+                ? <KVRow label="Voorgesteld IP" value={suggestedIp} mono />
+                : <p className="text-sm text-slate-400">Nog niet bepaald — klik op "Stel vrij IP voor"</p>
+              }
             </div>
 
-            {/* Sectie 4 — RUT241 status */}
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">RUT241 status</p>
+            <SubLabel>RUT241 routerstatus</SubLabel>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Verbindingsstatus</p>
               <div className="flex flex-wrap gap-2">
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
-                  cameraContext?.routerStatus === "online" ? "bg-emerald-100 text-emerald-800" :
-                  cameraContext?.routerStatus === "offline" ? "bg-red-100 text-red-800" :
-                  "bg-slate-200 text-slate-600"
-                }`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${
-                    cameraContext?.routerStatus === "online" ? "bg-emerald-500" :
-                    cameraContext?.routerStatus === "offline" ? "bg-red-500" : "bg-slate-400"
+                <Pill color={rutColor}>
+                  <span className={`h-1.5 w-1.5 rounded-full inline-block ${
+                    rutColor === "green" ? "bg-emerald-500" : rutColor === "red" ? "bg-red-500" : "bg-slate-400"
                   }`} />
                   {cameraContext?.routerStatus === "online" ? "Online" :
                    cameraContext?.routerStatus === "offline" ? "Offline" : "Onbekend"}
-                </span>
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
-                  cameraContext?.leaseStatus === "active" ? "bg-emerald-100 text-emerald-800" :
-                  cameraContext?.leaseStatus === "not_set" ? "bg-slate-200 text-slate-600" :
-                  cameraContext?.leaseStatus === "conflict" ? "bg-red-100 text-red-800" :
-                  "bg-slate-200 text-slate-600"
-                }`}>
+                </Pill>
+                <Pill color={cameraContext?.leaseStatus === "active" ? "green" : cameraContext?.leaseStatus === "conflict" ? "red" : "gray"}>
                   {cameraContext?.leaseStatus === "active" ? "Lease actief" :
-                   cameraContext?.leaseStatus === "not_set" ? "Lease nog niet gezet" :
+                   cameraContext?.leaseStatus === "not_set" ? "Lease niet gezet" :
                    cameraContext?.leaseStatus === "conflict" ? "Lease conflict" : "Lease onbekend"}
-                </span>
+                </Pill>
               </div>
               {cameraContext?.routerStatus === "offline" && (
-                <p className="text-xs text-red-700 mt-1">RUT241 is offline — bovenstaande Firestore-data kan verouderd zijn.</p>
+                <p className="text-xs text-red-700">Router niet bereikbaar — controleer stroomtoevoer en netwerkkabel</p>
               )}
             </div>
 
-            {/* Acties */}
             <div className="flex flex-wrap gap-2 pt-1">
-              <button
-                type="button"
-                onClick={loadCameraContext}
-                disabled={cameraContextBusy}
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-              >
-                {cameraContextBusy ? "Bezig…" : "Zoek camera opnieuw"}
+              <button type="button" onClick={loadCameraContext} disabled={cameraContextBusy}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition">
+                {cameraContextBusy ? "Bezig…" : "🔍 Zoek camera opnieuw"}
               </button>
-              <button
-                type="button"
-                onClick={handleSuggestIp}
-                disabled={suggestBusy}
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-              >
-                {suggestBusy ? "Bezig…" : "Stel vrij IP voor"}
+              <button type="button" onClick={handleSuggestIp} disabled={suggestBusy}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition">
+                {suggestBusy ? "Bezig…" : "💡 Stel vrij IP voor"}
               </button>
-              <button
-                type="button"
-                onClick={handleCameraAssign}
+              <button type="button" onClick={handleCameraAssign}
                 disabled={assignBusy || !cameraContext?.detectedMac || !suggestedIp}
-                title={!cameraContext?.detectedMac ? "Geen gedetecteerde MAC — zoek eerst camera opnieuw" : !suggestedIp ? "Stel eerst een vrij IP voor" : ""}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-40"
-              >
-                {assignBusy ? "Bezig…" : "Bevestig en zet vast IP op router"}
+                title={!cameraContext?.detectedMac ? "Geen gedetecteerde MAC" : !suggestedIp ? "Stel eerst een vrij IP voor" : ""}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-40 transition">
+                {assignBusy ? "Bezig…" : "✅ Bevestig en zet vast IP op router"}
               </button>
-              <button
-                type="button"
-                onClick={handleTestSnapshot}
+              <button type="button" onClick={handleTestSnapshot}
                 disabled={!cameraContext?.firestoreCamera?.snapshotUrl}
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-              >
-                Test snapshot
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition">
+                📸 Test snapshot
               </button>
             </div>
 
-            <hr className="border-slate-100 my-2" />
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Camera-instellingen</p>
-
-            {/* Bestaande camera-instellingen (intervals, thresholds) */}
+            <hr className="border-slate-100" />
+            <SubLabel>Camera-instellingen</SubLabel>
             <FieldRow label="Camera actief">
               <Toggle checked={cameraEnabled} onChange={setCameraEnabled} />
             </FieldRow>
@@ -769,177 +950,233 @@ export default function AdminBoxConfigClient() {
               <TextInput value={cameraUsername} onChange={setCameraUsername} placeholder="admin" />
             </FieldRow>
             <FieldRow label="Wachtwoord">
-              <TextInput
-                type="password"
-                value={cameraPassword}
-                onChange={setCameraPassword}
-                placeholder="Laat leeg om ongewijzigd te laten"
-              />
+              <TextInput type="password" value={cameraPassword} onChange={setCameraPassword} placeholder="Laat leeg om ongewijzigd te laten" />
             </FieldRow>
-          </div>
+          </SectionCard>
 
-          <hr className="border-slate-100" />
-
-          {/* RUT Router */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-4">Router (RUT-241)</p>
-            <div className="space-y-4">
-              <FieldRow label="IP-adres RUT">
-                <TextInput value={rutIp} onChange={setRutIp} placeholder="192.168.10.1" />
-              </FieldRow>
-              <FieldRow label="Model">
-                <TextInput value={rutModel ?? ""} onChange={(v) => setRutModel(v || null)} placeholder="RUT241" />
-              </FieldRow>
-              <FieldRow label="Gebruikersnaam">
-                <TextInput value={rutUsername} onChange={setRutUsername} placeholder="admin" />
-              </FieldRow>
-              <FieldRow label="Wachtwoord">
-                <TextInput
-                  type="password"
-                  value={rutPassword}
-                  onChange={setRutPassword}
-                  placeholder="Laat leeg om ongewijzigd te laten"
-                />
-              </FieldRow>
-              <FieldRow label="Gedetecteerde MAC">
-                <TextInput value={rutMac ?? "—"} disabled />
-              </FieldRow>
-              <FieldRow label="Gedetecteerd serienummer">
-                <TextInput value={rutSerial ?? "—"} disabled />
-              </FieldRow>
-            </div>
-          </div>
-
-          <hr className="border-slate-100" />
-
-          {/* Verlichting */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-4">Verlichting</p>
-            <div className="space-y-4">
-              <FieldRow label="Aan bij open deur">
-                <Toggle checked={lightsOnWhenOpen} onChange={setLightsOnWhenOpen} />
-              </FieldRow>
-              <FieldRow label="Vertraging uitschakelen (sec)">
-                <NumInput value={lightsOffDelay} onChange={setLightsOffDelay} placeholder="bijv. 60" />
-              </FieldRow>
-            </div>
-          </div>
-
-          <hr className="border-slate-100" />
-
-          {/* Sluiter / motor */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-4">Sluiter / motor</p>
-            <div className="space-y-4">
-              <FieldRow label="Sluitduur (sec)">
-                <NumInput value={shutterClose} onChange={setShutterClose} placeholder="bijv. 8" />
-              </FieldRow>
-              <FieldRow label="Openduur (sec)">
-                <NumInput value={shutterOpen} onChange={setShutterOpen} placeholder="bijv. 8" />
-              </FieldRow>
-            </div>
-          </div>
-        </SectionCard>
-
-        {/* C — NETWERK & INFO */}
-        <SectionCard title="Netwerk & info">
-          <KVRow label="IP RUT (config)" value={box?.rutIp ?? box?.gatewayIp} />
-          <KVRow label="MAC RUT (gedetecteerd)" value={box?.rutMac ?? box?.gatewayMac} />
-          <KVRow label="Serial RUT (gedetecteerd)" value={box?.rutSerial} />
-          <KVRow label="MAC Pi" value={box?.piMac} />
-          <KVRow label="IP Pi" value={box?.piIp} />
-          <KVRow label="Software versie Pi" value={box?.scriptVersion} />
-          <KVRow label="Laatste heartbeat Pi" value={formatDate(box?.lastProvisionedAt)} />
-          <KVRow label="Laatste update" value={formatDate(box?.updatedAt)} />
-        </SectionCard>
-
-        {/* D — BEHEER */}
-        <SectionCard title="Beheer">
-          <FieldRow label="Weergavenaam">
-            <TextInput value={displayName} onChange={setDisplayName} placeholder={box?.boxId || boxId} />
-          </FieldRow>
-          <FieldRow label="Site">
-            <select
-              value={selectedSiteId}
-              onChange={(e) => setSelectedSiteId(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900"
-            >
-              <option value="">— kies site —</option>
-              {sites.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name ? `${s.name} (${s.id})` : s.id}
-                </option>
-              ))}
-            </select>
-          </FieldRow>
-          <FieldRow label="Klant">
-            <select
-              value={selectedCustomerId}
-              onChange={(e) => setSelectedCustomerId(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-900"
-            >
-              <option value="">— kies klant —</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name ? `${c.name} (${c.id})` : c.id}
-                </option>
-              ))}
-            </select>
-          </FieldRow>
-          <FieldRow label="Box ID">
-            <TextInput value={box?.boxId || boxId} disabled />
-          </FieldRow>
-        </SectionCard>
-
-        {/* Opslaan knop */}
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="rounded-xl bg-slate-900 text-white px-6 py-3 text-sm font-semibold hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+          {/* ── C: ROUTER RUT241 ─────────────────────────────────────── */}
+          <SectionCard
+            id="rut"
+            title="Router (RUT241)"
+            subtitle="Verbindingsinstellingen voor de RUT241 mobiele router"
+            badge={
+              cameraContext ? (
+                <Pill color={rutColor}>
+                  <span className={`h-1.5 w-1.5 rounded-full inline-block ${
+                    rutColor === "green" ? "bg-emerald-500" : rutColor === "red" ? "bg-red-500" : "bg-slate-400"
+                  }`} />
+                  {cameraContext.routerStatus === "online" ? "Online" :
+                   cameraContext.routerStatus === "offline" ? "Offline" : "Onbekend"}
+                </Pill>
+              ) : undefined
+            }
           >
-            {saving ? "Opslaan…" : "Configuratie opslaan"}
-          </button>
-        </div>
+            <SubLabel>Configuratie</SubLabel>
+            <FieldRow label="IP-adres RUT">
+              <div className="flex items-center gap-2">
+                <TextInput value={rutIp || "—"} disabled />
+                <span className="text-xs text-slate-400 shrink-0">automatisch</span>
+              </div>
+            </FieldRow>
+            <FieldRow label="Model">
+              <TextInput value={rutModel ?? ""} onChange={(v) => setRutModel(v || null)} placeholder="RUT241" />
+            </FieldRow>
+            <FieldRow label="Gebruikersnaam">
+              <div className="flex items-center gap-2">
+                <TextInput value={rutUsername || "root"} disabled />
+                <span className="text-xs text-slate-400 shrink-0">automatisch</span>
+              </div>
+            </FieldRow>
+            <FieldRow label="Wachtwoord">
+              <TextInput type="password" value={rutPassword} onChange={setRutPassword} placeholder="Laat leeg om ongewijzigd te laten" />
+            </FieldRow>
 
-        {/* E — GEVARENZONE */}
-        <SectionCard title="Gevarenzone">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
-              <div>
-                <p className="text-sm font-semibold text-amber-900">Box deactiveren</p>
-                <p className="text-xs text-amber-700 mt-0.5">
-                  De box wordt gedeactiveerd en is niet meer bereikbaar voor gebruikers.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-50 transition shrink-0"
-                onClick={() => setErrorMessage("Deactiveren is nog niet geïmplementeerd")}
+            <SubLabel>Gedetecteerde gegevens (read-only)</SubLabel>
+            <KVRow label="Gedetecteerde MAC" value={rutMac} mono />
+            <KVRow label="Gedetecteerd serienummer" value={rutSerial} mono />
+            <KVRow label="Laatste heartbeat RUT" value={formatDate(box?.hardware?.rut?.observed?.lastSeenAt)} />
+          </SectionCard>
+
+          {/* ── D: VERLICHTING ───────────────────────────────────────── */}
+          <SectionCard id="verlichting" title="Verlichting" subtitle="Gedrag van de verlichting gekoppeld aan de boxstatus">
+            <FieldRow label="Aan bij open deur">
+              <Toggle checked={lightsOnWhenOpen} onChange={setLightsOnWhenOpen} />
+            </FieldRow>
+            <FieldRow label="Vertraging uitschakelen (sec)">
+              <NumInput value={lightsOffDelay} onChange={setLightsOffDelay} placeholder="bijv. 60" />
+            </FieldRow>
+          </SectionCard>
+
+          {/* ── E: SLUITER / MOTOR ───────────────────────────────────── */}
+          <SectionCard id="motor" title="Sluiter / motor" subtitle="Duur van de motorbeweging voor openen en sluiten">
+            <FieldRow label="Sluitduur motor (sec)">
+              <NumInput value={shutterClose} onChange={setShutterClose} placeholder="bijv. 30" />
+            </FieldRow>
+            <FieldRow label="Openduur motor (sec)">
+              <NumInput value={shutterOpen} onChange={setShutterOpen} placeholder="bijv. 30" />
+            </FieldRow>
+          </SectionCard>
+
+          {/* ── F: NETWERK & INFO ────────────────────────────────────── */}
+          <SectionCard id="netwerk" title="Netwerk & info" subtitle="Systeeminformatie van de Raspberry Pi en het lokale netwerk">
+            <SubLabel>Raspberry Pi</SubLabel>
+            <KVRow label="IP Pi (lokaal)" value={box?.piIp ?? box?.hardware?.pi?.ip} mono />
+            <KVRow label="MAC Pi" value={box?.piMac ?? box?.hardware?.pi?.mac} mono />
+            <KVRow label="Software versie Pi" value={box?.software?.versionRaspberry ?? box?.scriptVersion} />
+            <KVRow label="Laatste heartbeat Pi" value={formatDate(lastHeartbeat)} />
+            <KVRow label="Laatste update config" value={formatDate(box?.updatedAt)} />
+
+            <SubLabel>Gateway / netwerk</SubLabel>
+            <KVRow label="RUT IP (config)" value={box?.rutIp ?? box?.gatewayIp} mono />
+            <KVRow label="RUT MAC (gedetecteerd)" value={box?.rutMac ?? box?.gatewayMac} mono />
+            <KVRow label="RUT serienummer" value={box?.rutSerial} mono />
+          </SectionCard>
+
+          {/* ── G: BEHEER ────────────────────────────────────────────── */}
+          <SectionCard id="beheer" title="Beheer" subtitle="Naam, site-koppeling en klanttoewijzing">
+            <FieldRow label="Weergavenaam">
+              <TextInput value={displayName} onChange={setDisplayName} placeholder={box?.boxId || boxId} />
+            </FieldRow>
+            <FieldRow label="Site">
+              <select
+                value={selectedSiteId}
+                onChange={(e) => setSelectedSiteId(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-900"
               >
-                Deactiveren
-              </button>
-            </div>
-            <div className="flex items-center justify-between gap-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-4">
-              <div>
-                <p className="text-sm font-semibold text-red-900">Box verwijderen</p>
-                <p className="text-xs text-red-700 mt-0.5">
-                  Verwijdert de box definitief uit het platform. Dit kan niet ongedaan worden gemaakt.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="rounded-xl border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-800 hover:bg-red-50 transition shrink-0"
-                onClick={() => setErrorMessage("Verwijderen is nog niet geïmplementeerd")}
+                <option value="">— kies site —</option>
+                {sites.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name ? `${s.name} (${s.id})` : s.id}</option>
+                ))}
+              </select>
+            </FieldRow>
+            <FieldRow label="Klant">
+              <select
+                value={selectedCustomerId}
+                onChange={(e) => setSelectedCustomerId(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-900"
               >
-                Verwijderen
-              </button>
-            </div>
+                <option value="">— kies klant —</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name ? `${c.name} (${c.id})` : c.id}</option>
+                ))}
+              </select>
+            </FieldRow>
+            <FieldRow label="Box ID">
+              <TextInput value={box?.boxId || boxId} disabled />
+            </FieldRow>
+          </SectionCard>
+
+          {/* Opslaan */}
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={() => router.push("/admin")}
+              className="rounded-xl border border-slate-300 bg-white text-slate-700 px-5 py-2.5 text-sm font-semibold hover:bg-slate-50 transition">
+              Annuleren
+            </button>
+            <button type="button" onClick={handleSave} disabled={saving}
+              className="rounded-xl bg-slate-900 text-white px-6 py-2.5 text-sm font-semibold hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition">
+              {saving ? "Opslaan…" : "Configuratie opslaan"}
+            </button>
           </div>
-        </SectionCard>
 
-      </div>
+          {/* ── H: SOFTWARE UPDATE ───────────────────────────────────── */}
+          <SectionCard
+            id="update"
+            title="Software update"
+            subtitle="Gecontroleerd uitrollen van nieuwe firmware naar de Pi"
+            badge={
+              versionOk
+                ? <Pill color="green">✓ Up to date</Pill>
+                : piVersion !== "—" && latestVersion !== "—"
+                  ? <Pill color="amber">Update beschikbaar</Pill>
+                  : undefined
+            }
+          >
+            {/* Versievergelijking */}
+            <div className="grid grid-cols-3 gap-3 items-center">
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">Huidige versie (Pi)</p>
+                <p className="text-xl font-bold text-slate-900">{piVersion}</p>
+              </div>
+              <div className="text-center text-xl text-slate-300">→</div>
+              <div className={`border rounded-2xl p-4 text-center ${versionOk ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-200"}`}>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">Beschikbaar (GitHub)</p>
+                <p className={`text-xl font-bold ${versionOk ? "text-emerald-600" : "text-slate-900"}`}>{latestVersion}</p>
+              </div>
+            </div>
+
+            {/* Stappen */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-3">Update procedure</p>
+              {[
+                "Laatste versie ophalen via GitHub (tags)",
+                "git checkout naar doelversie op de Pi",
+                "pip install -r requirements.txt uitvoeren",
+                "systemctl restart gridbox.service",
+                "Bevestigen dat service actief is",
+              ].map((step, i) => (
+                <div key={i} className="flex items-center gap-3 py-1.5 text-sm text-slate-600">
+                  <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-500 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                    {i + 1}
+                  </span>
+                  <span>{step}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Info */}
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+              ℹ De Pi blijft bereikbaar tijdens de update. De service is ongeveer 5 seconden offline tijdens herstart.
+            </div>
+
+            {/* Update feedback */}
+            {updateMessage && (
+              <div className={`rounded-xl border px-4 py-3 text-sm ${
+                updateMessage.includes("gestart")
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : "border-amber-200 bg-amber-50 text-amber-800"
+              }`}>
+                {updateMessage}
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={handleTriggerUpdate} disabled={updateBusy}
+                className="rounded-xl bg-slate-900 text-white px-4 py-2 text-sm font-semibold hover:bg-black disabled:opacity-40 transition">
+                {updateBusy ? "⏳ Bezig…" : "🔄 Update uitvoeren"}
+              </button>
+            </div>
+          </SectionCard>
+
+          {/* ── I: GEVARENZONE ───────────────────────────────────────── */}
+          <SectionCard id="gevaar" title="Gevarenzone" subtitle="Onomkeerbare acties — wees zeker voor je verder gaat">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+                <div>
+                  <p className="text-sm font-semibold text-amber-900">Box deactiveren</p>
+                  <p className="text-xs text-amber-700 mt-0.5">De box wordt gedeactiveerd en is niet meer bereikbaar voor gebruikers.</p>
+                </div>
+                <button type="button"
+                  className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-50 transition shrink-0"
+                  onClick={() => setErrorMessage("Deactiveren is nog niet geïmplementeerd")}>
+                  Deactiveren
+                </button>
+              </div>
+              <div className="flex items-center justify-between gap-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-4">
+                <div>
+                  <p className="text-sm font-semibold text-red-900">Box verwijderen</p>
+                  <p className="text-xs text-red-700 mt-0.5">Verwijdert de box definitief uit het platform. Dit kan niet ongedaan worden gemaakt.</p>
+                </div>
+                <button type="button"
+                  className="rounded-xl border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-800 hover:bg-red-50 transition shrink-0"
+                  onClick={() => setErrorMessage("Verwijderen is nog niet geïmplementeerd")}>
+                  Verwijderen
+                </button>
+              </div>
+            </div>
+          </SectionCard>
+
+        </div>
+      </main>
     </div>
   );
 }

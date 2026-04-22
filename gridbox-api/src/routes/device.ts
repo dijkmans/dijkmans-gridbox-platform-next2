@@ -6,6 +6,14 @@ import { env } from "../config/env";
 const router = Router();
 
 async function tryLinkRmsDevice(boxId: string, gatewayMac: string): Promise<void> {
+  const db = getFirestore();
+  // Schrijf altijd een poging-timestamp, ook bij mislukking — zodat we weten wanneer we het
+  // opnieuw mogen proberen (zie hertrigger-logica in de heartbeat handler).
+  await db.collection("boxes").doc(boxId).set(
+    { hardware: { rmsLinkAttemptAt: new Date().toISOString() } },
+    { merge: true }
+  ).catch(() => { /* non-blocking */ });
+
   try {
     const url = `${env.rmsApiBaseUrl}/devices`;
     const response = await fetch(url, {
@@ -24,7 +32,6 @@ async function tryLinkRmsDevice(boxId: string, gatewayMac: string): Promise<void
       console.log(`tryLinkRmsDevice: geen RMS device gevonden voor MAC ${gatewayMac} (${boxId})`);
       return;
     }
-    const db = getFirestore();
     await db.collection("boxes").doc(boxId).set(
       { hardware: { rmsDeviceId: match.id, rmsDeviceMac: match.mac ?? null } },
       { merge: true }
@@ -389,18 +396,30 @@ router.post("/device/heartbeat", async (req, res) => {
       await boxRef.update(piUpdate);
     }
 
-    const existingRmsDeviceId = (boxDoc.data()?.hardware as Record<string, unknown> | undefined)?.rmsDeviceId;
+    const hardwareData = boxDoc.data()?.hardware as Record<string, unknown> | undefined;
+    const existingRmsDeviceId = hardwareData?.rmsDeviceId;
     const gatewayMac =
       typeof body.gatewayMac === "string" && body.gatewayMac.trim()
         ? body.gatewayMac.trim()
         : typeof softwarePayload?.gatewayMac === "string" && softwarePayload.gatewayMac.trim()
         ? softwarePayload.gatewayMac.trim()
-        : "";
+        // Fallback: gebruik hardware.rut.observed.mac als de heartbeat geen MAC meestuurt
+        : typeof (hardwareData?.rut as Record<string, unknown> | undefined)?.observed === "object"
+          && typeof ((hardwareData?.rut as Record<string, unknown>)?.observed as Record<string, unknown>)?.mac === "string"
+          ? ((hardwareData?.rut as Record<string, unknown>).observed as Record<string, unknown>).mac as string
+          : "";
     const existingGatewayMac = boxDoc.data()?.gatewayMac as string | undefined;
     const macChanged = gatewayMac && existingGatewayMac && gatewayMac !== existingGatewayMac;
     const noRmsLink = !existingRmsDeviceId;
 
-    if (gatewayMac && (noRmsLink || macChanged)) {
+    // Herprobeert ook als de laatste poging meer dan 30 minuten geleden was (dekt mislukte pogingen)
+    const lastAttemptAt = typeof hardwareData?.rmsLinkAttemptAt === "string"
+      ? new Date(hardwareData.rmsLinkAttemptAt).getTime()
+      : 0;
+    const attemptStale = Date.now() - lastAttemptAt > 30 * 60 * 1000;
+    const shouldRetry = !existingRmsDeviceId && attemptStale;
+
+    if (gatewayMac && (noRmsLink || macChanged || shouldRetry)) {
       tryLinkRmsDevice(boxId, gatewayMac).catch((err) =>
         console.error("tryLinkRmsDevice fire-and-forget fout:", err)
       );
