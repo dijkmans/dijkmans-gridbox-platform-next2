@@ -7,7 +7,7 @@ const router = Router();
 
 async function tryLinkRmsDevice(boxId: string, gatewayMac: string): Promise<void> {
   const db = getFirestore();
-  // Schrijf altijd een poging-timestamp, ook bij mislukking — zodat we weten wanneer we het
+  // Schrijf altijd een poging-timestamp, ook bij mislukking ï¿½ zodat we weten wanneer we het
   // opnieuw mogen proberen (zie hertrigger-logica in de heartbeat handler).
   await db.collection("boxes").doc(boxId).set(
     { hardware: { rmsLinkAttemptAt: new Date().toISOString() } },
@@ -340,7 +340,7 @@ router.post("/device/heartbeat", async (req, res) => {
             ...(boxDoc.data()?.software ?? {}),
             ...(softwarePayload ?? {}),
             ...(softwareVersion
-              ? { currentVersion: softwareVersion, versionRaspberry: softwareVersion }
+              ? { versionRaspberry: softwareVersion }
               : {}),
             lastHeartbeatIso: heartbeatAt
           },
@@ -376,7 +376,7 @@ router.post("/device/heartbeat", async (req, res) => {
             ...(boxDoc.data()?.software ?? {}),
             ...(softwarePayload ?? {}),
             ...(softwareVersion
-              ? { currentVersion: softwareVersion, versionRaspberry: softwareVersion }
+              ? { versionRaspberry: softwareVersion }
               : {}),
             lastHeartbeatIso: heartbeatAt
           },
