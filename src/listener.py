@@ -200,16 +200,16 @@ def load_bootstrap_config():
         with open(BOOTSTRAP_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        log(f"âš ï¸ Bootstrapbestand kon niet gelezen worden: {e}")
+        log(f"[WARN] Bootstrapbestand kon niet gelezen worden: {e}")
         return None
 
 def save_runtime_config(runtime_config):
     try:
         with open(RUNTIME_CONFIG_PATH, "w", encoding="utf-8") as f:
             json.dump(runtime_config, f, indent=2, ensure_ascii=False)
-        log(f"ðŸ¾ Runtimeconfig opgeslagen in {RUNTIME_CONFIG_PATH}")
+        log(f"[INFO] Runtimeconfig opgeslagen in {RUNTIME_CONFIG_PATH}")
     except Exception as e:
-        log(f"âš ï¸ Runtimeconfig kon niet opgeslagen worden: {e}")
+        log(f"[WARN] Runtimeconfig kon niet opgeslagen worden: {e}")
 
 def load_runtime_config():
     if not os.path.exists(RUNTIME_CONFIG_PATH):
@@ -219,7 +219,7 @@ def load_runtime_config():
         with open(RUNTIME_CONFIG_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        log(f"⚠️ Runtimeconfig kon niet gelezen worden: {e}")
+        log(f"[WARN] Runtimeconfig kon niet gelezen worden: {e}")
         return None
 def try_backend_bootstrap_claim():
     bootstrap = load_bootstrap_config()
@@ -232,7 +232,7 @@ def try_backend_bootstrap_claim():
     bootstrap_box_id = str(bootstrap.get("boxId") or DOCUMENT_ID or "").strip()
 
     if not api_base_url or not provisioning_id or not bootstrap_token or not bootstrap_box_id:
-        log("âš ï¸ Bootstrapbestand mist verplichte velden voor backend-claim")
+        log("[WARN] Bootstrapbestand mist verplichte velden voor backend-claim")
         return False
 
     claim_url = f"{api_base_url}/device/bootstrap/claim"
@@ -246,7 +246,7 @@ def try_backend_bootstrap_claim():
     try:
         response = requests.post(claim_url, json=payload, timeout=20)
         if response.status_code != 200:
-            log(f"âš ï¸ Backend bootstrap-claim geweigerd: {response.status_code} | {response.text}")
+            log(f"[WARN] Backend bootstrap-claim geweigerd: {response.status_code} | {response.text}")
             if 400 <= response.status_code < 500:
                 return None  # permanente afwijzing - niet opnieuw proberen
             return False  # tijdelijk (5xx, netwerk) - mag opnieuw proberen
@@ -256,7 +256,7 @@ def try_backend_bootstrap_claim():
         runtime_config = item.get("runtimeConfig") if isinstance(item, dict) else None
 
         if not isinstance(runtime_config, dict) or not runtime_config:
-            log("âš ï¸ Backend bootstrap-claim gaf geen bruikbare runtimeConfig terug")
+            log("[WARN] Backend bootstrap-claim gaf geen bruikbare runtimeConfig terug")
             return False
 
         runtime_config["provisioningId"] = provisioning_id
@@ -264,18 +264,18 @@ def try_backend_bootstrap_claim():
         runtime_config["status"] = item.get("status")
 
         save_runtime_config(runtime_config)
-        log(f"âœ… Backend bootstrap-claim geslaagd voor {bootstrap_box_id}")
+        log(f"[INFO] Backend bootstrap-claim geslaagd voor {bootstrap_box_id}")
 
         try:
             os.remove(BOOTSTRAP_PATH)
-            log(f"🗑️ box_bootstrap.json verwijderd na geslaagde claim")
+            log(f"[INFO] box_bootstrap.json verwijderd na geslaagde claim")
         except Exception as remove_error:
-            log(f"⚠️ Kon box_bootstrap.json niet verwijderen: {remove_error}")
+            log(f"[WARN] Kon box_bootstrap.json niet verwijderen: {remove_error}")
 
         return True
 
     except Exception as e:
-        log(f"âš ï¸ Backend bootstrap-claim fout: {e}")
+        log(f"[WARN] Backend bootstrap-claim fout: {e}")
         return False
 def deep_merge_missing(existing, defaults):
     if isinstance(existing, dict) and isinstance(defaults, dict):
@@ -294,7 +294,7 @@ def refresh_cached_config():
         doc = box_doc_ref.get()
         cached_config = doc.to_dict() if doc.exists else {}
     except Exception as e:
-        log(f"ÃƒÂ¢Ã…Â¡ÃÂ ÃƒÂ¯ÃÂ¸ÃÂ cached_config kon niet vernieuwd worden: {e}")
+        log(f"[WARN] cached_config kon niet vernieuwd worden: {e}")
 
 def build_location_payload(location_cfg):
     payload = {
@@ -375,7 +375,7 @@ def get_latest_github_tag(force=False):
         return latest
 
     except Exception as e:
-        log(f"ÃƒÂ¢Ã…Â¡ÃÂ ÃƒÂ¯ÃÂ¸ÃÂ GitHub tag uitlezen mislukt: {e}")
+        log(f"[WARN] GitHub tag uitlezen mislukt: {e}")
         github_tag_cache = {
             "value": "error",
             "fetched_at": now_ts
@@ -584,7 +584,7 @@ def mark_update_failed(message, target_version=None):
         "lastError": message,
         "lastUpdateAttemptAt": now_iso()
     })
-    log(f"ÃƒÂ¢ÃÂÃ…â€™ Software update mislukt: {message}")
+    log(f"[ERROR] Software update mislukt: {message}")
 
 
 # =========================================================
@@ -666,7 +666,7 @@ def ensure_customer_exists():
         payload["createdBy"] = f"gridbox-service-{VERSION}"
 
     ref.set(payload, merge=True)
-    log(f"ÃƒÂ°Ã…Â¸ÃÂÃÂ¢ Customer verzekerd: customers/{customer_id}")
+    log(f"[INFO] Customer verzekerd: customers/{customer_id}")
     return customer_id
 
 def ensure_site_exists(customer_id):
@@ -698,7 +698,7 @@ def ensure_site_exists(customer_id):
         payload["createdBy"] = f"gridbox-service-{VERSION}"
 
     ref.set(payload, merge=True)
-    log(f"ÃƒÂ°Ã…Â¸Ã¢â¬ÅÃÂ Site verzekerd: sites/{site_id}")
+    log(f"[INFO] Site verzekerd: sites/{site_id}")
     return site_id
 
 def ensure_bootstrap_admin_user():
@@ -733,7 +733,7 @@ def ensure_bootstrap_admin_user():
         payload["createdBy"] = f"gridbox-service-{VERSION}"
 
     ref.set(payload, merge=True)
-    log(f"ÃƒÂ°Ã…Â¸Ã¢â¬ËœÃÂ¤ Bootstrap admin verzekerd: boxes/{DOCUMENT_ID}/authorizedUsers/{user_id}")
+    log(f"[INFO] Bootstrap admin verzekerd: boxes/{DOCUMENT_ID}/authorizedUsers/{user_id}")
 
 def ensure_legacy_mirror_if_enabled(customer_id, site_id):
     compatibility_cfg = box_config.get("compatibility", {})
@@ -749,7 +749,7 @@ def ensure_legacy_mirror_if_enabled(customer_id, site_id):
             "mirroredAt": now_iso(),
             "mirroredBy": f"gridbox-service-{VERSION}"
         }, merge=True)
-        log(f"ÃƒÂ°Ã…Â¸ÃÂªÃ…Â¾ Legacy customer mirror gezet onder box: {customer_id}")
+        log(f"[INFO] Legacy customer mirror gezet onder box: {customer_id}")
 
     if site_id and has_site_config():
         site_cfg = box_config.get("site", {})
@@ -765,7 +765,7 @@ def ensure_legacy_mirror_if_enabled(customer_id, site_id):
             site_payload["location"] = build_location_payload(site_cfg["location"])
 
         box_doc_ref.collection("sites").document(site_id).set(site_payload, merge=True)
-        log(f"ÃƒÂ°Ã…Â¸ÃÂªÃ…Â¾ Legacy site mirror gezet onder box: {site_id}")
+        log(f"[INFO] Legacy site mirror gezet onder box: {site_id}")
 
 def bootstrap_if_needed():
     if isinstance(runtime_config, dict) and runtime_config:
@@ -842,7 +842,7 @@ def bootstrap_if_needed():
     final_payload["updatedBy"] = f"gridbox-service-{VERSION}"
 
     box_doc_ref.set(final_payload, merge=True)
-    log(f"ÃƒÂ°Ã…Â¸ÃÂ§ÃÂ± Bootstrap gecontroleerd voor boxes/{DOCUMENT_ID}")
+    log(f"[INFO] Bootstrap gecontroleerd voor boxes/{DOCUMENT_ID}")
 
     ensure_bootstrap_admin_user()
     ensure_legacy_mirror_if_enabled(customer_id, site_id)
@@ -870,7 +870,7 @@ def update_box_state(is_open, action_source):
             }
         }, merge=True)
     except Exception as e:
-        log(f"ÃƒÂ¢Ã…Â¡ÃÂ ÃƒÂ¯ÃÂ¸ÃÂ Kon state niet opslaan: {e}")
+        log(f"[WARN] Kon state niet opslaan: {e}")
 
 def load_box_state_from_firestore():
     global box_is_open
@@ -879,9 +879,9 @@ def load_box_state_from_firestore():
         data = doc.to_dict() if doc.exists else {}
         with state_lock:
             box_is_open = bool(data.get("state", {}).get("boxIsOpen", False))
-        log(f"ÃƒÂ°Ã…Â¸Ã¢â¬ÅÃÂ¦ Herstelde box_is_open = {box_is_open}")
+        log(f"[INFO] Herstelde box_is_open = {box_is_open}")
     except Exception as e:
-        log(f"ÃƒÂ¢Ã…Â¡ÃÂ ÃƒÂ¯ÃÂ¸ÃÂ Kon box state niet laden: {e}")
+        log(f"[WARN] Kon box state niet laden: {e}")
 
 
 # =========================================================
@@ -1580,13 +1580,13 @@ def update_pi_status():
 
         refresh_cached_config()
         log(
-            f"ÃƒÂ¢Ã…Â¡Ã¢â€žÂ¢ÃƒÂ¯ÃÂ¸ÃÂ Heartbeat OK | latestGithub={latest_github} | "
+            f"[INFO] Heartbeat OK | latestGithub={latest_github} | "
             f"versionRaspberry={version_raspberry} | targetVersion={target_version} | "
             f"deploymentStatus={deployment_status} | updateStatus={update_status}"
         )
 
     except Exception as e:
-        log(f"ÃƒÂ¢Ã…Â¡ÃÂ ÃƒÂ¯ÃÂ¸ÃÂ Sync fout: {e}")
+        log(f"[WARN] Sync fout: {e}")
 
 
 # =========================================================
@@ -1623,10 +1623,10 @@ def maybe_process_software_request():
                 "lastError": None,
                 "lastUpdateAttemptAt": now_iso()
             })
-            log("ÃƒÂ¢Ã¢â¬Å¾ÃÂ¹ÃƒÂ¯ÃÂ¸ÃÂ softwareUpdateRequested was true, maar box draait al op targetVersion.")
+            log("[INFO] softwareUpdateRequested was true, maar box draait al op targetVersion.")
             return
 
-        log(f"ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ Software update gevraagd naar {target_version}")
+        log(f"[INFO] Software update gevraagd naar {target_version}")
         software_action_in_progress = True
 
         write_software_fields({
@@ -1653,7 +1653,7 @@ def maybe_process_software_request():
             "lastRestartRequestedAt": now_iso()
         })
 
-        log(f"ÃƒÂ°Ã…Â¸Ã¢â¬ÂÃÂ Restart ingepland naar versie {target_version}")
+        log(f"[INFO] Restart ingepland naar versie {target_version}")
         schedule_service_restart()
 
         time.sleep(1)
@@ -1961,7 +1961,7 @@ def ensure_snapshot_thread():
 def stop_shutter_motors():
     shutter_open.off()
     shutter_close.off()
-    log("ÃƒÂ°Ã…Â¸Ã¢â¬ÂºÃ¢â¬Ëœ Motor stroom uitgeschakeld")
+    log("[INFO] Motor stroom uitgeschakeld")
 
 def mark_command(doc_ref, status, extra=None):
     if not doc_ref:
@@ -1985,7 +1985,7 @@ def mark_command(doc_ref, status, extra=None):
     try:
         doc_ref.set(payload, merge=True)
     except Exception as e:
-        log(f"ÃƒÂ¢Ã…Â¡ÃÂ ÃƒÂ¯ÃÂ¸ÃÂ Command status opslaan mislukt: {e}")
+        log(f"[WARN] Command status opslaan mislukt: {e}")
 
 def handle_command(doc_ref, data):
     global shutter_motor_timer, light_off_timer, auto_close_timer
@@ -2099,7 +2099,7 @@ def handle_command(doc_ref, data):
                 mark_command(doc_ref, "completed")
 
         except Exception as e:
-            log(f"ÃƒÂ¢ÃÂÃ…â€™ Commando fout: {e}")
+            log(f"[ERROR] Commando fout: {e}")
             if doc_ref:
                 mark_command(doc_ref, "failed", {"error": str(e)})
 
@@ -2151,7 +2151,7 @@ try:
     box_doc_ref = db.collection("boxes").document(DOCUMENT_ID)
 
 except Exception as e:
-    log(f"❌ Startup fout: {e}")
+    log(f"[ERROR] Startup fout: {e}")
     raise SystemExit(1)
 
 STARTUP_GIT_COMMIT = get_repo_commit()
@@ -2167,14 +2167,14 @@ try:
     bootstrap_if_needed()
     update_pi_status()
 
-    log("ÃƒÂ°Ã…Â¸Ã¢â¬ÅÃÂ¸ Startup test snapshot uitvoeren...")
+    log("[INFO] Startup test snapshot uitvoeren...")
     threading.Thread(
         target=lambda: take_snapshot(phase="startup-test", sequence_number=0),
         daemon=True
     ).start()
 
 except Exception as e:
-    log(f"ÃƒÂ¢ÃÂÃ…â€™ Bootstrap/init fout: {e}")
+    log(f"[ERROR] Bootstrap/init fout: {e}")
 
 query = box_doc_ref.collection("commands").where(filter=FieldFilter("status", "==", "pending"))
 query_watch = query.on_snapshot(on_commands_snapshot)
@@ -2188,14 +2188,14 @@ def handle_physical_button():
     with state_lock:
         target = "CLOSE" if box_is_open else "OPEN"
 
-    log(f"ÃƒÂ°Ã…Â¸Ã¢â¬ÂÃ‹Å Fysieke knop ingedrukt. Actie: {target}")
+    log(f"[INFO] Fysieke knop ingedrukt. Actie: {target}")
     handle_command(None, {"command": target, "source": "Fysieke Knop"})
 
 if platform.system() != "Windows" and GPIO_AVAILABLE:
     try:
         btn = Button(CLOSE_BUTTON_PIN, pin_factory=BUTTON_FACTORY, pull_up=True, bounce_time=0.2)
         btn.when_pressed = handle_physical_button
-        log(f"ÃƒÂ°Ã…Â¸Ã¢â¬ÂÃ‹Å Slimme toggle-schakelaar actief op GPIO {CLOSE_BUTTON_PIN}")
+        log(f"[INFO] Slimme toggle-schakelaar actief op GPIO {CLOSE_BUTTON_PIN}")
     except Exception as e:
         log(f"[ERROR] Fysieke knop kon NIET geregistreerd worden op GPIO {CLOSE_BUTTON_PIN}: {e}")
         log("[ERROR] Mogelijke oorzaak: service-gebruiker zit niet in de gpio/i2c groep.")
@@ -2249,7 +2249,7 @@ try:
         time.sleep(1)
 
 except Exception:
-    log("ÃƒÂ°Ã…Â¸Ã¢â¬ÂºÃ¢â¬Ëœ Stop.")
+    log("[INFO] Stop.")
 
 finally:
     cancel_timer(light_off_timer)
