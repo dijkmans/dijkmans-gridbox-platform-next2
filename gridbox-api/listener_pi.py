@@ -25,7 +25,7 @@ from db_manager import get_db
 # GRIDBOX SERVICE - MASTER v1.0.53 (FULL VERSION + VERBOSE)
 # =========================================================
 
-VERSION = "v1.0.53"
+VERSION = "v1.0.79"
 KEY_PATH = "service-account.json"
 BUCKET_NAME = "gridbox-platform.firebasestorage.app"
 TIMEZONE = ZoneInfo("Europe/Brussels")
