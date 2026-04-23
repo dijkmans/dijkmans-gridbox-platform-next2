@@ -341,16 +341,29 @@ router.get("/admin/boxes", async (req, res) => {
     });
 
     const db = getFirestore();
-    const snapshot = await db.collection("boxes").get();
+    const [snapshot, accessSnapshot] = await Promise.all([
+      db.collection("boxes").get(),
+      db.collection("customerBoxAccess").where("active", "==", true).get()
+    ]);
+
+    const activeCustomerByBox = new Map<string, string>();
+    for (const doc of accessSnapshot.docs) {
+      const d = doc.data();
+      if (typeof d.boxId === "string" && typeof d.customerId === "string") {
+        activeCustomerByBox.set(d.boxId, d.customerId);
+      }
+    }
 
     const items = snapshot.docs.map((doc) => {
       const data = doc.data() as Record<string, any>;
+      const boxId = typeof data.boxId === "string" ? data.boxId : doc.id;
 
       return {
         id: doc.id,
-        boxId: typeof data.boxId === "string" ? data.boxId : doc.id,
+        boxId,
         siteId: data.siteId || null,
         customerId: data.customerId || null,
+        activeCustomerId: activeCustomerByBox.get(boxId) ?? null,
         updatedAt: data.updatedAt || null
       };
     });
@@ -1679,6 +1692,22 @@ router.post("/admin/customer-box-access", async (req, res) => {
       return res.status(400).json({
         error: "BOX_NOT_FOUND",
         message: "Box bestaat niet"
+      });
+    }
+
+    const existingAccess = await db.collection("customerBoxAccess")
+      .where("boxId", "==", trimmedBoxId)
+      .where("active", "==", true)
+      .get();
+
+    const conflicting = existingAccess.docs.find(
+      (d) => d.data().customerId !== trimmedCustomerId
+    );
+
+    if (conflicting) {
+      return res.status(409).json({
+        error: "BOX_ALREADY_IN_USE",
+        message: "Deze box is al actief gekoppeld aan een andere klant"
       });
     }
 
