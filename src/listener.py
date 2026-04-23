@@ -84,6 +84,28 @@ software_action_in_progress = False
 GPIO_AVAILABLE = False
 BUTTON_FACTORY = None
 
+
+def ensure_gpio_groups():
+    if platform.system() == "Windows":
+        return
+    try:
+        result = subprocess.run(["groups", "pi"], capture_output=True, text=True)
+        groups = result.stdout
+        missing = [g for g in ["gpio", "i2c"] if g not in groups]
+        if missing:
+            log(f"[WARN] Gebruiker 'pi' mist groepen: {missing}. Auto-fix wordt toegepast...")
+            for g in missing:
+                subprocess.run(["sudo", "usermod", "-a", "-G", g, "pi"], check=True)
+            log("[INFO] Groepen toegevoegd. Service herstart om wijzigingen te activeren...")
+            subprocess.Popen(["sudo", "systemctl", "restart", "gridbox.service"])
+        else:
+            log("[INFO] GPIO groepen OK: gpio + i2c aanwezig.")
+    except Exception as e:
+        log(f"[WARN] Kon GPIO groepen niet controleren: {e}")
+
+
+ensure_gpio_groups()
+
 if platform.system() != "Windows":
     try:
         from gpiozero import Button
