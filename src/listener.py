@@ -93,15 +93,15 @@ def ensure_gpio_groups():
         groups = result.stdout
         missing = [g for g in ["gpio", "i2c"] if g not in groups]
         if missing:
-            log(f"[WARN] Gebruiker 'pi' mist groepen: {missing}. Auto-fix wordt toegepast...")
+            print(f"[WARN] Gebruiker 'pi' mist groepen: {missing}. Auto-fix wordt toegepast...")
             for g in missing:
                 subprocess.run(["sudo", "usermod", "-a", "-G", g, "pi"], check=True)
-            log("[INFO] Groepen toegevoegd. Service herstart om wijzigingen te activeren...")
+            print("[INFO] Groepen toegevoegd. Service herstart om wijzigingen te activeren...")
             subprocess.Popen(["sudo", "systemctl", "restart", "gridbox.service"])
         else:
-            log("[INFO] GPIO groepen OK: gpio + i2c aanwezig.")
+            print("[INFO] GPIO groepen OK: gpio + i2c aanwezig.")
     except Exception as e:
-        log(f"[WARN] Kon GPIO groepen niet controleren: {e}")
+        print(f"[WARN] Kon GPIO groepen niet controleren: {e}")
 
 
 ensure_gpio_groups()
