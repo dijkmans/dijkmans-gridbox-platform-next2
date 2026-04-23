@@ -1214,14 +1214,17 @@ def handle_command(doc_ref, data):
                 time.sleep(0.1)
                 shutter_close.on()
 
-                if was_open_before:
-                    take_snapshot(phase="open_end", sequence_number=999999)
-
-                update_box_state(False, source)
-
                 duration = float(shutter_cfg.get("closeDurationSeconds", 30))
                 cancel_timer(shutter_motor_timer)
                 shutter_motor_timer = start_daemon_timer(duration, stop_shutter_motors)
+
+                if was_open_before:
+                    threading.Thread(
+                        target=lambda: take_snapshot(phase="open_end", sequence_number=999999),
+                        daemon=True
+                    ).start()
+
+                update_box_state(False, source)
 
                 light_delay = float(lighting_cfg.get("lightOffDelaySeconds", 60))
                 cancel_timer(light_off_timer)
