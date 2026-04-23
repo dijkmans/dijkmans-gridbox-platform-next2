@@ -151,3 +151,37 @@ Implementatie:
 - `layout.tsx`: `overflowX: "hidden"` op `<html>` en `<body>`
 - Header: `px-4 lg:px-8` i.p.v. vaste `px-8`, logo `max-w` beperkt, titel `text-2xl lg:text-3xl`
 - Artikel linkerkolom: `min-w-0` i.p.v. `min-w-[280px]`
+
+## 2026-04-23 - Pi-side logging en bootstrap standaarden
+
+### Geen emoji's in Python logs
+
+Beslissing: emoji's zijn verboden in alle logberichten van Pi-side Python code.
+
+Reden: emoji's veroorzaken encoding-problemen in journald, PowerShell, SSH-terminals en bij gebruik van grep. Garbled output (dubbel-encoded UTF-8) maakt logs onleesbaar en niet doorzoekbaar.
+
+Richtlijn:
+- gebruik altijd `[INFO]`, `[WARN]` of `[ERROR]` als prefix in logberichten
+- geldt voor `src/listener.py` en alle toekomstige Pi-side scripts
+
+### GPIO/I2C groepen verplicht bij bootstrap
+
+Beslissing: elke nieuwe Raspberry Pi installatie voegt gebruiker `pi` automatisch toe aan de benodigde hardware-groepen via `gridbox-bootstrap-init.sh`.
+
+Reden: zonder lidmaatschap van de `gpio`- en `i2c`-groepen kan `gpiozero` de fysieke knop niet registreren. Dit veroorzaakte stille fouten waarbij de knop gewoon niet werkte zonder foutmelding.
+
+Richtlijn:
+- `gridbox-bootstrap-init.sh` voert `usermod -a -G gpio,i2c,spi,input,netdev,video,audio,dialout,cdrom,games,users,plugdev,render,adm pi` uit
+- Pi herstarten na bootstrap is verplicht zodat groepswijzigingen actief worden
+- geldt voor elke nieuwe Raspberry Pi installatie
+
+### Service logging verplicht configureren
+
+Beslissing: `gridbox.service` moet altijd `StandardOutput=journal` en `PYTHONUNBUFFERED=1` bevatten.
+
+Reden: zonder deze instellingen zijn Python `print()`-output en logberichten niet zichtbaar in `journalctl`. Dit maakt debugging op de Pi onmogelijk.
+
+Richtlijn:
+- `StandardOutput=journal` en `StandardError=journal` in de `[Service]` sectie
+- `Environment=PYTHONUNBUFFERED=1` in de `[Service]` sectie
+- geldt voor alle nieuwe en bestaande Gridbox Pi-installaties
