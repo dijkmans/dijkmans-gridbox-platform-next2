@@ -24,4 +24,13 @@ pip3 install -r requirements.txt --break-system-packages
 
 systemctl enable gridbox.service
 
+# Install Raspberry Pi Connect Lite
+apt-get install -y rpi-connect-lite
+
+# Enable rpi-connect as user service for pi
+sudo -u pi systemctl --user enable rpi-connect
+
+# Enable linger so user service starts without login
+loginctl enable-linger pi
+
 echo "[BOOTSTRAP] Klaar. Herstart aanbevolen voor groepswijzigingen."
