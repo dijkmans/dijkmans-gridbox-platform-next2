@@ -33,4 +33,15 @@ sudo -u pi systemctl --user enable rpi-connect
 # Enable linger so user service starts without login
 loginctl enable-linger pi
 
+echo "[BOOTSTRAP] Watchdog installeren en instellen..."
+if ! dpkg -s watchdog &>/dev/null; then
+  apt-get install -y watchdog
+fi
+echo "watchdog-device = /dev/watchdog" > /etc/watchdog.conf
+echo "watchdog-timeout = 15" >> /etc/watchdog.conf
+echo "max-load-1 = 24" >> /etc/watchdog.conf
+systemctl enable watchdog
+systemctl start watchdog
+echo "[BOOTSTRAP] Watchdog actief."
+
 echo "[BOOTSTRAP] Klaar. Herstart aanbevolen voor groepswijzigingen."

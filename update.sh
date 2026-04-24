@@ -17,6 +17,17 @@ fi
 echo "[UPDATE] Linger inschakelen voor gebruiker pi..."
 loginctl enable-linger pi
 
+echo "[UPDATE] Watchdog installeren en instellen..."
+if ! dpkg -s watchdog &>/dev/null; then
+  apt-get install -y watchdog
+fi
+echo "watchdog-device = /dev/watchdog" > /etc/watchdog.conf
+echo "watchdog-timeout = 15" >> /etc/watchdog.conf
+echo "max-load-1 = 24" >> /etc/watchdog.conf
+systemctl enable watchdog
+systemctl start watchdog
+echo "[UPDATE] Watchdog actief."
+
 echo "[UPDATE] rpi-connect user service inschakelen..."
 sudo -u pi DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/1000/bus" XDG_RUNTIME_DIR=/run/user/1000 systemctl --user enable rpi-connect
 
