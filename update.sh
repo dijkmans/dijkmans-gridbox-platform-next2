@@ -3,7 +3,9 @@ set -e
 
 echo "[UPDATE] Laatste versie ophalen..."
 git fetch --all
-git checkout v1.0.85
+VERSION=${1:-$(git describe --tags $(git rev-list --tags --max-count=1))}
+echo "[UPDATE] Versie: $VERSION"
+git checkout $VERSION
 
 echo "[UPDATE] rpi-connect-lite installeren indien nodig..."
 if ! dpkg -s rpi-connect-lite &>/dev/null; then
