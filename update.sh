@@ -26,8 +26,7 @@ systemctl restart gridbox.service
 echo "[UPDATE] rpi-connect starten..."
 sudo -u pi DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/1000/bus" XDG_RUNTIME_DIR=/run/user/1000 rpi-connect on
 
-echo "[UPDATE] Status:"
-sudo -u pi rpi-connect status || true
+echo "[UPDATE] rpi-connect gestart. Controleer status na script met: rpi-connect status"
 systemctl status gridbox.service --no-pager || true
 
 echo "[UPDATE] Klaar."
