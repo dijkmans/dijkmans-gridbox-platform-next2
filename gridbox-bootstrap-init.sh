@@ -27,11 +27,12 @@ systemctl enable gridbox.service
 # Install Raspberry Pi Connect Lite
 apt-get install -y rpi-connect-lite
 
-# Enable rpi-connect as user service for pi
-sudo -u pi systemctl --user enable rpi-connect
-
 # Enable linger so user service starts without login
 loginctl enable-linger pi
+
+# Enable and start rpi-connect as user service for pi
+sudo -u pi DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/1000/bus" XDG_RUNTIME_DIR=/run/user/1000 systemctl --user enable rpi-connect
+sudo -u pi DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/1000/bus" XDG_RUNTIME_DIR=/run/user/1000 systemctl --user start rpi-connect
 
 echo "[BOOTSTRAP] Watchdog installeren en instellen..."
 if ! dpkg -s watchdog &>/dev/null; then
