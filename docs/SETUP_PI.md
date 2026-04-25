@@ -111,6 +111,40 @@ Controleer in het Operations Center (`/operations`) of de box online komt.
 
 ---
 
+## rpi-connect (remote toegang)
+
+rpi-connect is een `--user` service die draait onder de `pi` gebruiker, niet als systeem service.
+Dit betekent dat standaard `systemctl` commando's niet werken — je moet altijd `DBUS_SESSION_BUS_ADDRESS` en `XDG_RUNTIME_DIR` meegeven, of direct als de `pi` gebruiker uitvoeren.
+
+### Waarom expliciete stop/restart nodig is
+
+rpi-connect loopt na een update vast als de service niet expliciet herstart wordt. De combinatie van `rpi-connect on` (oud gedrag) activeert alleen de verbinding als die uitstaat, maar herstart geen vastgelopen instantie. Daarom wordt in `update.sh` (v1.0.93+) rpi-connect expliciet gestopt vóór de update en herstart daarna.
+
+### Handmatige restart van rpi-connect
+
+```bash
+sudo -u pi DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/1000/bus" XDG_RUNTIME_DIR=/run/user/1000 systemctl --user restart rpi-connect
+```
+
+Status controleren:
+
+```bash
+sudo -u pi DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/1000/bus" XDG_RUNTIME_DIR=/run/user/1000 rpi-connect status
+```
+
+### Eerste installatie (bootstrap)
+
+`gridbox-bootstrap-init.sh` installeert rpi-connect-lite, schakelt linger in zodat de user service bij boot start, en start rpi-connect direct op. Dit werkt alleen correct als `loginctl enable-linger pi` vóór de `systemctl --user` aanroepen staat.
+
+### Changelog
+
+| Versie | Wijziging |
+|--------|-----------|
+| v1.0.93 | `update.sh`: expliciete stop voor update en restart daarna (commit 5f91534) |
+| v1.0.93 | `gridbox-bootstrap-init.sh`: correcte DBUS/XDG_RUNTIME_DIR variabelen en directe start na enable |
+
+---
+
 ## Service-naam
 
 De service heet `gridbox.service`. Dit is de naam waarmee systemd de listener beheert.
