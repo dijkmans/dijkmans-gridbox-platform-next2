@@ -203,6 +203,9 @@ export default function AdminBoxConfigClient() {
   const [cameraFlowError, setCameraFlowError] = useState("");
   const [cameraFlowSuccess, setCameraFlowSuccess] = useState("");
 
+  // Geavanceerd (camera sectie)
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
   // Handmatige override (fallback)
   const [manualMac, setManualMac] = useState("");
   const [manualIp, setManualIp] = useState("");
@@ -879,7 +882,7 @@ export default function AdminBoxConfigClient() {
           <SectionCard
             id="camera"
             title="Camera"
-            subtitle="Koppeling van de camera via MAC-adres aan een vast IP op de RUT241 router"
+            subtitle="Stapsgewijze koppeling en configuratie van de netwerkcamera"
             badge={
               cameraContext ? (
                 <Pill color={camColor === "amber" ? "amber" : camColor === "green" ? "green" : "gray"}>
@@ -896,151 +899,178 @@ export default function AdminBoxConfigClient() {
             )}
             {cameraContext?.routerStatus === "offline" && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                ⚠ RUT241 router is niet bereikbaar. Camera-koppeling beheren is tijdelijk niet mogelijk.
+                ⚠ RUT241 router is niet bereikbaar — camera-koppeling tijdelijk niet mogelijk.
               </div>
             )}
 
-            <SubLabel>Gedetecteerde camera (live via RUT241)</SubLabel>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Huidig gedetecteerd op het netwerk</p>
-              {cameraContext === null ? (
-                <p className="text-sm text-slate-400">Nog niet opgeroepen — klik op "Zoek camera opnieuw"</p>
-              ) : cameraContext.detectedMac ? (
-                <>
-                  <KVRow label="Huidig netwerk-IP" value={cameraContext.detectedIp} mono />
-                  <KVRow label="MAC-adres" value={cameraContext.detectedMac} mono />
-                </>
-              ) : (
-                <p className="text-sm text-slate-400">Geen camera gedetecteerd</p>
+            {/* ── STAP 1 — Camera detecteren ──────────────────────────── */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center shrink-0">1</span>
+                <p className="text-sm font-bold text-slate-900">Camera detecteren</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2">
+                {cameraContext === null ? (
+                  <p className="text-sm text-slate-400">Nog niet opgeroepen</p>
+                ) : cameraContext.detectedMac ? (
+                  <>
+                    <KVRow label="Netwerk-IP" value={cameraContext.detectedIp} mono />
+                    <KVRow label="MAC-adres" value={cameraContext.detectedMac} mono />
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-400">Geen camera gedetecteerd op het netwerk</p>
+                )}
+              </div>
+              <button type="button" onClick={loadCameraContext} disabled={cameraContextBusy}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition">
+                {cameraContextBusy ? "Bezig…" : "🔍 Zoek camera opnieuw"}
+              </button>
+            </div>
+
+            <hr className="border-slate-100" />
+
+            {/* ── STAP 2 — Camera instellen en koppelen ───────────────── */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center shrink-0">2</span>
+                <p className="text-sm font-bold text-slate-900">Camera instellen en koppelen</p>
+              </div>
+              <FieldRow label="Gebruikersnaam">
+                <TextInput value={cameraUsername} onChange={setCameraUsername} placeholder="admin" />
+              </FieldRow>
+              <FieldRow label="Wachtwoord">
+                <TextInput type="password" value={cameraPassword} onChange={setCameraPassword} placeholder="Laat leeg om ongewijzigd te laten" />
+              </FieldRow>
+              <div className="flex flex-wrap gap-2 items-center pt-1">
+                <button type="button" onClick={handleSuggestIp} disabled={suggestBusy}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition">
+                  {suggestBusy ? "Bezig…" : suggestedIp ? `💡 IP: ${suggestedIp} ↺` : "💡 Stel vrij IP voor"}
+                </button>
+                <button type="button" onClick={handleCameraAssign}
+                  disabled={assignBusy || !cameraContext?.detectedMac || !suggestedIp}
+                  title={!cameraContext?.detectedMac ? "Detecteer eerst een camera (stap 1)" : !suggestedIp ? "Stel eerst een vrij IP voor" : ""}
+                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-40 transition">
+                  {assignBusy ? "Bezig…" : "✅ Bevestig en zet vast IP op router"}
+                </button>
+                <button type="button" onClick={handleTestSnapshot}
+                  disabled={!cameraContext?.firestoreCamera?.snapshotUrl}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition">
+                  📸 Test snapshot
+                </button>
+              </div>
+            </div>
+
+            <hr className="border-slate-100" />
+
+            {/* ── STAP 3 — Huidige status ──────────────────────────────── */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center shrink-0">3</span>
+                <p className="text-sm font-bold text-slate-900">Huidige status</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2">
+                {cameraContext?.firestoreCamera ? (
+                  <>
+                    <KVRow label="MAC-adres" value={cameraContext.firestoreCamera.mac} mono />
+                    <KVRow label="Vast IP op router" value={cameraContext.firestoreCamera.ip} mono />
+                    <KVRow label="Snapshot URL" value={cameraContext.firestoreCamera.snapshotUrl} mono />
+                    <KVRow label="Laatste update" value={formatDate(cameraContext.firestoreCamera.updatedAt)} />
+                    <div className="pt-1">
+                      <Pill color={cameraContext.leaseStatus === "active" ? "green" : cameraContext.leaseStatus === "conflict" ? "red" : "gray"}>
+                        {cameraContext.leaseStatus === "active" ? "Lease actief" :
+                         cameraContext.leaseStatus === "not_set" ? "Lease niet gezet" :
+                         cameraContext.leaseStatus === "conflict" ? "Lease conflict" : "Lease onbekend"}
+                      </Pill>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-400">Nog geen camera gekoppeld aan deze box</p>
+                )}
+              </div>
+            </div>
+
+            <hr className="border-slate-100" />
+
+            {/* ── STAP 4 — Geavanceerd (collapsible) ──────────────────── */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setAdvancedOpen((v) => !v)}
+                className="flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition"
+              >
+                <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold flex items-center justify-center shrink-0">4</span>
+                Geavanceerd
+                <span className="text-slate-400 text-xs ml-1">{advancedOpen ? "▲ inklappen" : "▼ uitklappen"}</span>
+              </button>
+              {advancedOpen && (
+                <div className="mt-4 space-y-4">
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Handmatige override</p>
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      Gebruik dit als de Pi of RUT241 niet bereikbaar is. Stel de static lease daarna ook zelf in op de RUT241 (Network → DHCP → Static Leases).
+                    </p>
+                    {manualError && (
+                      <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{manualError}</div>
+                    )}
+                    {manualSuccess && (
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{manualSuccess}</div>
+                    )}
+                    <FieldRow label="MAC-adres camera">
+                      <TextInput value={manualMac} onChange={setManualMac} placeholder="bijv. 08:8f:c3:f0:a5:6a" />
+                    </FieldRow>
+                    <FieldRow label="Vast IP-adres">
+                      <TextInput value={manualIp} onChange={setManualIp} placeholder="bijv. 192.168.10.100" />
+                    </FieldRow>
+                    <button type="button" onClick={handleManualAssign}
+                      disabled={manualBusy || !manualMac || !manualIp}
+                      className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-40 transition">
+                      {manualBusy ? "Bezig…" : "⚠ Handmatig opslaan in Firestore (zonder Pi)"}
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Camera-instellingen</p>
+                    <FieldRow label="Camera actief">
+                      <Toggle checked={cameraEnabled} onChange={setCameraEnabled} />
+                    </FieldRow>
+                    <FieldRow label="Snapshot interval (sec)">
+                      <NumInput value={cameraSnapshotInterval} onChange={setCameraSnapshotInterval} placeholder="bijv. 5" />
+                    </FieldRow>
+                    <FieldRow label="Bewegingsdrempel">
+                      <NumInput value={cameraChangeThreshold} onChange={setCameraChangeThreshold} placeholder="bijv. 6.0" />
+                    </FieldRow>
+                    <FieldRow label="Snapshot duur na sluiten (sec)">
+                      <NumInput value={cameraPostCloseDuration} onChange={setCameraPostCloseDuration} placeholder="bijv. 30" />
+                    </FieldRow>
+                  </div>
+                </div>
               )}
             </div>
 
-            <SubLabel>Huidige koppeling op deze box (Firestore)</SubLabel>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Vastgelegd in de database</p>
-              {cameraContext?.firestoreCamera ? (
-                <>
-                  <KVRow label="MAC-adres" value={cameraContext.firestoreCamera.mac} mono />
-                  <KVRow label="Vast IP op router" value={cameraContext.firestoreCamera.ip} mono />
-                  <KVRow label="Snapshot URL" value={cameraContext.firestoreCamera.snapshotUrl} mono />
-                  <KVRow label="Laatste update" value={formatDate(cameraContext.firestoreCamera.updatedAt)} />
-                </>
-              ) : (
-                <p className="text-sm text-slate-400">Nog geen camera gekoppeld</p>
-              )}
-            </div>
+            <hr className="border-slate-100" />
 
-            <SubLabel>Voorgesteld nieuw vast IP</SubLabel>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Beschikbaar IP via RUT241 DHCP</p>
-              {suggestedIp
-                ? <KVRow label="Voorgesteld IP" value={suggestedIp} mono />
-                : <p className="text-sm text-slate-400">Nog niet bepaald — klik op "Stel vrij IP voor"</p>
-              }
-            </div>
-
-            <SubLabel>RUT241 routerstatus</SubLabel>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Verbindingsstatus</p>
+            {/* ── STAP 5 — Router (RUT241) ─────────────────────────────── */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center shrink-0">5</span>
+                <p className="text-sm font-bold text-slate-900">Router (RUT241)</p>
+              </div>
               <div className="flex flex-wrap gap-2">
                 <Pill color={rutColor}>
                   <span className={`h-1.5 w-1.5 rounded-full inline-block ${
                     rutColor === "green" ? "bg-emerald-500" : rutColor === "red" ? "bg-red-500" : "bg-slate-400"
                   }`} />
-                  {cameraContext?.routerStatus === "online" ? "Online" :
-                   cameraContext?.routerStatus === "offline" ? "Offline" : "Onbekend"}
-                </Pill>
-                <Pill color={cameraContext?.leaseStatus === "active" ? "green" : cameraContext?.leaseStatus === "conflict" ? "red" : "gray"}>
-                  {cameraContext?.leaseStatus === "active" ? "Lease actief" :
-                   cameraContext?.leaseStatus === "not_set" ? "Lease niet gezet" :
-                   cameraContext?.leaseStatus === "conflict" ? "Lease conflict" : "Lease onbekend"}
+                  {cameraContext?.routerStatus === "online" ? "Router online" :
+                   cameraContext?.routerStatus === "offline" ? "Router offline" : "Status onbekend"}
                 </Pill>
               </div>
-              {cameraContext?.routerStatus === "offline" && (
-                <p className="text-xs text-red-700">Router niet bereikbaar — controleer stroomtoevoer en netwerkkabel</p>
+              <KVRow label="RUT IP" value={box?.rutIp ?? box?.hardware?.rut?.config?.ip ?? box?.gatewayIp} mono />
+              <KVRow label="RUT MAC" value={box?.rutMac ?? box?.hardware?.rut?.observed?.mac} mono />
+              {cameraContext?.lastError && (
+                <p className="text-xs text-amber-700">{cameraContext.lastError}</p>
               )}
             </div>
 
-            <div className="flex flex-wrap gap-2 pt-1">
-              <button type="button" onClick={loadCameraContext} disabled={cameraContextBusy}
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition">
-                {cameraContextBusy ? "Bezig…" : "🔍 Zoek camera opnieuw"}
-              </button>
-              <button type="button" onClick={handleSuggestIp} disabled={suggestBusy}
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition">
-                {suggestBusy ? "Bezig…" : "💡 Stel vrij IP voor"}
-              </button>
-              <button type="button" onClick={handleCameraAssign}
-                disabled={assignBusy || !cameraContext?.detectedMac || !suggestedIp}
-                title={!cameraContext?.detectedMac ? "Geen gedetecteerde MAC" : !suggestedIp ? "Stel eerst een vrij IP voor" : ""}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-40 transition">
-                {assignBusy ? "Bezig…" : "✅ Bevestig en zet vast IP op router"}
-              </button>
-              <button type="button" onClick={handleTestSnapshot}
-                disabled={!cameraContext?.firestoreCamera?.snapshotUrl}
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition">
-                📸 Test snapshot
-              </button>
-            </div>
-
-            <hr className="border-slate-100" />
-            <SubLabel>Handmatige override (fallback)</SubLabel>
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3">
-              <p className="text-xs text-amber-800 leading-relaxed">
-                <strong>Gebruik dit als de Pi of RUT241 niet bereikbaar is.</strong> Vul het MAC-adres en gewenste vaste IP in.
-                Stel de static lease ook zelf in op de RUT241 (Network → DHCP → Static Leases).
-                De automatische flow blijft daarna gewoon werken.
-              </p>
-              {manualError && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{manualError}</div>
-              )}
-              {manualSuccess && (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{manualSuccess}</div>
-              )}
-              <FieldRow label="MAC-adres camera">
-                <TextInput
-                  value={manualMac}
-                  onChange={setManualMac}
-                  placeholder="bijv. 08:8f:c3:f0:a5:6a"
-                />
-              </FieldRow>
-              <FieldRow label="Vast IP-adres">
-                <TextInput
-                  value={manualIp}
-                  onChange={setManualIp}
-                  placeholder="bijv. 192.168.10.100"
-                />
-              </FieldRow>
-              <button
-                type="button"
-                onClick={handleManualAssign}
-                disabled={manualBusy || !manualMac || !manualIp}
-                className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-40 transition"
-              >
-                {manualBusy ? "Bezig…" : "⚠ Handmatig opslaan in Firestore (zonder Pi)"}
-              </button>
-            </div>
-
-            <hr className="border-slate-100" />
-            <SubLabel>Camera-instellingen</SubLabel>
-            <FieldRow label="Camera actief">
-              <Toggle checked={cameraEnabled} onChange={setCameraEnabled} />
-            </FieldRow>
-            <FieldRow label="Snapshot interval (sec)">
-              <NumInput value={cameraSnapshotInterval} onChange={setCameraSnapshotInterval} placeholder="bijv. 5" />
-            </FieldRow>
-            <FieldRow label="Bewegingsdrempel (0–1)">
-              <NumInput value={cameraChangeThreshold} onChange={setCameraChangeThreshold} placeholder="bijv. 0.02" />
-            </FieldRow>
-            <FieldRow label="Snapshot duur na sluiten (sec)">
-              <NumInput value={cameraPostCloseDuration} onChange={setCameraPostCloseDuration} placeholder="bijv. 10" />
-            </FieldRow>
-            <FieldRow label="Gebruikersnaam">
-              <TextInput value={cameraUsername} onChange={setCameraUsername} placeholder="admin" />
-            </FieldRow>
-            <FieldRow label="Wachtwoord">
-              <TextInput type="password" value={cameraPassword} onChange={setCameraPassword} placeholder="Laat leeg om ongewijzigd te laten" />
-            </FieldRow>
           </SectionCard>
 
           {/* ── C: ROUTER RUT241 ─────────────────────────────────────── */}
