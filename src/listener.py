@@ -1290,7 +1290,19 @@ def set_rut241_static_lease_via_ssh(ip, username, password, mac, lease_ip, hostn
         ssh.connect(ip, port=22, username=username, password=password, timeout=10)
         log(f"INFO: SSH verbonden met RUT241 op {ip}")
 
+        # Verwijder bestaande entries voor dit MAC (voorkomt duplicate leases bij hergebruik).
+        # UCI verschuift indices na delete, vandaar: bij match niet ophogen, anders wel.
+        cleanup_cmd = (
+            f"i=0; "
+            f"while uci -q get dhcp.@host[$i] >/dev/null 2>&1; do "
+            f"m=$(uci -q get dhcp.@host[$i].mac 2>/dev/null); "
+            f"if [ \"$m\" = \"{mac}\" ]; then uci delete dhcp.@host[$i]; "
+            f"else i=$((i+1)); fi; "
+            f"done"
+        )
+
         commands = [
+            cleanup_cmd,
             f"uci add dhcp host",
             f"uci set dhcp.@host[-1].mac='{mac}'",
             f"uci set dhcp.@host[-1].ip='{lease_ip}'",

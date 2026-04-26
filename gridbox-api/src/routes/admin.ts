@@ -982,7 +982,8 @@ router.post("/admin/boxes/:boxId/camera-assign", async (req, res) => {
       "hardware.camera.assignment.mac": mac,
       "hardware.camera.assignment.ip": chosenIp,
       "hardware.camera.assignment.snapshotUrl": snapshotUrl,
-      "hardware.camera.assignment.updatedAt": now
+      "hardware.camera.assignment.updatedAt": now,
+      "hardware.camera.config.enabled": true
     });
 
     console.log(`camera-assign: ${boxId} → mac=${mac} ip=${chosenIp} (via Pi)`);
