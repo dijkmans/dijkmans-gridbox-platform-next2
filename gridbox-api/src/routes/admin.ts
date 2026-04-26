@@ -892,6 +892,8 @@ router.post("/admin/boxes/:boxId/camera-assign", async (req, res) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const mac = typeof body.mac === "string" ? body.mac.trim().toLowerCase() : "";
     const chosenIp = typeof body.chosenIp === "string" ? body.chosenIp.trim() : "";
+    const username = typeof body.username === "string" && body.username.trim() ? body.username.trim() : null;
+    const password = typeof body.password === "string" && body.password ? body.password : null;
 
     if (!mac || !/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(mac)) {
       return res.status(400).json({ error: "INVALID_MAC", message: "mac moet het formaat xx:xx:xx:xx:xx:xx hebben" });
@@ -978,13 +980,17 @@ router.post("/admin/boxes/:boxId/camera-assign", async (req, res) => {
     const snapshotUrl = `http://${chosenIp}/cgi-bin/snapshot.cgi`;
     const now = new Date().toISOString();
 
-    await boxDocRef.update({
+    const fsUpdate: Record<string, unknown> = {
       "hardware.camera.assignment.mac": mac,
       "hardware.camera.assignment.ip": chosenIp,
       "hardware.camera.assignment.snapshotUrl": snapshotUrl,
       "hardware.camera.assignment.updatedAt": now,
-      "hardware.camera.config.enabled": true
-    });
+      "hardware.camera.config.enabled": true,
+    };
+    if (username) fsUpdate["hardware.camera.config.username"] = username;
+    if (password) fsUpdate["hardware.camera.config.password"] = password;
+
+    await boxDocRef.update(fsUpdate);
 
     console.log(`camera-assign: ${boxId} → mac=${mac} ip=${chosenIp} (via Pi)`);
     return res.json({ ok: true, mac, ip: chosenIp, snapshotUrl, updatedAt: now });

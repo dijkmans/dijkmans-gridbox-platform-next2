@@ -465,7 +465,12 @@ export default function AdminBoxConfigClient() {
       const res = await fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/camera-assign`), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ mac, chosenIp: suggestedIp })
+        body: JSON.stringify({
+          mac,
+          chosenIp: suggestedIp,
+          ...(cameraUsername ? { username: cameraUsername } : {}),
+          ...(cameraPassword ? { password: cameraPassword } : {})
+        })
       });
       const data = await res.json() as { ok?: boolean; ip?: string; mac?: string; message?: string };
       if (!res.ok) { setCameraFlowError(data.message || "Toewijzen camera mislukt"); return; }
