@@ -15,7 +15,7 @@ function PageContentRouter() {
   const [box, setBox] = useState<any>(null);
   const [shares, setShares] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshKey, setRefreshKey] = useState(Date.now());
+  const [snapshotUrl, setSnapshotUrl] = useState("");
   const [toast, setToast] = useState({ visible: false, msg: "" });
   const [sharesOpen, setSharesOpen] = useState(searchParams.get("tab") === "toegang");
   const [smsLogs, setSmsLogs] = useState<Record<string, any[]>>({});
@@ -58,6 +58,27 @@ function PageContentRouter() {
     }
   }, [boxId]);
 
+  const loadSnapshot = useCallback(async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user || !boxId) return;
+      const token = await user.getIdToken();
+      const res = await fetch(apiUrl(`/portal/boxes/${boxId}/picture`), {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store"
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      setSnapshotUrl(prev => {
+        if (prev) URL.revokeObjectURL(prev);
+        return objectUrl;
+      });
+    } catch {
+      // keep existing image on error
+    }
+  }, [boxId]);
+
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((u) => {
       if (u) void loadDashboardData();
@@ -74,9 +95,16 @@ function PageContentRouter() {
 
   useEffect(() => {
     if (!boxId) return;
+    void loadSnapshot();
+    const intervalId = window.setInterval(() => void loadSnapshot(), 30_000);
     const q = query(collection(db, "boxes", boxId, "snapshots"), orderBy("capturedAt", "desc"), limit(1));
-    return onSnapshot(q, () => setRefreshKey(Date.now()));
-  }, [boxId]);
+    const unsubscribeSnap = onSnapshot(q, () => void loadSnapshot());
+    return () => {
+      window.clearInterval(intervalId);
+      unsubscribeSnap();
+      setSnapshotUrl(prev => { if (prev) URL.revokeObjectURL(prev); return ""; });
+    };
+  }, [boxId, loadSnapshot]);
 
   useEffect(() => {
     if (searchParams.get("tab") === "toegang") {
@@ -326,11 +354,13 @@ function PageContentRouter() {
             <span className="live-dot" /> Live monitoring
           </h3>
           <div className="w-full max-w-3xl aspect-video bg-slate-900 rounded-2xl overflow-hidden border-4 border-slate-800 shadow-xl relative">
-            <img
-              src={apiUrl(`/portal/boxes/${boxId}/picture?t=${refreshKey}`)}
-              alt="Real-time feed"
-              className="w-full h-full object-cover"
-            />
+            {snapshotUrl && (
+              <img
+                src={snapshotUrl}
+                alt="Real-time feed"
+                className="w-full h-full object-cover"
+              />
+            )}
             <div className="absolute top-4 right-4 text-xs font-mono border border-emerald-400 text-emerald-400 px-2 py-1 rounded-lg bg-black/50 backdrop-blur-sm">
               STREAM_OK // 1080p
             </div>

@@ -1704,7 +1704,21 @@ def maybe_process_software_request():
 # =========================================================
 
 def get_camera_config():
-    return cached_config.get("hardware", {}).get("camera", {})
+    raw = cached_config.get("hardware", {}).get("camera", {})
+    assignment = raw.get("assignment") or {}
+    cfg = raw.get("config") or {}
+    # Normalize: nested admin-written structure (assignment/config) takes precedence over flat legacy
+    return {
+        "enabled":                        cfg.get("enabled",                        raw.get("enabled", True)),
+        "snapshotUrl":                    assignment.get("snapshotUrl")          or raw.get("snapshotUrl"),
+        "username":                       cfg.get("username")                    or raw.get("username"),
+        "password":                       cfg.get("password")                    or raw.get("password"),
+        "snapshotIntervalSeconds":        cfg.get("snapshotIntervalSeconds",        raw.get("snapshotIntervalSeconds", 5)),
+        "postCloseSnapshotDurationSeconds": cfg.get("postCloseSnapshotDurationSeconds", raw.get("postCloseSnapshotDurationSeconds", 30)),
+        "changeDetectionThreshold":       cfg.get("changeDetectionThreshold",       raw.get("changeDetectionThreshold", 6.0)),
+        "saveCooldownSeconds":            cfg.get("saveCooldownSeconds",            raw.get("saveCooldownSeconds", 10)),
+        "forceSaveThresholdMultiplier":   cfg.get("forceSaveThresholdMultiplier",   raw.get("forceSaveThresholdMultiplier", 2.0)),
+    }
 
 def get_snapshot_collection_ref():
     return box_doc_ref.collection("snapshots")
