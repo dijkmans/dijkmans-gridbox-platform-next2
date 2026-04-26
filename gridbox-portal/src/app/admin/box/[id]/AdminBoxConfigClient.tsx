@@ -203,6 +203,13 @@ export default function AdminBoxConfigClient() {
   const [cameraFlowError, setCameraFlowError] = useState("");
   const [cameraFlowSuccess, setCameraFlowSuccess] = useState("");
 
+  // Handmatige override (fallback)
+  const [manualMac, setManualMac] = useState("");
+  const [manualIp, setManualIp] = useState("");
+  const [manualBusy, setManualBusy] = useState(false);
+  const [manualError, setManualError] = useState("");
+  const [manualSuccess, setManualSuccess] = useState("");
+
   // Verlichting
   const [lightsOnWhenOpen, setLightsOnWhenOpen] = useState(false);
   const [lightsOffDelay, setLightsOffDelay] = useState("");
@@ -488,6 +495,47 @@ export default function AdminBoxConfigClient() {
       }
     } catch {
       setCameraFlowError("Netwerkfout bij ophalen snapshot");
+    }
+  }
+
+  async function handleManualAssign() {
+    setManualError("");
+    setManualSuccess("");
+
+    const macTrimmed = manualMac.trim().toLowerCase();
+    const ipTrimmed = manualIp.trim();
+
+    if (!/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(macTrimmed)) {
+      setManualError("Ongeldig MAC-adres — gebruik het formaat xx:xx:xx:xx:xx:xx");
+      return;
+    }
+    const ipMatch = ipTrimmed.match(/^192\.168\.10\.(\d+)$/);
+    if (!ipMatch || parseInt(ipMatch[1], 10) < 100 || parseInt(ipMatch[1], 10) > 249) {
+      setManualError("Ongeldig IP-adres — gebruik 192.168.10.x (100–249)");
+      return;
+    }
+
+    try {
+      setManualBusy(true);
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) { setManualError("Niet aangemeld"); return; }
+
+      const res = await fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/camera`), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ mac: macTrimmed, ip: ipTrimmed })
+      });
+      const data = await res.json() as { ok?: boolean; message?: string };
+      if (!res.ok) { setManualError(data.message || "Opslaan mislukt"); return; }
+
+      setManualSuccess(`Camera handmatig opgeslagen: MAC ${macTrimmed} → IP ${ipTrimmed}. Vergeet niet de static lease ook in de RUT241 in te stellen.`);
+      setManualMac("");
+      setManualIp("");
+      await loadData();
+    } catch {
+      setManualError("Netwerkfout bij handmatig opslaan");
+    } finally {
+      setManualBusy(false);
     }
   }
 
@@ -927,6 +975,44 @@ export default function AdminBoxConfigClient() {
                 disabled={!cameraContext?.firestoreCamera?.snapshotUrl}
                 className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition">
                 📸 Test snapshot
+              </button>
+            </div>
+
+            <hr className="border-slate-100" />
+            <SubLabel>Handmatige override (fallback)</SubLabel>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+              <p className="text-xs text-amber-800 leading-relaxed">
+                <strong>Gebruik dit als de Pi of RUT241 niet bereikbaar is.</strong> Vul het MAC-adres en gewenste vaste IP in.
+                Stel de static lease ook zelf in op de RUT241 (Network → DHCP → Static Leases).
+                De automatische flow blijft daarna gewoon werken.
+              </p>
+              {manualError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{manualError}</div>
+              )}
+              {manualSuccess && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{manualSuccess}</div>
+              )}
+              <FieldRow label="MAC-adres camera">
+                <TextInput
+                  value={manualMac}
+                  onChange={setManualMac}
+                  placeholder="bijv. 08:8f:c3:f0:a5:6a"
+                />
+              </FieldRow>
+              <FieldRow label="Vast IP-adres">
+                <TextInput
+                  value={manualIp}
+                  onChange={setManualIp}
+                  placeholder="bijv. 192.168.10.100"
+                />
+              </FieldRow>
+              <button
+                type="button"
+                onClick={handleManualAssign}
+                disabled={manualBusy || !manualMac || !manualIp}
+                className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-40 transition"
+              >
+                {manualBusy ? "Bezig…" : "⚠ Handmatig opslaan in Firestore (zonder Pi)"}
               </button>
             </div>
 
