@@ -1,5 +1,19 @@
 # CURRENT WORKSTATE
 
+## Status — 2026-04-26
+
+P0 safety fix uitgerold als v1.0.94: box opende spontaan bij herstart
+doordat Firestore on_snapshot pending commands herspecelde. Fix negeert
+commands aangemaakt vóór LISTENER_STARTED_AT en markeert ze als
+`ignored_stale` in Firestore.
+
+Cloud Function `checkBoxHeartbeats` gedeployed: schrijft `status: "offline"`
+als `software.lastHeartbeatIso` ouder is dan 5 minuten. listener.py herstelt
+`status: "online"` bij volgende heartbeat. Operations pagina toonde heartbeat
+timestamps al correct — geen frontendwijziging nodig.
+
+Oracle VPS aangemaakt: 141.145.215.74 — nog niet in gebruik.
+
 ## Status — 2026-04-21
 
 RUT-info herstructureerd naar `hardware.rut.config` + `hardware.rut.observed`. Camera-info herstructureerd naar `hardware.camera.config` + `assignment` + `observed`. Firestore migratiescript uitgevoerd voor RUT (7 boxes). Camera-config endpoint bijgewerkt; PUT /camera schrijft naar assignment.*; snapshot endpoint leest uit assignment + config.
@@ -159,6 +173,9 @@ Provisioning flow end-to-end werkend en gevalideerd. Master image bijgewerkt naa
 - `/portal/box-events` toont box events overzicht
 - Portal API: `/portal/boxes/:id/picture`, `/snapshots`, `/photos`, `/photos/content`
 - `GET /portal/me` debug endpoint
+- P0 safety fix v1.0.94: stale pending commands worden genegeerd bij listener startup
+- Cloud Function `checkBoxHeartbeats`: automatische offline-detectie elke 5 minuten
+- Watchdog (hardware, userspace) actief op Pi via update.sh en bootstrap
 
 ## Fixes 2026-04-10 (sessie 2)
 
@@ -262,6 +279,9 @@ Provisioning flow end-to-end werkend en gevalideerd. Master image bijgewerkt naa
 18. Operations Center uitbreiden met acties per box
 19. **Operations Center:** boxes grafisch groeperen per router/locatie
 20. **Automatische software updates op Pi:** bij nieuwe commit/release automatisch `softwareUpdateRequested` triggeren voor alle actieve boxes
+21. v1.0.94 uitrollen naar alle overige boxes (gbox-006, gbox-007, etc.)
+22. Oracle VPS 141.145.215.74 inzetten (doel nog te bepalen)
+23. Hardware watchdog: systemd WatchdogSec implementeren (on hold tot na P0 uitrol)
 
 ## Regels
 

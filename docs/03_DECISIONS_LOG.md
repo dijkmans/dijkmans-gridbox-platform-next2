@@ -185,3 +185,47 @@ Richtlijn:
 - `StandardOutput=journal` en `StandardError=journal` in de `[Service]` sectie
 - `Environment=PYTHONUNBUFFERED=1` in de `[Service]` sectie
 - geldt voor alle nieuwe en bestaande Gridbox Pi-installaties
+
+## 2026-04-26 - P0 safety fix: stale commands negeren bij reboot (v1.0.94)
+
+Beslissing: listener.py negeert voortaan pending commands die aangemaakt zijn
+vóór het huidige processtart-tijdstip (LISTENER_STARTED_AT).
+
+Reden: Firestore on_snapshot stuurt bij registratie een initieel ADDED-event
+voor alle bestaande pending documenten. Zonder staleness-check werden
+OPEN-commands na reboot opnieuw uitgevoerd — box opende spontaan.
+Ontdekt op gbox-007.
+
+Implementatie:
+- `LISTENER_STARTED_AT = time.time()` gezet bij processtart
+- `on_commands_snapshot`: commands met `createdAt < LISTENER_STARTED_AT - 2s`
+  worden gemarkeerd als `status: "ignored_stale"` in Firestore
+- Commands zonder `createdAt` in de initiële snapshot worden ook genegeerd
+- Gelogd als `[SAFETY] stale_command_ignored`
+
+Afspraak: elk OPEN/CLOSE command moet altijd een `createdAt` ISO-timestamp
+bevatten. Commands zonder timestamp worden als onveilig beschouwd.
+
+## 2026-04-26 - Cloud Function: heartbeat check elke 5 minuten
+
+Beslissing: een scheduled Cloud Function (`checkBoxHeartbeats`) controleert
+elke 5 minuten of `software.lastHeartbeatIso` per box niet ouder is dan
+5 minuten en schrijft dan `status: "offline"` naar Firestore.
+
+Reden: listener.py schrijft `status: "online"` bij elke heartbeat maar had
+geen mechanisme om `offline` te schrijven bij uitval. De Operations pagina
+berekende online/offline al client-side maar Firestore zelf bleef op "online"
+staan.
+
+Implementatie:
+- `cloud-functions/index.js`: `onSchedule` uit `firebase-functions/v2/scheduler`
+- Schedule: `every 5 minutes`, regio `europe-west1`
+- Veld: `software.lastHeartbeatIso` (primair) of `lastHeartbeatAt` (fallback)
+- Slaat boxes met `status: "offline"` over (geen onnodige writes)
+- listener.py herstelt `status: "online"` bij eerstvolgende heartbeat
+
+## 2026-04-26 - Oracle VPS aangemaakt
+
+Beslissing: Oracle VPS aangemaakt op 141.145.215.74.
+
+Status: nog niet in gebruik. Doel nog te bepalen.
