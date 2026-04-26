@@ -1,5 +1,6 @@
 const { onDocumentWritten } = require('firebase-functions/v2/firestore');
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const admin = require('firebase-admin');
 
 admin.initializeApp();
@@ -134,4 +135,38 @@ exports.openBox = onCall({ region: 'europe-west1', cors: true }, async (request)
 exports.inviteUser = onCall({ region: 'europe-west1', cors: true }, async (request) => {
     await db.collection('users').add({ email: request.data.email, role: 'user', status: 'invited', createdAt: new Date().toISOString() });
     return { success: true };
+});
+
+// 4. HEARTBEAT WATCHDOG — markeert boxes als offline als Pi meer dan 5 minuten stil is
+exports.checkBoxHeartbeats = onSchedule({
+    schedule: 'every 5 minutes',
+    region: 'europe-west1',
+    timeoutSeconds: 60
+}, async (_event) => {
+    const now = Date.now();
+    const THRESHOLD_MS = 5 * 60 * 1000;
+
+    const snapshot = await db.collection('boxes').get();
+    const batch = db.batch();
+    let markedOffline = 0;
+
+    for (const doc of snapshot.docs) {
+        const data = doc.data();
+        if (data.status === 'offline') continue;
+
+        const heartbeatStr = data?.software?.lastHeartbeatIso ?? data?.lastHeartbeatAt ?? null;
+        if (!heartbeatStr) continue;
+
+        const heartbeatTs = new Date(heartbeatStr).getTime();
+        if (isNaN(heartbeatTs)) continue;
+
+        if (now - heartbeatTs > THRESHOLD_MS) {
+            batch.update(doc.ref, { status: 'offline' });
+            markedOffline++;
+            console.log(`[checkBoxHeartbeats] ${doc.id} offline (heartbeat: ${heartbeatStr})`);
+        }
+    }
+
+    if (markedOffline > 0) await batch.commit();
+    console.log(`[checkBoxHeartbeats] done — ${markedOffline} boxes marked offline`);
 });
