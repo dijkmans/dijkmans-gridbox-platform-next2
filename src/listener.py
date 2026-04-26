@@ -37,6 +37,7 @@ from db_manager import get_db
 # =========================================================
 
 VERSION = "v1.0.81"  # fallback als git describe mislukt
+LISTENER_STARTED_AT = time.time()
 KEY_PATH = "service-account.json"
 BOOTSTRAP_PATH = "box_bootstrap.json"
 RUNTIME_CONFIG_PATH = "runtime_config.json"
@@ -2134,7 +2135,14 @@ def handle_command(doc_ref, data):
             if doc_ref:
                 mark_command(doc_ref, "failed", {"error": str(e)})
 
+_initial_commands_snapshot_received = False
+
 def on_commands_snapshot(snapshot, changes, read_time):
+    global _initial_commands_snapshot_received
+
+    is_initial_snapshot = not _initial_commands_snapshot_received
+    _initial_commands_snapshot_received = True
+
     for ch in changes:
         if ch.type.name not in ["ADDED", "MODIFIED"]:
             continue
@@ -2143,6 +2151,35 @@ def on_commands_snapshot(snapshot, changes, read_time):
         if data.get("status") != "pending":
             continue
 
+        cmd_id = ch.document.id
+        cmd_type = data.get("command") or data.get("type") or "?"
+        created_at_str = str(data.get("createdAt") or "").strip()
+
+        if created_at_str:
+            try:
+                cmd_ts = datetime.fromisoformat(created_at_str).timestamp()
+                if cmd_ts < LISTENER_STARTED_AT - 2:
+                    age_s = int(time.time() - cmd_ts)
+                    log(f"[SAFETY] stale_command_ignored: cmd={cmd_id} type={cmd_type} age={age_s}s created_before_listener_start")
+                    try:
+                        ch.document.reference.set({
+                            "status": "ignored_stale",
+                            "ignoredAt": now_iso(),
+                            "ignoredReason": "created_before_listener_start"
+                        }, merge=True)
+                    except Exception as mark_err:
+                        log(f"[WARN] Kon stale command niet markeren: {mark_err}")
+                    continue
+            except Exception as parse_err:
+                log(f"[WARN] on_commands_snapshot: createdAt parse fout cmd={cmd_id}: {parse_err}")
+                if is_initial_snapshot:
+                    log(f"[SAFETY] initial_snapshot_no_valid_created_at_skipped: cmd={cmd_id} type={cmd_type}")
+                    continue
+        elif is_initial_snapshot:
+            log(f"[SAFETY] initial_snapshot_no_created_at_skipped: cmd={cmd_id} type={cmd_type}")
+            continue
+
+        log(f"[BOOT] command_accepted: cmd={cmd_id} type={cmd_type}")
         handle_command(ch.document.reference, data)
 
 
@@ -2193,6 +2230,7 @@ light = I2CRelay(I2C_BUS, I2C_ADDRESS, LIGHT_RELAY_ID, "Lamp")
 
 stop_shutter_motors()
 light.off()
+log("[BOOT] outputs_forced_safe: alle motor- en lichtrelais op OFF gezet bij startup")
 
 try:
     bootstrap_if_needed()
