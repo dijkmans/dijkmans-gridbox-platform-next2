@@ -294,10 +294,11 @@ export default function Home() {
   }, [siteGroups]);
 
   useEffect(() => {
+    if (loading) return;
     if (selectedSiteId === "all") return;
     const stillExists = filterOptions.some((option) => option.siteId === selectedSiteId);
     if (!stillExists) setSiteId("all");
-  }, [filterOptions, selectedSiteId]);
+  }, [filterOptions, selectedSiteId, loading]);
 
   const visibleGroups = useMemo(() => {
     if (selectedSiteId === "all") return siteGroups;
