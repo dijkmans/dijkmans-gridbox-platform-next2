@@ -9,6 +9,16 @@ import type { AdminSiteItem, CustomerItem } from "@/components/admin/types";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+type CameraCandidate = {
+  mac: string;
+  ip: string;
+  source: "dhcp_lease" | "arp_detected";
+  reachable: boolean | null;
+  alreadyLinked: boolean;
+  linkedBoxId: string | null;
+  isCurrentBox: boolean;
+};
+
 type CameraContext = {
   firestoreCamera: {
     ip: string | null;
@@ -22,6 +32,7 @@ type CameraContext = {
   routerStatus: "online" | "offline" | "unknown";
   leaseStatus: "active" | "not_set" | "conflict" | "unknown";
   lastError: string | null;
+  cameraCandidates?: CameraCandidate[];
 };
 
 type BoxCamera = {
@@ -216,6 +227,22 @@ export default function AdminBoxConfigClient() {
     updatedAt?: string;
   };
   const [assignResult, setAssignResult] = useState<AssignResult | null>(null);
+
+  // MAC-first flow
+  type ValidateMacResult = {
+    ok: boolean;
+    boxId: string;
+    mac: string;
+    alreadyLinked: boolean;
+    linkedBoxId: string | null;
+    currentRouterIp: string | null;
+    warnings: string[];
+  };
+  const [macInput, setMacInput] = useState("");
+  const [confirmedMac, setConfirmedMac] = useState<string | null>(null);
+  const [validateMacBusy, setValidateMacBusy] = useState(false);
+  const [validateMacResult, setValidateMacResult] = useState<ValidateMacResult | null>(null);
+  const [validateMacError, setValidateMacError] = useState("");
 
   // Geavanceerd (camera sectie)
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -451,13 +478,18 @@ export default function AdminBoxConfigClient() {
   async function handleSuggestIp() {
     const token = await auth.currentUser?.getIdToken();
     if (!token || !boxId) return;
+    if (!confirmedMac) {
+      setCameraFlowError("Valideer eerst het MAC-adres.");
+      return;
+    }
     setSuggestBusy(true);
     setCameraFlowError("");
     setSuggestedIp(null);
     try {
       const res = await fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/camera-suggest-ip`), {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ mac: confirmedMac })
       });
       const data = await res.json() as { suggestedIp?: string; message?: string };
       if (!res.ok) { setCameraFlowError(data.message || "Vrij IP bepalen mislukt"); return; }
@@ -469,11 +501,57 @@ export default function AdminBoxConfigClient() {
     }
   }
 
+  async function handleValidateMac() {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token || !boxId) return;
+    setValidateMacBusy(true);
+    setValidateMacError("");
+    setValidateMacResult(null);
+    setConfirmedMac(null);
+    try {
+      const res = await fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/camera/validate-mac`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ mac: macInput })
+      });
+      const data = await res.json() as ValidateMacResult & { error?: string; message?: string };
+      if (res.status === 409) {
+        setValidateMacError(`Deze camera is al gekoppeld aan ${data.linkedBoxId ?? "een andere box"}`);
+        return;
+      }
+      if (!res.ok) {
+        setValidateMacError(data.error || data.message || "Ongeldig MAC-adres");
+        return;
+      }
+      setValidateMacResult(data);
+      if (data.mac) {
+        setMacInput(data.mac);
+        setConfirmedMac(data.mac);
+      }
+    } catch {
+      setValidateMacError("Netwerkfout bij validatie MAC");
+    } finally {
+      setValidateMacBusy(false);
+    }
+  }
+
+  function updateMacInput(value: string) {
+    setMacInput(value);
+    setConfirmedMac(null);
+    setSuggestedIp(null);
+    setValidateMacResult(null);
+    setValidateMacError("");
+  }
+
   async function handleCameraAssign() {
     const token = await auth.currentUser?.getIdToken();
     if (!token || !boxId) return;
-    const mac = cameraContext?.detectedMac;
-    if (!mac || !suggestedIp) return;
+    const mac = confirmedMac;
+    if (!mac) {
+      setCameraFlowError("Valideer eerst het MAC-adres.");
+      return;
+    }
+    if (!suggestedIp) return;
 
     setAssignBusy(true);
     setCameraFlowError("");
@@ -947,6 +1025,39 @@ export default function AdminBoxConfigClient() {
                 className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition">
                 {cameraContextBusy ? "Bezig…" : "🔍 Zoek camera opnieuw"}
               </button>
+
+              {/* Zichtbare kandidaten op het netwerk */}
+              {cameraContext?.cameraCandidates && cameraContext.cameraCandidates.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Zichtbare apparaten op het netwerk</p>
+                  {cameraContext.cameraCandidates.map((candidate) => (
+                    <div key={candidate.mac}
+                      className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 ${
+                        candidate.alreadyLinked && !candidate.isCurrentBox
+                          ? "border-amber-200 bg-amber-50"
+                          : "border-slate-200 bg-white"
+                      }`}>
+                      <div className="space-y-0.5 min-w-0">
+                        <p className="text-sm font-mono font-semibold text-slate-900">{candidate.mac}</p>
+                        <p className="text-xs text-slate-500">
+                          {candidate.ip} · {candidate.source === "dhcp_lease" ? "DHCP lease" : "ARP"}
+                        </p>
+                        {candidate.alreadyLinked && !candidate.isCurrentBox && (
+                          <p className="text-xs text-amber-700">⚠ Al gekoppeld aan {candidate.linkedBoxId}</p>
+                        )}
+                        {candidate.isCurrentBox && (
+                          <p className="text-xs text-emerald-700">✓ Huidige camera van deze box</p>
+                        )}
+                      </div>
+                      <button type="button"
+                        onClick={() => updateMacInput(candidate.mac)}
+                        className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition shrink-0">
+                        Gebruik
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <hr className="border-slate-100" />
@@ -956,7 +1067,43 @@ export default function AdminBoxConfigClient() {
               <div className="flex items-center gap-2">
                 <span className="w-5 h-5 rounded-full bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center shrink-0">2</span>
                 <p className="text-sm font-bold text-slate-900">Camera instellen en koppelen</p>
+                <p className="text-xs text-slate-400 ml-7">Valideer MAC → stel vrij IP voor → bevestig en koppel</p>
               </div>
+              {/* MAC-adres kiezen en valideren */}
+              <div className="space-y-2">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Camera MAC-adres</p>
+                <div className="flex gap-2">
+                  <TextInput
+                    value={macInput}
+                    onChange={updateMacInput}
+                    placeholder="bijv. 08:8f:c3:f0:a5:6a"
+                  />
+                  <button type="button" onClick={handleValidateMac}
+                    disabled={validateMacBusy || !macInput.trim()}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition shrink-0">
+                    {validateMacBusy ? "Bezig…" : "Valideer MAC"}
+                  </button>
+                </div>
+                {validateMacError && (
+                  <p className="text-xs text-red-700">{validateMacError}</p>
+                )}
+                {confirmedMac && (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 space-y-0.5">
+                    <p className="text-xs font-semibold text-emerald-800">✓ MAC bevestigd: {confirmedMac}</p>
+                    {validateMacResult?.currentRouterIp && (
+                      <p className="text-xs text-emerald-700">Huidig IP op router: {validateMacResult.currentRouterIp}</p>
+                    )}
+                  </div>
+                )}
+                {validateMacResult?.warnings && validateMacResult.warnings.length > 0 && (
+                  <div className="space-y-1">
+                    {validateMacResult.warnings.map((w, i) => (
+                      <p key={i} className="text-xs text-amber-700">⚠ {w}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <FieldRow label="Gebruikersnaam">
                 <TextInput value={cameraUsername} onChange={setCameraUsername} placeholder="admin" />
               </FieldRow>
@@ -964,15 +1111,16 @@ export default function AdminBoxConfigClient() {
                 <TextInput type="password" value={cameraPassword} onChange={setCameraPassword} placeholder="Laat leeg om ongewijzigd te laten" />
               </FieldRow>
               <div className="flex flex-wrap gap-2 items-center pt-1">
-                <button type="button" onClick={handleSuggestIp} disabled={suggestBusy}
+                <button type="button" onClick={handleSuggestIp} disabled={suggestBusy || !confirmedMac}
+                  title={!confirmedMac ? "Valideer eerst het MAC-adres" : ""}
                   className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition">
                   {suggestBusy ? "Bezig…" : suggestedIp ? `💡 IP: ${suggestedIp} ↺` : "💡 Stel vrij IP voor"}
                 </button>
                 <button type="button" onClick={handleCameraAssign}
-                  disabled={assignBusy || !cameraContext?.detectedMac || !suggestedIp}
-                  title={!cameraContext?.detectedMac ? "Detecteer eerst een camera (stap 1)" : !suggestedIp ? "Stel eerst een vrij IP voor" : ""}
+                  disabled={assignBusy || !confirmedMac || !suggestedIp}
+                  title={!confirmedMac ? "Valideer eerst het MAC-adres" : !suggestedIp ? "Stel eerst een vrij IP voor" : ""}
                   className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-40 transition">
-                  {assignBusy ? "Bezig…" : "✅ Bevestig en zet vast IP op router"}
+                  {assignBusy ? "Bezig…" : "✅ Bevestig en koppel camera"}
                 </button>
                 <button type="button" onClick={handleTestSnapshot}
                   disabled={!cameraContext?.firestoreCamera?.snapshotUrl}

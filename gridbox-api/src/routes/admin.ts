@@ -670,6 +670,115 @@ async function fetchRut241Leases(
   }
 }
 
+router.post("/admin/boxes/:boxId/camera/validate-mac", async (req, res) => {
+  try {
+    await requirePlatformAdmin(req.header("Authorization") || undefined);
+    const { boxId } = req.params;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+
+    // MAC normaliseren: accepteer kolons, dashes, spaties of aaneengesloten hex.
+    // Strip separators → valideer 12 hex-tekens → formatteer als xx:xx:xx:xx:xx:xx lowercase.
+    const rawMac = typeof body.mac === "string" ? body.mac.trim() : "";
+    const stripped = rawMac.replace(/[:\-\s]/g, "").toLowerCase();
+    if (!stripped || !/^[0-9a-f]{12}$/.test(stripped)) {
+      return res.status(400).json({ ok: false, error: "Ongeldig MAC-adres" });
+    }
+    const mac = stripped.match(/.{2}/g)!.join(":");
+
+    const db = getFirestore();
+
+    // Box opzoeken (zelfde patroon als overige camera-routes)
+    const boxSnap = await db.collection("boxes").where("boxId", "==", boxId).limit(1).get();
+    const boxDoc = !boxSnap.empty
+      ? boxSnap.docs[0]
+      : await db.collection("boxes").doc(boxId).get();
+
+    if (!boxDoc.exists) {
+      return res.status(404).json({ ok: false, error: "Box niet gevonden" });
+    }
+
+    const boxData = boxDoc.data() as Record<string, any>;
+    const resolvedBoxId: string = boxData.boxId ?? boxDoc.id;
+
+    // Normaliseer boxId voor vergelijking zodat gbox-012 en gbox-12 als identiek worden beschouwd
+    const normalizeBoxId = (id: string) =>
+      id.toLowerCase().replace(/-0*(\d+)$/, (_, n) => `-${parseInt(n, 10)}`);
+
+    const warnings: string[] = [];
+
+    // Waarschuw als de gevraagde boxId en de Firestore-boxId letterlijk verschillen
+    // maar na normalisering hetzelfde zijn (bijv. "gbox-12" gevraagd terwijl DB "gbox-012" heeft)
+    if (resolvedBoxId !== boxId && normalizeBoxId(resolvedBoxId) === normalizeBoxId(boxId)) {
+      warnings.push(
+        `Box gevonden als "${resolvedBoxId}" maar aangevraagd als "${boxId}" — gebruik de exacte ID om verwarring te voorkomen`
+      );
+    }
+
+    // Duplicate-check: is deze MAC al aan een andere box gekoppeld?
+    const allBoxesSnap = await db.collection("boxes").get();
+    for (const doc of allBoxesSnap.docs) {
+      const d = doc.data() as Record<string, any>;
+      const existingMac: string | undefined = d?.hardware?.camera?.assignment?.mac;
+      const existingBoxId: string = d?.boxId ?? doc.id;
+      if (
+        existingMac === mac &&
+        normalizeBoxId(existingBoxId) !== normalizeBoxId(resolvedBoxId)
+      ) {
+        return res.status(409).json({
+          ok: false,
+          error: `Deze camera is al gekoppeld aan ${existingBoxId}`,
+          linkedBoxId: existingBoxId,
+          mac
+        });
+      }
+    }
+
+    // Controleer of MAC al aan déze box gekoppeld is
+    const ownAssignedMac: string | undefined = boxData?.hardware?.camera?.assignment?.mac;
+    const alreadyLinked = ownAssignedMac === mac;
+
+    // Zoek huidig IP uit Pi-geschreven lease-data (geen nieuwe routerconnectie)
+    const storedLeases: Array<{ ip: string; mac: string }> =
+      Array.isArray(boxData?.hardware?.rut?.observed?.leases)
+        ? boxData.hardware.rut.observed.leases
+        : [];
+    const detectedDevices: Array<{ mac: string; ip: string }> =
+      Array.isArray(boxData?.hardware?.detectedDevices)
+        ? boxData.hardware.detectedDevices
+        : [];
+
+    // Lease-IP heeft voorrang over ARP-IP (zelfde prioriteit als camera-context)
+    let currentRouterIp: string | null = null;
+    const fromArp = detectedDevices.find((d) => d.mac.toLowerCase() === mac);
+    if (fromArp) currentRouterIp = fromArp.ip;
+    const fromLease = storedLeases.find((l) => l.mac.toLowerCase() === mac);
+    if (fromLease) currentRouterIp = fromLease.ip;
+
+    if (!currentRouterIp) {
+      warnings.push("MAC-adres niet gevonden in de huidige routerdetectie");
+    }
+
+    console.log(`camera/validate-mac: boxId=${resolvedBoxId} mac=${mac} alreadyLinked=${alreadyLinked} currentRouterIp=${currentRouterIp ?? "null"}`);
+
+    return res.json({
+      ok: true,
+      boxId: resolvedBoxId,
+      mac,
+      alreadyLinked,
+      linkedBoxId: alreadyLinked ? resolvedBoxId : null,
+      currentRouterIp,
+      warnings
+    });
+
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ ok: false, error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ ok: false, error: "FORBIDDEN", message: "Geen admin-toegang" });
+    console.error("FOUT in POST /admin/boxes/:boxId/camera/validate-mac", error);
+    return res.status(500).json({ ok: false, error: "VALIDATE_MAC_FAILED", message: "Validatie mislukt" });
+  }
+});
+
 router.get("/admin/boxes/:boxId/camera-context", async (req, res) => {
   try {
     await requirePlatformAdmin(req.header("Authorization") || undefined);
@@ -746,33 +855,41 @@ router.get("/admin/boxes/:boxId/camera-context", async (req, res) => {
     if (typeof gatewayMac === "string") excludedMacs.add(gatewayMac.toLowerCase());
     const gatewayIp: string | null = data?.hardware?.rut?.config?.ip ?? data?.hardware?.rut?.observed?.ip ?? null;
 
-    // Combineer: ARP als basis, lease-IP heeft voorrang als beide beschikbaar
-    const combinedCandidates = new Map<string, { mac: string; ip: string }>();
+    // Combineer: ARP als basis, lease-IP én source hebben voorrang
+    const combinedCandidates = new Map<string, { mac: string; ip: string; source: "dhcp_lease" | "arp_detected" }>();
 
     for (const d of detectedDevices) {
       const mac = d.mac.toLowerCase();
       if (excludedMacs.has(mac)) continue;
       if (gatewayIp && d.ip === gatewayIp) continue;
       if (/\.(1|2)$/.test(d.ip)) continue;
-      combinedCandidates.set(mac, { mac, ip: d.ip });
+      combinedCandidates.set(mac, { mac, ip: d.ip, source: "arp_detected" });
     }
 
     for (const l of storedLeases) {
       const mac = l.mac.toLowerCase();
-      combinedCandidates.set(mac, { mac, ip: l.ip });
+      combinedCandidates.set(mac, { mac, ip: l.ip, source: "dhcp_lease" });
     }
 
-    // Verzamel geregistreerde camera-MACs op deze site
+    // Verzamel geregistreerde camera-MACs (site-gefilterd, voor detectedMac-logica)
+    // én een globale mac→boxId-map voor duplicate-check in cameraCandidates
     const allBoxesSnap = await db.collection("boxes").get();
     const registeredMacs = new Set<string>();
+    const macToBoxId = new Map<string, string>();
     allBoxesSnap.docs.forEach((doc) => {
       const d = doc.data() as Record<string, any>;
-      if (siteId && d?.siteId !== siteId) return;
+      const boxIdValue: string = d?.boxId ?? doc.id;
       const m = d?.hardware?.camera?.assignment?.mac;
-      if (typeof m === "string") registeredMacs.add(m.toLowerCase());
+      if (typeof m === "string") {
+        const normalizedMac = m.toLowerCase();
+        macToBoxId.set(normalizedMac, boxIdValue);
+        if (!siteId || d?.siteId === siteId) {
+          registeredMacs.add(normalizedMac);
+        }
+      }
     });
 
-    // Eerste onbekende kandidaat
+    // Eerste onbekende kandidaat (bestaande logica ongewijzigd)
     for (const [mac, candidate] of combinedCandidates) {
       if (!registeredMacs.has(mac)) {
         detectedMac = candidate.mac;
@@ -780,6 +897,21 @@ router.get("/admin/boxes/:boxId/camera-context", async (req, res) => {
         break;
       }
     }
+
+    // Bouw cameraCandidates: alle gedetecteerde kandidaten met duplicate-info
+    const resolvedBoxId: string = (data as Record<string, any>).boxId ?? boxDoc.id;
+    const cameraCandidates = [...combinedCandidates.values()].map((candidate) => {
+      const linkedBoxId = macToBoxId.get(candidate.mac) ?? null;
+      return {
+        mac: candidate.mac,
+        ip: candidate.ip,
+        source: candidate.source,
+        reachable: null,
+        alreadyLinked: linkedBoxId !== null,
+        linkedBoxId,
+        isCurrentBox: linkedBoxId !== null && linkedBoxId === resolvedBoxId
+      };
+    });
 
     // leaseStatus voor al gekoppelde camera
     if (firestoreCamera?.mac) {
@@ -808,7 +940,8 @@ router.get("/admin/boxes/:boxId/camera-context", async (req, res) => {
       detectedIp,
       routerStatus,
       leaseStatus,
-      lastError
+      lastError,
+      cameraCandidates
     });
   } catch (error) {
     const statusCode = getStatusCode(error);
@@ -825,7 +958,18 @@ router.post("/admin/boxes/:boxId/camera-suggest-ip", async (req, res) => {
     const { boxId } = req.params;
     const db = getFirestore();
 
-    // Haal alle box-camera-IPs op uit Firestore voor dezelfde site
+    // Optioneel: lees en normaliseer MAC uit body (zelfde normalisatie als validate-mac)
+    const rawMac = typeof req.body?.mac === "string" ? req.body.mac.trim() : "";
+    let requestedMac: string | null = null;
+    if (rawMac) {
+      const stripped = rawMac.replace(/[:\-\s]/g, "").toLowerCase();
+      if (!/^[0-9a-f]{12}$/.test(stripped)) {
+        return res.status(400).json({ ok: false, error: "Ongeldig MAC-adres" });
+      }
+      requestedMac = stripped.match(/.{2}/g)!.join(":");
+    }
+
+    // Box opzoeken
     const boxSnap = await db.collection("boxes").where("boxId", "==", boxId).limit(1).get();
     const boxDoc = !boxSnap.empty
       ? boxSnap.docs[0]
@@ -838,26 +982,76 @@ router.post("/admin/boxes/:boxId/camera-suggest-ip", async (req, res) => {
     const boxData = boxDoc.data() as Record<string, any>;
     const siteId: string | null = boxData?.siteId ?? null;
 
-    // Verzamel gebruikte IPs: alle cameras in Firestore op dezelfde site
+    // Pi-geschreven lease-data en ARP-data (zelfde bronnen als camera-context en validate-mac)
+    const storedLeases: Array<{ ip: string; mac: string }> =
+      Array.isArray(boxData?.hardware?.rut?.observed?.leases)
+        ? boxData.hardware.rut.observed.leases
+        : [];
+    const detectedDevices: Array<{ mac: string; ip: string }> =
+      Array.isArray(boxData?.hardware?.detectedDevices)
+        ? boxData.hardware.detectedDevices
+        : [];
+
+    // Verzamel gebruikte IPs uit Firestore (site-gefilterd) + bijbehorende boxId voor conflict-check
     const allBoxesSnap = await db.collection("boxes").get();
     const usedIps = new Set<string>();
+    const ipToBoxId = new Map<string, string>(); // ip → boxId
 
     allBoxesSnap.docs.forEach((doc) => {
       const d = doc.data() as Record<string, any>;
       if (siteId && d?.siteId !== siteId) return;
       const ip = d?.hardware?.camera?.assignment?.ip;
-      if (typeof ip === "string") usedIps.add(ip);
+      const bId: string = d?.boxId ?? doc.id;
+      if (typeof ip === "string") {
+        usedIps.add(ip);
+        ipToBoxId.set(ip, bId);
+      }
     });
 
-    // Voeg lease-IPs toe uit Firestore (geschreven door Pi — Cloud Run kan RUT241 niet bereiken)
-    const storedLeases: Array<{ ip: string; mac: string }> =
-      Array.isArray(boxData?.hardware?.rut?.observed?.leases)
-        ? boxData.hardware.rut.observed.leases
-        : [];
+    // Voeg lease-IPs toe (Pi-data — Cloud Run bereikt RUT241 niet rechtstreeks)
     storedLeases.forEach((l) => usedIps.add(l.ip));
 
+    // Als MAC opgegeven: zoek of die al een IP heeft in Pi-geschreven data
+    if (requestedMac) {
+      // Lease heeft voorrang over ARP (zelfde prioriteit als camera-context)
+      let existingIp: string | null = null;
+      const fromArp = detectedDevices.find((d) => d.mac.toLowerCase() === requestedMac);
+      if (fromArp) existingIp = fromArp.ip;
+      const fromLease = storedLeases.find((l) => l.mac.toLowerCase() === requestedMac);
+      if (fromLease) existingIp = fromLease.ip;
+
+      if (existingIp) {
+        const linkedBoxId = ipToBoxId.get(existingIp) ?? null;
+        const isOwnOrFree = linkedBoxId === null || linkedBoxId === boxId;
+
+        if (!isOwnOrFree) {
+          // IP is al gekoppeld aan een andere box in Firestore
+          return res.status(409).json({
+            ok: false,
+            error: `IP ${existingIp} is al gekoppeld aan box ${linkedBoxId}`,
+            conflictIp: existingIp,
+            linkedBoxId,
+            mac: requestedMac,
+            suggestedIp: null,
+            conflictsWith: linkedBoxId,
+            source: "existing_mac_lease"
+          });
+        }
+
+        // IP is vrij of hoort al bij deze box — geef terug als voorstel
+        return res.json({
+          suggestedIp: existingIp,
+          conflictsWith: null,
+          mac: requestedMac,
+          source: "existing_mac_lease",
+          reason: "Bestaande lease voor dit MAC-adres"
+        });
+      }
+    }
+
+    // Fallback: eerste vrij IP in range (bestaand algoritme)
     let suggestedIp: string | null = null;
-    let conflictsWith: string | null = null;
+    const conflictsWith: string | null = null;
 
     for (let i = 100; i <= 249; i++) {
       const candidate = `192.168.10.${i}`;
@@ -875,7 +1069,12 @@ router.post("/admin/boxes/:boxId/camera-suggest-ip", async (req, res) => {
       });
     }
 
-    return res.json({ suggestedIp, conflictsWith });
+    return res.json({
+      suggestedIp,
+      conflictsWith,
+      mac: requestedMac,
+      source: "first_free_ip"
+    });
   } catch (error) {
     const statusCode = getStatusCode(error);
     if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
