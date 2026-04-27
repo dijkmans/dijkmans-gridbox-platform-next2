@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signInWithPopup, signOut, User } from "firebase/auth";
 import SmartToggleButton from "@/components/SmartToggleButton";
 import { auth, googleProvider } from "@/lib/firebase";
@@ -109,13 +110,20 @@ async function fetchProtectedAssetUrl(token: string, path: string): Promise<stri
   return URL.createObjectURL(blob);
 }
 
-export default function Home() {
+function HomeContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const selectedSiteId = searchParams.get("site") ?? "all";
+
+  function setSiteId(id: string) {
+    router.replace(id === "all" ? "/" : `/?site=${encodeURIComponent(id)}`, { scroll: false });
+  }
+
   const [user, setUser] = useState<User | null>(null);
   const [boxes, setBoxes] = useState<PortalBox[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [toast, setToast] = useState("");
-  const [selectedSiteId, setSelectedSiteId] = useState<string>("all");
   const [footerText, setFooterText] = useState("Powered by Gridbox");
   const [gridboxLogoUrl, setGridboxLogoUrl] = useState<string | null>(null);
   const [customerLogoUrl, setCustomerLogoUrl] = useState<string | null>(null);
@@ -279,8 +287,8 @@ export default function Home() {
   useEffect(() => {
     if (selectedSiteId === "all") return;
     const stillExists = filterOptions.some((option) => option.siteId === selectedSiteId);
-    if (!stillExists) setSelectedSiteId("all");
-  }, [filterOptions, selectedSiteId]);
+    if (!stillExists) router.replace("/", { scroll: false });
+  }, [filterOptions, selectedSiteId, router]);
 
   const visibleGroups = useMemo(() => {
     if (selectedSiteId === "all") return siteGroups;
@@ -304,7 +312,7 @@ export default function Home() {
       setMessage("");
       await signOut(auth);
       setBoxes([]);
-      setSelectedSiteId("all");
+      router.replace("/", { scroll: false });
       setGridboxLogoUrl(null);
       setCustomerLogoUrl(null);
       setFooterLogoUrl(null);
@@ -400,7 +408,7 @@ export default function Home() {
               Locatie
             </span>
             <button
-              onClick={() => setSelectedSiteId("all")}
+              onClick={() => setSiteId("all")}
               className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
                 selectedSiteId === "all"
                   ? "bg-slate-900 text-white"
@@ -412,7 +420,7 @@ export default function Home() {
             {filterOptions.map((option) => (
               <button
                 key={option.siteId}
-                onClick={() => setSelectedSiteId(option.siteId)}
+                onClick={() => setSiteId(option.siteId)}
                 className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
                   selectedSiteId === option.siteId
                     ? "bg-slate-900 text-white"
@@ -549,5 +557,13 @@ export default function Home() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-slate-50" />}>
+      <HomeContent />
+    </Suspense>
   );
 }
