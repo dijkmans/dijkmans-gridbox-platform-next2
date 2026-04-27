@@ -285,10 +285,11 @@ function HomeContent() {
   }, [siteGroups]);
 
   useEffect(() => {
+    if (loading) return;
     if (selectedSiteId === "all") return;
     const stillExists = filterOptions.some((option) => option.siteId === selectedSiteId);
     if (!stillExists) router.replace("/", { scroll: false });
-  }, [filterOptions, selectedSiteId, router]);
+  }, [filterOptions, selectedSiteId, loading, router]);
 
   const visibleGroups = useMemo(() => {
     if (selectedSiteId === "all") return siteGroups;
