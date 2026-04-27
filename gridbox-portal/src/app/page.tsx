@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { signInWithPopup, signOut, User } from "firebase/auth";
 import SmartToggleButton from "@/components/SmartToggleButton";
 import { auth, googleProvider } from "@/lib/firebase";
@@ -110,13 +109,21 @@ async function fetchProtectedAssetUrl(token: string, path: string): Promise<stri
   return URL.createObjectURL(blob);
 }
 
-function HomeContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const selectedSiteId = searchParams.get("site") ?? "all";
+export default function Home() {
+  const [selectedSiteId, setSelectedSiteId] = useState<string>(() => {
+    if (typeof window === "undefined") return "all";
+    return localStorage.getItem("gridbox-selected-site") ?? "all";
+  });
 
   function setSiteId(id: string) {
-    router.replace(id === "all" ? "/" : `/?site=${encodeURIComponent(id)}`, { scroll: false });
+    setSelectedSiteId(id);
+    if (typeof window !== "undefined") {
+      if (id === "all") {
+        localStorage.removeItem("gridbox-selected-site");
+      } else {
+        localStorage.setItem("gridbox-selected-site", id);
+      }
+    }
   }
 
   const [user, setUser] = useState<User | null>(null);
@@ -285,11 +292,10 @@ function HomeContent() {
   }, [siteGroups]);
 
   useEffect(() => {
-    if (loading) return;
     if (selectedSiteId === "all") return;
     const stillExists = filterOptions.some((option) => option.siteId === selectedSiteId);
-    if (!stillExists) router.replace("/", { scroll: false });
-  }, [filterOptions, selectedSiteId, loading, router]);
+    if (!stillExists) setSiteId("all");
+  }, [filterOptions, selectedSiteId]);
 
   const visibleGroups = useMemo(() => {
     if (selectedSiteId === "all") return siteGroups;
@@ -313,7 +319,7 @@ function HomeContent() {
       setMessage("");
       await signOut(auth);
       setBoxes([]);
-      router.replace("/", { scroll: false });
+      setSiteId("all");
       setGridboxLogoUrl(null);
       setCustomerLogoUrl(null);
       setFooterLogoUrl(null);
@@ -558,13 +564,5 @@ function HomeContent() {
         </div>
       )}
     </main>
-  );
-}
-
-export default function Home() {
-  return (
-    <Suspense fallback={<main className="min-h-screen bg-slate-50" />}>
-      <HomeContent />
-    </Suspense>
   );
 }
