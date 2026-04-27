@@ -994,13 +994,6 @@ export default function AdminPage() {
           .sort((a, b) => a.siteId.localeCompare(b.siteId))
       : boxBasedSiteSummaries;
 
-  const provisioningSiteSummaries = sites
-    .map((site) => ({
-      siteId: site.id,
-      boxCount: boxes.filter((box) => box.siteId === site.id).length,
-      customerIds: new Set(site.customerId ? [site.customerId.toLowerCase()] : [])
-    }))
-    .sort((a, b) => a.siteId.localeCompare(b.siteId));
   const customerSummaries = getCustomerSummaries(customers, memberships, customerBoxAccess);
 
   const getAdminRoleLabel = (roleId: string | undefined) =>
@@ -1100,7 +1093,7 @@ export default function AdminPage() {
               <section>
                 <AdminProvisioningSection
                   customers={customers}
-                  siteSummaries={provisioningSiteSummaries}
+                  sites={sites}
                   boxes={boxes}
                   provisioningCustomerId={provisioningCustomerId}
                   provisioningSiteId={provisioningSiteId}
@@ -1345,7 +1338,9 @@ export default function AdminPage() {
                                   >
                                     <option value="">-- kies site --</option>
                                     {sites.map((s) => (
-                                      <option key={s.id} value={s.id}>{s.id}</option>
+                                      <option key={s.id} value={s.id}>
+                                        {s.name ? `${s.name} (${s.id})` : s.id}
+                                      </option>
                                     ))}
                                   </select>
                                 </td>

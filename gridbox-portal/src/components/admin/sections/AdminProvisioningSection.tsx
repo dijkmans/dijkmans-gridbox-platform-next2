@@ -1,12 +1,11 @@
 "use client";
 
 import { getBoxLabel } from "../helpers";
-import type { SiteSummary } from "../derived";
-import type { AdminBoxItem, AdminProvisioningItem, CustomerItem } from "../types";
+import type { AdminBoxItem, AdminProvisioningItem, AdminSiteItem, CustomerItem } from "../types";
 
 type Props = {
   customers: CustomerItem[];
-  siteSummaries: SiteSummary[];
+  sites: AdminSiteItem[];
   boxes: AdminBoxItem[];
   provisioningCustomerId: string;
   provisioningSiteId: string;
@@ -90,7 +89,7 @@ function BlockHeader({
 
 export default function AdminProvisioningSection({
   customers,
-  siteSummaries,
+  sites,
   boxes,
   provisioningCustomerId,
   provisioningSiteId,
@@ -114,12 +113,14 @@ export default function AdminProvisioningSection({
   const sortedCustomers = [...customers].sort((a, b) =>
     (a.name || a.id).localeCompare(b.name || b.id)
   );
-  const sortedSites = [...siteSummaries].sort((a, b) => a.siteId.localeCompare(b.siteId));
+  const sortedSites = [...sites].sort((a, b) =>
+    (a.name || a.id).localeCompare(b.name || b.id)
+  );
 
   const selectedCustomer = customers.find((c) => c.id === provisioningCustomerId);
   const customerChosen = provisioningCustomerId.trim().length > 0;
   const customerScopedSites = selectedCustomer
-    ? sortedSites.filter((s) => s.customerIds.has(selectedCustomer.id.toLowerCase()))
+    ? sortedSites.filter((s) => s.customerId?.toLowerCase() === selectedCustomer.id.toLowerCase())
     : [];
 
   const trimmedSiteId = provisioningSiteId.trim();
@@ -128,7 +129,7 @@ export default function AdminProvisioningSection({
   const existingBoxIds = new Set(
     boxes.map((b) => (b.boxId || b.id).trim().toLowerCase()).filter(Boolean)
   );
-  const existingSite = customerScopedSites.find((s) => s.siteId === trimmedSiteId) || null;
+  const existingSite = customerScopedSites.find((s) => s.id === trimmedSiteId) || null;
   const boxIdLooksValid = trimmedBoxId.length > 0 && /^[a-z0-9-]+$/.test(trimmedBoxId);
   const boxIdAlreadyExists = trimmedBoxId.length > 0 && existingBoxIds.has(normalizedBoxId);
   const stepOneReady =
@@ -246,7 +247,9 @@ export default function AdminProvisioningSection({
                       {!customerChosen ? "-- Kies eerst een klant --" : "-- Kies een site --"}
                     </option>
                     {customerScopedSites.map((s) => (
-                      <option key={s.siteId} value={s.siteId}>{s.siteId}</option>
+                      <option key={s.id} value={s.id}>
+                        {s.name ? `${s.name} (${s.id})` : s.id}
+                      </option>
                     ))}
                   </select>
                 )}
