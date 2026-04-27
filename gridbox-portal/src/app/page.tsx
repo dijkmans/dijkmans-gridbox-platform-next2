@@ -112,18 +112,20 @@ async function fetchProtectedAssetUrl(token: string, path: string): Promise<stri
 export default function Home() {
   const [selectedSiteId, setSelectedSiteId] = useState<string>(() => {
     if (typeof window === "undefined") return "all";
-    return localStorage.getItem("gridbox-selected-site") ?? "all";
+    const params = new URLSearchParams(window.location.search);
+    return params.get("site") || "all";
   });
 
   function setSiteId(id: string) {
     setSelectedSiteId(id);
-    if (typeof window !== "undefined") {
-      if (id === "all") {
-        localStorage.removeItem("gridbox-selected-site");
-      } else {
-        localStorage.setItem("gridbox-selected-site", id);
-      }
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (id === "all") {
+      url.searchParams.delete("site");
+    } else {
+      url.searchParams.set("site", id);
     }
+    window.history.replaceState({}, "", url.toString());
   }
 
   const [user, setUser] = useState<User | null>(null);
