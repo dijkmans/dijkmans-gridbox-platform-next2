@@ -203,6 +203,20 @@ export default function AdminBoxConfigClient() {
   const [cameraFlowError, setCameraFlowError] = useState("");
   const [cameraFlowSuccess, setCameraFlowSuccess] = useState("");
 
+  type AssignStepResult = { ok: boolean; error: string | null };
+  type AssignResult = {
+    steps: {
+      dhcpLease: AssignStepResult;
+      firestoreAssignment: AssignStepResult;
+      firestoreConfig: AssignStepResult;
+    };
+    mac?: string;
+    ip?: string;
+    snapshotUrl?: string;
+    updatedAt?: string;
+  };
+  const [assignResult, setAssignResult] = useState<AssignResult | null>(null);
+
   // Geavanceerd (camera sectie)
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
@@ -464,6 +478,7 @@ export default function AdminBoxConfigClient() {
     setAssignBusy(true);
     setCameraFlowError("");
     setCameraFlowSuccess("");
+    setAssignResult(null);
     try {
       const res = await fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/camera-assign`), {
         method: "POST",
@@ -475,8 +490,15 @@ export default function AdminBoxConfigClient() {
           ...(cameraPassword ? { password: cameraPassword } : {})
         })
       });
-      const data = await res.json() as { ok?: boolean; ip?: string; mac?: string; message?: string };
-      if (!res.ok) { setCameraFlowError(data.message || "Toewijzen camera mislukt"); return; }
+      const data = await res.json() as {
+        ok?: boolean; ip?: string; mac?: string; message?: string;
+        steps?: AssignResult["steps"]; snapshotUrl?: string; updatedAt?: string;
+      };
+      if (data.steps) setAssignResult({ steps: data.steps, mac: data.mac, ip: data.ip, snapshotUrl: data.snapshotUrl, updatedAt: data.updatedAt });
+      if (!res.ok) {
+        setCameraFlowError(data.message || "Toewijzen camera mislukt");
+        return;
+      }
       setCameraFlowSuccess(`Camera gekoppeld: MAC ${data.mac} → vast IP ${data.ip}`);
       await loadCameraContext();
       await loadData();
@@ -959,6 +981,32 @@ export default function AdminBoxConfigClient() {
                 </button>
               </div>
             </div>
+
+            {/* Koppelingsresultaat per stap */}
+            {assignResult && (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500 mb-3">Laatste koppelingsresultaat</p>
+                {(["dhcpLease", "firestoreAssignment", "firestoreConfig"] as const).map((key) => {
+                  const step = assignResult.steps[key];
+                  const labels: Record<string, string> = {
+                    dhcpLease: "DHCP lease op router",
+                    firestoreAssignment: "Firestore assignment",
+                    firestoreConfig: "Firestore camera config",
+                  };
+                  return (
+                    <div key={key} className="flex items-start gap-3">
+                      <span className={`shrink-0 text-sm font-bold ${step.ok ? "text-emerald-600" : "text-red-600"}`}>
+                        {step.ok ? "✓" : "✗"}
+                      </span>
+                      <div>
+                        <span className="text-sm font-semibold text-slate-700">{labels[key]}</span>
+                        {step.error && <p className="text-xs text-red-700 mt-0.5">{step.error}</p>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             <hr className="border-slate-100" />
 

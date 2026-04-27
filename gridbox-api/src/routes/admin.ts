@@ -905,13 +905,18 @@ router.post("/admin/boxes/:boxId/camera-assign", async (req, res) => {
 
     const db = getFirestore();
 
+    // Normaliseer boxId voor vergelijking: verwijder leading zeros in numeriek suffix
+    // zodat "gbox-012" en "gbox-12" als identiek worden beschouwd
+    const normalizeBoxId = (id: string) =>
+      id.toLowerCase().replace(/-0*(\d+)$/, (_, n) => `-${parseInt(n, 10)}`);
+
     // Stap 1: controleer of MAC al aan een andere box hangt
     const allBoxesSnap = await db.collection("boxes").get();
     for (const doc of allBoxesSnap.docs) {
       const d = doc.data() as Record<string, any>;
       const existingMac = d?.hardware?.camera?.assignment?.mac;
       const existingBoxId = d?.boxId ?? doc.id;
-      if (existingMac === mac && existingBoxId !== boxId) {
+      if (existingMac === mac && normalizeBoxId(existingBoxId) !== normalizeBoxId(boxId)) {
         return res.status(409).json({
           error: "MAC_CONFLICT",
           message: `MAC ${mac} is al gekoppeld aan box ${existingBoxId}`
@@ -962,38 +967,77 @@ router.post("/admin/boxes/:boxId/camera-assign", async (req, res) => {
       }
     }
 
+    type StepResult = { ok: boolean; error: string | null };
+    const steps: {
+      dhcpLease: StepResult;
+      firestoreAssignment: StepResult;
+      firestoreConfig: StepResult;
+    } = {
+      dhcpLease:           { ok: false, error: null },
+      firestoreAssignment: { ok: false, error: null },
+      firestoreConfig:     { ok: false, error: null },
+    };
+
     if (finalStatus === null) {
+      steps.dhcpLease.error = "Pi heeft niet gereageerd binnen 20 seconden";
       return res.status(504).json({
+        ok: false,
         error: "PI_TIMEOUT",
-        message: "Pi heeft niet gereageerd binnen 20 seconden — lease niet bevestigd, Firestore niet bijgewerkt"
+        message: "Pi heeft niet gereageerd binnen 20 seconden — lease niet bevestigd, Firestore niet bijgewerkt",
+        steps
       });
     }
 
     if (finalStatus === "error") {
+      steps.dhcpLease.error = errorMessage || "Pi kon de DHCP lease niet instellen";
       return res.status(502).json({
+        ok: false,
         error: "LEASE_FAILED",
-        message: errorMessage || "Pi kon de DHCP lease niet instellen — Firestore niet bijgewerkt"
+        message: steps.dhcpLease.error,
+        steps
       });
     }
+
+    steps.dhcpLease.ok = true;
 
     // Stap 5: Pi bevestigde success — schrijf camera-koppeling naar Firestore
     const snapshotUrl = `http://${chosenIp}/cgi-bin/snapshot.cgi`;
     const now = new Date().toISOString();
 
     const fsUpdate: Record<string, unknown> = {
-      "hardware.camera.assignment.mac": mac,
-      "hardware.camera.assignment.ip": chosenIp,
+      "hardware.camera.assignment.mac":         mac,
+      "hardware.camera.assignment.ip":          chosenIp,
       "hardware.camera.assignment.snapshotUrl": snapshotUrl,
-      "hardware.camera.assignment.updatedAt": now,
-      "hardware.camera.config.enabled": true,
+      "hardware.camera.assignment.source":      "admin-portal",
+      "hardware.camera.assignment.updatedAt":   now,
+      "hardware.camera.config.enabled":         true,
+      "hardware.camera.config.updatedAt":       now,
     };
     if (username) fsUpdate["hardware.camera.config.username"] = username;
     if (password) fsUpdate["hardware.camera.config.password"] = password;
 
-    await boxDocRef.update(fsUpdate);
+    try {
+      await boxDocRef.update(fsUpdate);
+      steps.firestoreAssignment.ok = true;
+      steps.firestoreConfig.ok = true;
+    } catch (fsError: any) {
+      const fsMsg = `Firestore-update mislukt: ${fsError?.message ?? "onbekende fout"}`;
+      steps.firestoreAssignment.error = fsMsg;
+      steps.firestoreConfig.error = fsMsg;
+      console.error(`camera-assign: DHCP lease ok maar Firestore write mislukt voor ${boxId}`, fsError);
+      return res.status(207).json({
+        ok: false,
+        error: "FIRESTORE_FAILED",
+        message: "DHCP lease gezet op router maar Firestore-update mislukt. Controleer de assignment handmatig.",
+        steps,
+        mac,
+        ip: chosenIp,
+        snapshotUrl
+      });
+    }
 
-    console.log(`camera-assign: ${boxId} → mac=${mac} ip=${chosenIp} (via Pi)`);
-    return res.json({ ok: true, mac, ip: chosenIp, snapshotUrl, updatedAt: now });
+    console.log(`camera-assign: ${boxId} → mac=${mac} ip=${chosenIp}`, steps);
+    return res.json({ ok: true, steps, mac, ip: chosenIp, snapshotUrl, updatedAt: now });
 
   } catch (error) {
     const statusCode = getStatusCode(error);
