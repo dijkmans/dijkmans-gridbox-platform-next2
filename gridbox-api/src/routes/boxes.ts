@@ -185,7 +185,7 @@ router.get("/portal/boxes", async (req, res) => {
           boxId,
           {
             totalActive,
-            phoneNumbers: allPhoneNumbers.slice(0, 2)
+            phoneNumbers: allPhoneNumbers
           }
         ] as const;
       })
