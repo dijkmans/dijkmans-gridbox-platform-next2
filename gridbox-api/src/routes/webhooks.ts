@@ -8,6 +8,13 @@ const router = Router();
 
 type SmsAction = "OPEN" | "CLOSE" | "UNKNOWN";
 
+function normalizePhoneNumber(phone: string): string {
+  let normalized = phone.replace(/\s+/g, "");
+  if (normalized.startsWith("0")) normalized = "+32" + normalized.substring(1);
+  if (!normalized.startsWith("+")) normalized = "+" + normalized;
+  return normalized;
+}
+
 function extractBoxIdFromText(text: string | null): string | null {
   if (!text) return null;
 
@@ -164,12 +171,13 @@ router.post("/webhooks/bird/inbound", async (req, res) => {
     const boxId = extractBoxIdFromText(text) ?? `gbox-${boxNr.padStart(3, "0")}`;
     const action = detectAction(text);
 
+    const normalizedSenderPhone = normalizePhoneNumber(phoneNumber);
     const boxDoc = await getBoxById(boxId);
 
     if (!boxDoc) {
       const replyText = `Gridbox ${shortBoxNr} bestaat niet.`;
 
-      await sendBirdSms(phoneNumber, replyText, {
+      await sendBirdSms(normalizedSenderPhone, replyText, {
         boxId,
         trigger: "sms-box-not-found",
       });
@@ -189,6 +197,36 @@ router.post("/webhooks/bird/inbound", async (req, res) => {
         ok: true,
         handled: true,
         status: "box-not-found",
+      });
+    }
+
+    const shareRef = db.collection("boxes").doc(boxId).collection("shares").doc(normalizedSenderPhone);
+    const shareDoc = await shareRef.get();
+    const hasAccess = shareDoc.exists && shareDoc.data()?.active === true;
+
+    if (!hasAccess) {
+      const noAccessReply = `Je hebt geen toegang tot Gridbox ${shortBoxNr}.`;
+
+      await sendBirdSms(normalizedSenderPhone, noAccessReply, {
+        boxId,
+        trigger: "sms-access-denied",
+      });
+
+      await smsLogRef.set(
+        {
+          boxId,
+          action,
+          processingStatus: "access-denied",
+          replyText: noAccessReply,
+          processedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      return res.status(200).json({
+        ok: true,
+        handled: true,
+        status: "access-denied",
       });
     }
 
@@ -233,7 +271,7 @@ router.post("/webhooks/bird/inbound", async (req, res) => {
       );
     }
 
-    await sendBirdSms(phoneNumber, replyText, {
+    await sendBirdSms(normalizedSenderPhone, replyText, {
       boxId,
       trigger: `sms-${action.toLowerCase()}`,
     });
