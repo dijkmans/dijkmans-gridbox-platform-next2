@@ -36,7 +36,7 @@ from db_manager import get_db
 # - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.95"  # fallback als git describe mislukt
+VERSION = "v1.0.96"  # fallback als git describe mislukt
 LISTENER_STARTED_AT = time.time()
 KEY_PATH = "service-account.json"
 BOOTSTRAP_PATH = "box_bootstrap.json"
