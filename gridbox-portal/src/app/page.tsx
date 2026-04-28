@@ -20,7 +20,7 @@ type PortalBox = {
   canOpen: boolean;
   shareSummary?: {
     totalActive: number;
-    phoneNumbers: string[];
+    phoneNumbers: { number: string; comment: string | null }[];
   };
   links: {
     detail: string;
@@ -528,12 +528,17 @@ export default function Home() {
                     </p>
                     {box.shareSummary && box.shareSummary.phoneNumbers.length > 0 && (
                       <div className="flex flex-wrap gap-2 mb-3">
-                        {box.shareSummary.phoneNumbers.map((num) => (
+                        {box.shareSummary.phoneNumbers.map((entry) => (
                           <span
-                            key={num}
-                            className="rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-sm font-semibold px-3 py-1"
+                            key={entry.number}
+                            className="relative group rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-sm font-semibold px-3 py-1"
                           >
-                            {num}
+                            {entry.number}
+                            {entry.comment && (
+                              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-[200px] rounded-xl bg-slate-900 text-white text-xs font-normal px-3 py-1.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                {entry.comment}
+                              </span>
+                            )}
                           </span>
                         ))}
                       </div>

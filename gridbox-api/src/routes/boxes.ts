@@ -174,10 +174,14 @@ router.get("/portal/boxes", async (req, res) => {
               return null;
             }
 
-            return shareId;
+            const comment = typeof data.name === "string" && data.name.trim().length > 0
+              ? data.name.trim()
+              : null;
+
+            return { number: shareId, comment };
           })
-          .filter((value): value is string => typeof value === "string")
-          .sort((a, b) => a.localeCompare(b));
+          .filter((value): value is { number: string; comment: string | null } => value !== null)
+          .sort((a, b) => a.number.localeCompare(b.number));
 
         return [
           boxId,
