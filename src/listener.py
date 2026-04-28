@@ -36,7 +36,7 @@ from db_manager import get_db
 # - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.81"  # fallback als git describe mislukt
+VERSION = "v1.0.95"  # fallback als git describe mislukt
 LISTENER_STARTED_AT = time.time()
 KEY_PATH = "service-account.json"
 BOOTSTRAP_PATH = "box_bootstrap.json"
@@ -676,6 +676,34 @@ def build_software_defaults_from_box_config():
         "restartDelaySeconds": sw_cfg.get("restartDelaySeconds", 2)
     }
 
+def initialize_camera_assignment_if_not_exists():
+    """Voegt hardware.camera.assignment-skelet toe als dat nog niet bestaat in Firestore.
+    Raakt bestaande velden (enabled, username, intervals, drempelwaarden) niet aan.
+    Gebruikt update() met dot-notatie voor selectieve schrijfactie."""
+    try:
+        doc = box_doc_ref.get()
+        data = doc.to_dict() if doc.exists else {}
+        existing_assignment = ((data.get("hardware") or {}).get("camera") or {}).get("assignment")
+
+        if existing_assignment:
+            log(f"INFO: initialize_camera_assignment: al aanwezig voor boxes/{DOCUMENT_ID} — niets aangepast")
+            return
+
+        now = now_iso()
+        box_doc_ref.update({
+            "hardware.camera.assignment.mac":         "",
+            "hardware.camera.assignment.ip":          "",
+            "hardware.camera.assignment.snapshotUrl": "",
+            "hardware.camera.assignment.source":      "manual",
+            "hardware.camera.assignment.updatedAt":   now,
+            "hardware.camera.config.password":        "",
+            "hardware.camera.config.updatedAt":       now,
+        })
+        log(f"INFO: initialize_camera_assignment: skelet aangemaakt voor boxes/{DOCUMENT_ID}")
+    except Exception as e:
+        log(f"WARN: initialize_camera_assignment fout: {e}")
+
+
 def ensure_customer_exists():
     if not has_customer_config():
         return None
@@ -815,6 +843,7 @@ def bootstrap_if_needed():
             box_doc_ref.set(init_payload, merge=True)
             log(f"Hardware/software defaults geschreven voor boxes/{DOCUMENT_ID}")
         refresh_cached_config()
+        initialize_camera_assignment_if_not_exists()
         load_box_state_from_firestore()
         return
     customer_id = ensure_customer_exists()
@@ -880,6 +909,7 @@ def bootstrap_if_needed():
     ensure_legacy_mirror_if_enabled(customer_id, site_id)
 
     refresh_cached_config()
+    initialize_camera_assignment_if_not_exists()
     load_box_state_from_firestore()
 
 
