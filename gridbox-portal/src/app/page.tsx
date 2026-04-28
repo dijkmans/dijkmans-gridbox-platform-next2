@@ -20,7 +20,7 @@ type PortalBox = {
   canOpen: boolean;
   shareSummary?: {
     totalActive: number;
-    phoneNumbers: { number: string; comment: string | null }[];
+    phoneNumbers: { number: string; comment: string | null; active: boolean }[];
   };
   links: {
     detail: string;
@@ -331,6 +331,25 @@ export default function Home() {
     }
   }
 
+  async function handleActivateShare(boxId: string, shareId: string) {
+    if (!window.confirm(`SMS versturen naar ${shareId}?`)) return;
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(apiUrl(`/portal/boxes/${encodeURIComponent(boxId)}/shares/${encodeURIComponent(shareId)}/activate`), {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setToast("SMS succesvol verstuurd! ✉️");
+        void loadBoxes();
+      } else {
+        setToast("Fout bij versturen SMS.");
+      }
+    } catch {
+      setToast("Netwerkfout bij versturen.");
+    }
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-4 lg:px-8 lg:py-6">
       <div className="space-y-4">
@@ -529,17 +548,30 @@ export default function Home() {
                     {box.shareSummary && box.shareSummary.phoneNumbers.length > 0 && (
                       <div className="flex flex-wrap gap-2 mb-3">
                         {box.shareSummary.phoneNumbers.map((entry) => (
-                          <span
-                            key={entry.number}
-                            className="relative group rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-sm font-semibold px-3 py-1"
-                          >
-                            {entry.number}
-                            {entry.comment && (
-                              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-[200px] rounded-xl bg-slate-900 text-white text-xs font-normal px-3 py-1.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                                {entry.comment}
-                              </span>
+                          <div key={entry.number} className="flex items-center gap-1.5">
+                            <span
+                              className="relative group rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-sm font-semibold px-3 py-1 cursor-default"
+                            >
+                              {entry.number}
+                              {entry.comment && (
+                                <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-[200px] rounded-xl bg-slate-900 text-white text-xs font-semibold px-3 py-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-10 whitespace-normal text-center">
+                                  {entry.comment}
+                                </span>
+                              )}
+                            </span>
+                            {!entry.active && (
+                              <button
+                                onClick={() => handleActivateShare(box.id, entry.number)}
+                                title={`SMS versturen naar ${entry.number}`}
+                                className="rounded-xl bg-blue-50 border border-blue-200 text-blue-700 w-8 h-8 flex items-center justify-center hover:bg-blue-100 transition-colors shrink-0"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <rect width="20" height="16" x="2" y="4" rx="2"/>
+                                  <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                                </svg>
+                              </button>
                             )}
-                          </span>
+                          </div>
                         ))}
                       </div>
                     )}

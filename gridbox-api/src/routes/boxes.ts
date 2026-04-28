@@ -160,15 +160,11 @@ router.get("/portal/boxes", async (req, res) => {
 
         const snapshot = await db.collection("boxes").doc(boxId).collection("shares").get();
 
-        const activePhoneNumbers = snapshot.docs
+        const allPhoneNumbers = snapshot.docs
           .map((shareDoc) => {
             const data = shareDoc.data() as Record<string, any>;
             const shareId = shareDoc.id;
             const active = data.active === true || data.status === "active";
-
-            if (!active) {
-              return null;
-            }
 
             if (!/^\+\d{8,20}$/.test(shareId)) {
               return null;
@@ -178,16 +174,18 @@ router.get("/portal/boxes", async (req, res) => {
               ? data.name.trim()
               : null;
 
-            return { number: shareId, comment };
+            return { number: shareId, comment, active };
           })
-          .filter((value): value is { number: string; comment: string | null } => value !== null)
+          .filter((value): value is { number: string; comment: string | null; active: boolean } => value !== null)
           .sort((a, b) => a.number.localeCompare(b.number));
+
+        const totalActive = allPhoneNumbers.filter((e) => e.active).length;
 
         return [
           boxId,
           {
-            totalActive: activePhoneNumbers.length,
-            phoneNumbers: activePhoneNumbers.slice(0, 2)
+            totalActive,
+            phoneNumbers: allPhoneNumbers.slice(0, 2)
           }
         ] as const;
       })
