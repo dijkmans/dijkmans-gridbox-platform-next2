@@ -120,7 +120,7 @@ function PageContentRouter() {
       const res = await fetch(apiUrl(`/portal/boxes/${boxId}/shares`), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ phoneNumber: sharePhone, label: shareLabel, status: isPending ? "pending" : "active" })
+        body: JSON.stringify({ phoneNumber: sharePhone.replace(/[\s.]/g, ""), label: shareLabel, status: isPending ? "pending" : "active" })
       });
       if (res.ok) {
         setSharePhone("+32"); setShareLabel("");
