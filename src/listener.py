@@ -36,7 +36,7 @@ from db_manager import get_db
 # - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.97"  # fallback als git describe mislukt
+VERSION = "v1.0.98"  # fallback als git describe mislukt
 LISTENER_STARTED_AT = time.time()
 KEY_PATH = "service-account.json"
 BOOTSTRAP_PATH = "box_bootstrap.json"
@@ -677,29 +677,45 @@ def build_software_defaults_from_box_config():
     }
 
 def initialize_camera_assignment_if_not_exists():
-    """Voegt hardware.camera.assignment-skelet toe als dat nog niet bestaat in Firestore.
-    Raakt bestaande velden (enabled, username, intervals, drempelwaarden) niet aan.
-    Gebruikt update() met dot-notatie voor selectieve schrijfactie."""
+    """Vult hardware.camera.assignment en hardware.camera.config aan als velden ontbreken.
+    Overschrijft nooit bestaande waarden. Gebruikt dot-notatie update() per ontbrekend veld."""
     try:
         doc = box_doc_ref.get()
         data = doc.to_dict() if doc.exists else {}
-        existing_assignment = ((data.get("hardware") or {}).get("camera") or {}).get("assignment")
-
-        if existing_assignment:
-            log(f"INFO: initialize_camera_assignment: al aanwezig voor boxes/{DOCUMENT_ID} — niets aangepast")
-            return
+        camera = (data.get("hardware") or {}).get("camera") or {}
+        existing_assignment = camera.get("assignment")
+        existing_config = camera.get("config") or {}
 
         now = now_iso()
-        box_doc_ref.update({
-            "hardware.camera.assignment.mac":         "",
-            "hardware.camera.assignment.ip":          "",
-            "hardware.camera.assignment.snapshotUrl": "",
-            "hardware.camera.assignment.source":      "manual",
-            "hardware.camera.assignment.updatedAt":   now,
-            "hardware.camera.config.password":        "",
-            "hardware.camera.config.updatedAt":       now,
-        })
-        log(f"INFO: initialize_camera_assignment: skelet aangemaakt voor boxes/{DOCUMENT_ID}")
+        updates = {}
+
+        if not existing_assignment:
+            updates["hardware.camera.assignment.mac"]         = ""
+            updates["hardware.camera.assignment.ip"]          = ""
+            updates["hardware.camera.assignment.snapshotUrl"] = ""
+            updates["hardware.camera.assignment.source"]      = "manual"
+            updates["hardware.camera.assignment.updatedAt"]   = now
+
+        config_defaults = {
+            "enabled":                        False,
+            "username":                       "",
+            "password":                       "",
+            "snapshotIntervalSeconds":        5,
+            "postCloseSnapshotDurationSeconds": 30,
+            "changeDetectionThreshold":       6.0,
+            "saveCooldownSeconds":            10,
+            "forceSaveThresholdMultiplier":   2.0,
+            "updatedAt":                      now,
+        }
+        for field, default in config_defaults.items():
+            if field not in existing_config:
+                updates[f"hardware.camera.config.{field}"] = default
+
+        if updates:
+            box_doc_ref.update(updates)
+            log(f"INFO: initialize_camera_assignment: {len(updates)} veld(en) aangemaakt voor boxes/{DOCUMENT_ID}")
+        else:
+            log(f"INFO: initialize_camera_assignment: alles al aanwezig voor boxes/{DOCUMENT_ID} — niets aangepast")
     except Exception as e:
         log(f"WARN: initialize_camera_assignment fout: {e}")
 
