@@ -10,6 +10,11 @@ VERSION=${1:-$(git tag | sort -V | tail -1)}
 echo "[UPDATE] Versie: $VERSION"
 git checkout $VERSION
 
+echo "[UPDATE] gridbox.service installeren..."
+cp /home/pi/dijkmans-gridbox-platform-next2/gridbox.service /etc/systemd/system/gridbox.service
+systemctl daemon-reload
+echo "[UPDATE] gridbox.service geïnstalleerd en daemon herladen."
+
 echo "[UPDATE] rpi-connect-lite installeren indien nodig..."
 if ! dpkg -s rpi-connect-lite &>/dev/null; then
   apt-get install -y rpi-connect-lite
