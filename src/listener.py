@@ -37,7 +37,7 @@ from db_manager import get_db
 # - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.99"  # fallback als git describe mislukt
+VERSION = "v1.0.100"  # fallback als git describe mislukt
 LISTENER_STARTED_AT = time.time()
 KEY_PATH = "service-account.json"
 BOOTSTRAP_PATH = "box_bootstrap.json"
@@ -1903,6 +1903,10 @@ def fetch_snapshot_bytes(url, cam_cfg):
     """Haalt ruwe JPEG-bytes op via HTTP of RTSP (ffmpeg).
     Geeft (bytes, content_type) terug of gooit een exception."""
     if url.startswith("rtsp://"):
+        username = cam_cfg.get("username")
+        password = cam_cfg.get("password")
+        if username and "@" not in url.split("://", 1)[1]:
+            url = url.replace("rtsp://", f"rtsp://{username}:{password}@", 1)
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
             tmp_path = tmp.name
         try:
