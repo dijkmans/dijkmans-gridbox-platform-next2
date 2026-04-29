@@ -5,6 +5,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 from datetime import datetime
@@ -36,7 +37,7 @@ from db_manager import get_db
 # - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.98"  # fallback als git describe mislukt
+VERSION = "v1.0.99"  # fallback als git describe mislukt
 LISTENER_STARTED_AT = time.time()
 KEY_PATH = "service-account.json"
 BOOTSTRAP_PATH = "box_bootstrap.json"
@@ -1898,6 +1899,44 @@ def should_store_snapshot(phase, change_detected, change_score, threshold):
 # CAMERA
 # =========================================================
 
+def fetch_snapshot_bytes(url, cam_cfg):
+    """Haalt ruwe JPEG-bytes op via HTTP of RTSP (ffmpeg).
+    Geeft (bytes, content_type) terug of gooit een exception."""
+    if url.startswith("rtsp://"):
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+            tmp_path = tmp.name
+        try:
+            result = subprocess.run(
+                [
+                    "ffmpeg", "-y",
+                    "-rtsp_transport", "tcp",
+                    "-i", url,
+                    "-frames:v", "1",
+                    "-q:v", "2",
+                    tmp_path,
+                ],
+                capture_output=True,
+                timeout=15,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"ffmpeg fout: {result.stderr.decode(errors='replace')[-300:]}")
+            with open(tmp_path, "rb") as f:
+                return f.read(), "image/jpeg"
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+    else:
+        auth = None
+        if cam_cfg.get("username"):
+            auth = HTTPBasicAuth(cam_cfg.get("username"), cam_cfg.get("password"))
+        resp = requests.get(url, auth=auth, timeout=10)
+        if resp.status_code != 200:
+            raise RuntimeError(f"Camera gaf status {resp.status_code}")
+        return resp.content, resp.headers.get("Content-Type", "image/jpeg")
+
+
 def take_snapshot(phase="manual", sequence_number=None):
     global last_saved_snapshot_at
 
@@ -1910,19 +1949,10 @@ def take_snapshot(phase="manual", sequence_number=None):
         return
 
     try:
-        auth = None
-        if cam_cfg.get("username"):
-            auth = HTTPBasicAuth(cam_cfg.get("username"), cam_cfg.get("password"))
-
-        resp = requests.get(url, auth=auth, timeout=10)
-        if resp.status_code != 200:
-            log(f"Camera gaf status {resp.status_code}")
-            return
-
-        content_type = resp.headers.get("Content-Type", "image/jpeg")
+        raw_bytes, content_type = fetch_snapshot_bytes(url, cam_cfg)
         captured_at = now_iso()
 
-        image = Image.open(BytesIO(resp.content))
+        image = Image.open(BytesIO(raw_bytes))
         image.load()
 
         width, height = image.size
@@ -1957,7 +1987,7 @@ def take_snapshot(phase="manual", sequence_number=None):
         storage_path = f"snapshots/{DOCUMENT_ID}/{filename}"
         bucket = storage_client.bucket(BUCKET_NAME)
         blob = bucket.blob(storage_path)
-        blob.upload_from_string(resp.content, content_type=content_type)
+        blob.upload_from_string(raw_bytes, content_type=content_type)
 
         with state_lock:
             current_box_open = bool(box_is_open)
@@ -1980,7 +2010,7 @@ def take_snapshot(phase="manual", sequence_number=None):
             "changeThreshold": float(threshold),
             "previousSnapshotId": previous_snapshot_id,
             "contentType": content_type,
-            "sizeBytes": int(len(resp.content)),
+            "sizeBytes": int(len(raw_bytes)),
             "width": int(width),
             "height": int(height),
             "boxWasOpen": current_box_open,
@@ -2310,7 +2340,7 @@ try:
 
     log("[INFO] Startup test snapshot uitvoeren...")
     threading.Thread(
-        target=lambda: take_snapshot(phase="startup-test", sequence_number=0),
+        target=lambda: take_snapshot(phase="startup_test", sequence_number=0),
         daemon=True
     ).start()
 
