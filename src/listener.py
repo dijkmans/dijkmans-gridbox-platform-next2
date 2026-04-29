@@ -4,6 +4,7 @@ import platform
 import re
 import shlex
 import shutil
+import socket
 import subprocess
 import tempfile
 import threading
@@ -22,6 +23,24 @@ from PIL import Image, ImageChops, ImageStat
 
 from db_manager import get_db
 
+
+def sd_notify(msg: str) -> None:
+    """Stuurt een bericht naar de systemd notify socket (NOTIFY_SOCKET).
+    Vereist voor WatchdogSec in gridbox.service — geen effect buiten systemd."""
+    notify_socket = os.environ.get("NOTIFY_SOCKET")
+    if not notify_socket:
+        return
+    addr = ("\0" + notify_socket[1:]) if notify_socket.startswith("@") else notify_socket
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    try:
+        sock.connect(addr)
+        sock.sendall(msg.encode())
+    except OSError:
+        pass
+    finally:
+        sock.close()
+
+
 # =========================================================
 # GRIDBOX SERVICE - MASTER v1.0.51
 # ÃƒÆÃ¢â¬Â°ÃƒÆÃÂ©n script:
@@ -37,7 +56,7 @@ from db_manager import get_db
 # - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.102"  # fallback als git describe mislukt
+VERSION = "v1.0.103"  # fallback als git describe mislukt
 LISTENER_STARTED_AT = time.time()
 KEY_PATH = "service-account.json"
 BOOTSTRAP_PATH = "box_bootstrap.json"
@@ -2394,6 +2413,7 @@ _claim_permanently_rejected = False
 try:
     while True:
         now_ts = time.time()
+        sd_notify("WATCHDOG=1")
 
         if now_ts >= next_software_poll_at:
             maybe_process_software_request()
