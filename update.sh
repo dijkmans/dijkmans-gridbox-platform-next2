@@ -38,6 +38,7 @@ echo "[UPDATE] Watchdog actief."
 
 echo "[UPDATE] ffmpeg installeren indien nodig..."
 if ! dpkg -s ffmpeg &>/dev/null; then
+  apt-get update
   apt-get install -y ffmpeg
   echo "[UPDATE] ffmpeg geïnstalleerd."
 else
