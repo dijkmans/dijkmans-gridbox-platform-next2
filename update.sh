@@ -36,6 +36,14 @@ systemctl enable watchdog
 systemctl start watchdog
 echo "[UPDATE] Watchdog actief."
 
+echo "[UPDATE] ffmpeg installeren indien nodig..."
+if ! dpkg -s ffmpeg &>/dev/null; then
+  apt-get install -y ffmpeg
+  echo "[UPDATE] ffmpeg geïnstalleerd."
+else
+  echo "[UPDATE] ffmpeg is al geïnstalleerd."
+fi
+
 echo "[UPDATE] rpi-connect user service inschakelen..."
 sudo -u pi DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/1000/bus" XDG_RUNTIME_DIR=/run/user/1000 systemctl --user enable rpi-connect
 
