@@ -204,6 +204,7 @@ export default function AdminBoxConfigClient() {
   const [cameraSnapshotInterval, setCameraSnapshotInterval] = useState("");
   const [cameraChangeThreshold, setCameraChangeThreshold] = useState("");
   const [cameraPostCloseDuration, setCameraPostCloseDuration] = useState("");
+  const [cameraSnapshotUrl, setCameraSnapshotUrl] = useState("");
 
   // Camera-toewijzingsflow
   const [cameraContext, setCameraContext] = useState<CameraContext | null>(null);
@@ -354,6 +355,7 @@ export default function AdminBoxConfigClient() {
       setCameraMac(camAssignment?.mac ?? null);
       setCameraUsername(camConfig?.username ?? "");
       setCameraPassword("");
+      setCameraSnapshotUrl(camAssignment?.snapshotUrl ?? "");
       setCameraSnapshotInterval(numField(camConfig?.snapshotIntervalSeconds));
       setCameraChangeThreshold(numField(camConfig?.changeDetectionThreshold));
       setCameraPostCloseDuration(numField(camConfig?.postCloseSnapshotDurationSeconds));
@@ -565,7 +567,8 @@ export default function AdminBoxConfigClient() {
           mac,
           chosenIp: suggestedIp,
           ...(cameraUsername ? { username: cameraUsername } : {}),
-          ...(cameraPassword ? { password: cameraPassword } : {})
+          ...(cameraPassword ? { password: cameraPassword } : {}),
+          ...(cameraSnapshotUrl ? { snapshotUrl: cameraSnapshotUrl } : {})
         })
       });
       const data = await res.json() as {
@@ -631,7 +634,7 @@ export default function AdminBoxConfigClient() {
       const res = await fetch(apiUrl(`/admin/boxes/${encodeURIComponent(boxId)}/camera`), {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ mac: macTrimmed, ip: ipTrimmed })
+        body: JSON.stringify({ mac: macTrimmed, ip: ipTrimmed, ...(cameraSnapshotUrl ? { snapshotUrl: cameraSnapshotUrl } : {}) })
       });
       const data = await res.json() as { ok?: boolean; message?: string };
       if (!res.ok) { setManualError(data.message || "Opslaan mislukt"); return; }
@@ -1237,6 +1240,13 @@ export default function AdminBoxConfigClient() {
                     </FieldRow>
                     <FieldRow label="Snapshot duur na sluiten (sec)">
                       <NumInput value={cameraPostCloseDuration} onChange={setCameraPostCloseDuration} placeholder="bijv. 30" />
+                    </FieldRow>
+                    <FieldRow label="Snapshot/stream URL">
+                      <TextInput
+                        value={cameraSnapshotUrl}
+                        onChange={setCameraSnapshotUrl}
+                        placeholder="Leeg = standaard http://{ip}/cgi-bin/snapshot.cgi"
+                      />
                     </FieldRow>
                   </div>
                 </div>

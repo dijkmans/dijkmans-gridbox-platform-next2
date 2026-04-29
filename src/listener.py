@@ -56,7 +56,7 @@ def sd_notify(msg: str) -> None:
 # - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.103"  # fallback als git describe mislukt
+VERSION = "v1.0.104"  # fallback als git describe mislukt
 LISTENER_STARTED_AT = time.time()
 KEY_PATH = "service-account.json"
 BOOTSTRAP_PATH = "box_bootstrap.json"
@@ -1412,21 +1412,17 @@ def _handle_test_snapshot_command(cmd_ref, data):
 
         log(f"INFO: test_snapshot aanvraag voor {snapshot_url}")
 
-        auth = None
-        if username and password:
-            auth = HTTPBasicAuth(username, password)
-
-        resp = requests.get(snapshot_url, auth=auth, timeout=10)
-        if resp.status_code != 200:
-            cmd_ref.update({"status": "error", "errorMessage": f"Camera HTTP {resp.status_code}"})
-            return
+        raw_bytes, content_type = fetch_snapshot_bytes(
+            snapshot_url,
+            {"username": username, "password": password}
+        )
 
         timestamp_ms = int(time.time() * 1000)
         filename = f"test_snapshot_{timestamp_ms}.jpg"
         storage_path = f"snapshots/{DOCUMENT_ID}/{filename}"
         bucket = storage_client.bucket(BUCKET_NAME)
         blob = bucket.blob(storage_path)
-        blob.upload_from_string(resp.content, content_type="image/jpeg")
+        blob.upload_from_string(raw_bytes, content_type=content_type)
         blob.make_public()
         public_url = blob.public_url
 

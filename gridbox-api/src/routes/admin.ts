@@ -1093,6 +1093,7 @@ router.post("/admin/boxes/:boxId/camera-assign", async (req, res) => {
     const chosenIp = typeof body.chosenIp === "string" ? body.chosenIp.trim() : "";
     const username = typeof body.username === "string" && body.username.trim() ? body.username.trim() : null;
     const password = typeof body.password === "string" && body.password ? body.password : null;
+    const customSnapshotUrl = typeof body.snapshotUrl === "string" ? body.snapshotUrl.trim() : "";
 
     if (!mac || !/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(mac)) {
       return res.status(400).json({ error: "INVALID_MAC", message: "mac moet het formaat xx:xx:xx:xx:xx:xx hebben" });
@@ -1100,6 +1101,9 @@ router.post("/admin/boxes/:boxId/camera-assign", async (req, res) => {
     const ipMatch = chosenIp.match(/^192\.168\.10\.(\d+)$/);
     if (!ipMatch || parseInt(ipMatch[1], 10) < 100 || parseInt(ipMatch[1], 10) > 249) {
       return res.status(400).json({ error: "INVALID_IP", message: "chosenIp moet 192.168.10.x zijn (100–249)" });
+    }
+    if (customSnapshotUrl && !/^(https?|rtsp):\/\/([\w.:-]+@)?192\.168\.10\.\d+/.test(customSnapshotUrl)) {
+      return res.status(400).json({ error: "INVALID_SNAPSHOT_URL", message: "snapshotUrl moet beginnen met http(s)://192.168.10.x of rtsp://192.168.10.x" });
     }
 
     const db = getFirestore();
@@ -1200,7 +1204,7 @@ router.post("/admin/boxes/:boxId/camera-assign", async (req, res) => {
     steps.dhcpLease.ok = true;
 
     // Stap 5: Pi bevestigde success — schrijf camera-koppeling naar Firestore
-    const snapshotUrl = `http://${chosenIp}/cgi-bin/snapshot.cgi`;
+    const snapshotUrl = customSnapshotUrl || `http://${chosenIp}/cgi-bin/snapshot.cgi`;
     const now = new Date().toISOString();
 
     const fsUpdate: Record<string, unknown> = {
@@ -1287,7 +1291,9 @@ router.put("/admin/boxes/:boxId/camera", async (req, res) => {
   try {
     const context = await requirePlatformAdmin(req.header("Authorization") || undefined);
     const { boxId } = req.params;
-    const { mac, ip, username, password } = req.body as { mac?: string; ip?: string; username?: string; password?: string };
+    const { mac, ip, username, password, snapshotUrl: rawSnapshotUrl } = req.body as {
+      mac?: string; ip?: string; username?: string; password?: string; snapshotUrl?: string;
+    };
 
     if (!mac || typeof mac !== "string") {
       return res.status(400).json({ error: "INVALID_INPUT", message: "mac is verplicht" });
@@ -1303,6 +1309,12 @@ router.put("/admin/boxes/:boxId/camera", async (req, res) => {
       return res.status(400).json({ error: "INVALID_IP", message: "ip moet 192.168.10.x zijn waarbij x tussen 100 en 249 ligt" });
     }
 
+    const customUrl = typeof rawSnapshotUrl === "string" ? rawSnapshotUrl.trim() : "";
+    if (customUrl && !/^(https?|rtsp):\/\/([\w.:-]+@)?192\.168\.10\.\d+/.test(customUrl)) {
+      return res.status(400).json({ error: "INVALID_SNAPSHOT_URL", message: "snapshotUrl moet beginnen met http(s)://192.168.10.x of rtsp://192.168.10.x" });
+    }
+    const snapshotUrl = customUrl || `http://${ip}/cgi-bin/snapshot.cgi`;
+
     const db = getFirestore();
 
     const boxSnap = await db.collection("boxes").where("boxId", "==", boxId).limit(1).get();
@@ -1316,7 +1328,6 @@ router.put("/admin/boxes/:boxId/camera", async (req, res) => {
       return res.status(404).json({ error: "BOX_NOT_FOUND", message: "Box niet gevonden" });
     }
 
-    const snapshotUrl = `http://${ip}/cgi-bin/snapshot.cgi`;
     const updateData: Record<string, any> = {
       "hardware.camera.assignment.mac": mac.toLowerCase(),
       "hardware.camera.assignment.ip": ip,
