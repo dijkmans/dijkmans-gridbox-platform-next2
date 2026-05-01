@@ -1,4 +1,4 @@
-const { onDocumentWritten } = require('firebase-functions/v2/firestore');
+﻿const { onDocumentWritten } = require('firebase-functions/v2/firestore');
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const admin = require('firebase-admin');
@@ -36,7 +36,7 @@ exports.onShareStatusChanged = onDocumentWritten({
     const name = afterData.name || 'Gebruiker';
 
     try {
-        // Haal city op via box → siteId → sites
+        // Haal city op via box â†’ siteId â†’ sites
         let city = '';
         try {
             const boxSnap = await db.collection('boxes').doc(boxId).get();
@@ -67,7 +67,7 @@ exports.onShareStatusChanged = onDocumentWritten({
 
         const WORKSPACE_ID = '145d3c27-76ac-4d6a-9e10-1f7dff2f6bcb';
         const CHANNEL_ID = 'a703f755-7154-532a-89a0-70103633682e';
-        const API_KEY = 'bRoknKEna83EdGVd7wF2VF6ZpAKcP1IXWh4A';
+        const API_KEY = process.env.BIRD_API_KEY || '';
 
         const payload = {
             receiver: { contacts: [{ identifierValue: phoneNumber }] },
@@ -137,7 +137,7 @@ exports.inviteUser = onCall({ region: 'europe-west1', cors: true }, async (reque
     return { success: true };
 });
 
-// 4. HEARTBEAT WATCHDOG — markeert boxes als offline als Pi meer dan 5 minuten stil is
+// 4. HEARTBEAT WATCHDOG â€” markeert boxes als offline als Pi meer dan 5 minuten stil is
 exports.checkBoxHeartbeats = onSchedule({
     schedule: 'every 5 minutes',
     region: 'europe-west1',
@@ -168,5 +168,5 @@ exports.checkBoxHeartbeats = onSchedule({
     }
 
     if (markedOffline > 0) await batch.commit();
-    console.log(`[checkBoxHeartbeats] done — ${markedOffline} boxes marked offline`);
+    console.log(`[checkBoxHeartbeats] done â€” ${markedOffline} boxes marked offline`);
 });
