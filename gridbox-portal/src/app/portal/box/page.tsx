@@ -354,20 +354,23 @@ function PageContentRouter() {
             <span className="live-dot" /> Live monitoring
           </h3>
           {(() => {
-            const rotation = (box?.camera?.rotationDeg ?? 0) as 0 | 90 | 180 | 270;
+            const raw = Number(box?.camera?.rotationDeg ?? 0);
+            console.log("rotationDeg:", raw, typeof raw);
+            const rotation = ([0, 90, 180, 270] as const).includes(raw as 0 | 90 | 180 | 270)
+              ? (raw as 0 | 90 | 180 | 270)
+              : 0;
             const isPortrait = rotation === 90 || rotation === 270;
-            console.log("rotationDeg:", box?.camera?.rotationDeg);
-            // Bij 90/270°: img DOM-afmetingen zijn omgewisseld t.o.v. de container,
-            // zodat na rotate() de visuele afmetingen exact de container vullen.
+            const visualRotation = rotation === 90 ? -90 : rotation === 270 ? 90 : rotation;
             const imgStyle: React.CSSProperties = isPortrait
               ? {
                   position: "absolute",
                   top: "50%",
                   left: "50%",
-                  width: "177.78%",
-                  height: "56.25%",
-                  transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
+                  width: "100%",
+                  height: "100%",
+                  transform: `translate(-50%, -50%) rotate(${visualRotation}deg) scale(1.55)`,
                   objectFit: "contain",
+                  maxWidth: "none",
                 }
               : {
                   position: "absolute",
@@ -382,7 +385,7 @@ function PageContentRouter() {
               <div style={{
                 position: "relative",
                 width: "100%",
-                paddingTop: isPortrait ? "177.78%" : "56.25%",
+                aspectRatio: isPortrait ? "9/16" : "16/9",
                 overflow: "hidden",
                 borderRadius: "16px",
                 border: "4px solid #1e293b",
