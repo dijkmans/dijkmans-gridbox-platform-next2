@@ -37,3 +37,8 @@ src/__pycache__/
 .env.*.local
 gridbox-api/.env
 gridbox-portal/.env.local
+
+# Claude local settings
+.claude/settings.local.json
+gridbox-portal/.claude/settings.local.json
+gridbox-api/.claude/settings.local.json
