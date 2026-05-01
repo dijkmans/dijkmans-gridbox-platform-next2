@@ -45,3 +45,6 @@ gridbox-api/.claude/settings.local.json
 
 # Database dumps
 archive/dumps/*.json
+
+# Database dumps
+archive/dumps/*.json
