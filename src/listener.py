@@ -56,7 +56,7 @@ def sd_notify(msg: str) -> None:
 # - eenvoudige change-detectie op beeldverschil
 # =========================================================
 
-VERSION = "v1.0.104"  # fallback als git describe mislukt
+VERSION = "v1.0.106"  # fallback als git describe mislukt
 LISTENER_STARTED_AT = time.time()
 KEY_PATH = "service-account.json"
 BOOTSTRAP_PATH = "box_bootstrap.json"
@@ -696,6 +696,14 @@ def build_software_defaults_from_box_config():
         "restartDelaySeconds": sw_cfg.get("restartDelaySeconds", 2)
     }
 
+def normalize_rotation_deg(value):
+    try:
+        rotation = int(value)
+    except Exception:
+        return None
+    return rotation if rotation in (0, 90, 180, 270) else None
+
+
 def initialize_camera_assignment_if_not_exists():
     """Vult hardware.camera.assignment en hardware.camera.config aan als velden ontbreken.
     Overschrijft nooit bestaande waarden. Gebruikt dot-notatie update() per ontbrekend veld."""
@@ -730,6 +738,13 @@ def initialize_camera_assignment_if_not_exists():
         for field, default in config_defaults.items():
             if field not in existing_config:
                 updates[f"hardware.camera.config.{field}"] = default
+
+        existing_rotation = camera.get("rotationDeg")
+        normalized_rotation = normalize_rotation_deg(existing_rotation)
+        if existing_rotation is None:
+            updates["hardware.camera.rotationDeg"] = 270
+        elif normalized_rotation is None:
+            log(f"WARN: initialize_camera_assignment: ongeldige rotationDeg={existing_rotation!r} — niet overschreven")
 
         if updates:
             box_doc_ref.update(updates)
