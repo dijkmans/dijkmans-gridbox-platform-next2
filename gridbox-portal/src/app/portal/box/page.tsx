@@ -356,6 +356,28 @@ function PageContentRouter() {
           {(() => {
             const rotation = (box?.camera?.rotationDeg ?? 0) as 0 | 90 | 180 | 270;
             const isPortrait = rotation === 90 || rotation === 270;
+            console.log("rotationDeg:", box?.camera?.rotationDeg);
+            // Bij 90/270°: img DOM-afmetingen zijn omgewisseld t.o.v. de container,
+            // zodat na rotate() de visuele afmetingen exact de container vullen.
+            const imgStyle: React.CSSProperties = isPortrait
+              ? {
+                  position: "absolute",
+                  top: "50%",
+                  left: "50%",
+                  width: "177.78%",
+                  height: "56.25%",
+                  transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
+                  objectFit: "contain",
+                }
+              : {
+                  position: "absolute",
+                  top: "0",
+                  left: "0",
+                  width: "100%",
+                  height: "100%",
+                  transform: rotation !== 0 ? `rotate(${rotation}deg)` : undefined,
+                  objectFit: "contain",
+                };
             return (
               <div style={{
                 position: "relative",
@@ -370,17 +392,7 @@ function PageContentRouter() {
                   <img
                     src={snapshotUrl}
                     alt="Real-time feed"
-                    style={{
-                      position: "absolute",
-                      top: "50%",
-                      left: "50%",
-                      maxWidth: isPortrait ? "177.78%" : "100%",
-                      maxHeight: isPortrait ? "100%" : "177.78%",
-                      width: "auto",
-                      height: "auto",
-                      transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
-                      objectFit: "contain",
-                    }}
+                    style={imgStyle}
                   />
                 )}
                 <div className="absolute top-4 right-4 text-xs font-mono border border-emerald-400 text-emerald-400 px-2 py-1 rounded-lg bg-black/50 backdrop-blur-sm">
