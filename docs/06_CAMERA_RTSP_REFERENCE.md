@@ -59,21 +59,32 @@ hardware.camera.assignment.snapshotUrl = rtsp://admin:admin@192.168.10.{x}:5544/
 
 ---
 
-### 1.3 Vatilon — Nog niet opgelost
+### 1.3 Vatilon — Werkend
 
 | Eigenschap         | Waarde                                              |
 |--------------------|-----------------------------------------------------|
 | Boxen              | gbox-014                                            |
+| Model              | I3004-HSWA                                          |
 | MAC OUI            | `e8:b7:23`                                          |
 | Fabrikant          | Shenzhen Vatilon Electronics Co., Ltd               |
-| Ping               | Werkt                                               |
-| HTTP / RTSP        | Alle poorten geblokkeerd — geen verbinding mogelijk |
-| Status             | Onopgelost — camera niet in productie               |
+| RTSP poort         | **554**                                             |
+| RTSP URL           | `rtsp://admin:admin1@{ip}:554/stream1`              |
+| Snapshot CGI       | **BESTAAT NIET** — alleen RTSP                      |
+| Webinterface       | `http://{ip}/view/player.html`                      |
+| Standaard gebruiker| `admin` / `admin1`                                  |
+| Status             | Werkend in productie (gbox-014, 2026-05-01)         |
 
-**Mogelijke vervolgstappen Vatilon:**
-- Controleer of er een firewall-instelling in de webinterface zit (als die bereikbaar is via ander subnet)
-- Probeer ONVIF Discovery op het lokale netwerk via poort 3702 (UDP)
-- Reset de camera en probeer direct via een laptop op hetzelfde netwerk
+**Configuratie in Firestore:**
+```
+hardware.camera.assignment.snapshotUrl = rtsp://admin:admin1@192.168.10.{x}:554/stream1
+```
+
+**Waarom Vatilon niet meteen werkt bij eerste aanpak:**
+- Poortscans (80, 554, 8554, 5544) lijken geblokkeerd op standaard netwerkconfiguratie
+- De webinterface draait op `/view/player.html`, niet op `/` — een gewone HTTP-check geeft geen respons
+- Het standaardwachtwoord is `admin1`, niet `admin` zoals bij Jovision — dit is de meest voorkomende fout
+- RTSP draait op poort 554 (standaard), niet op de Jovision-specifieke poorten 8554 of 5544
+- Gebruik altijd `-rtsp_transport tcp` bij testen met ffmpeg — UDP werkt niet betrouwbaar met Vatilon
 
 ---
 
@@ -81,19 +92,21 @@ hardware.camera.assignment.snapshotUrl = rtsp://admin:admin@192.168.10.{x}:5544/
 
 ### Herselt
 
-| Box       | Camera type          | IP (vast)       | MAC               | RTSP URL                                           | Status         |
-|-----------|----------------------|-----------------|-------------------|----------------------------------------------------|----------------|
-| gbox-012  | Jovision standaard   | 192.168.10.167  | e0:62:90:...      | `rtsp://admin:admin@192.168.10.167:8554/live1.264` | Geconfigureerd |
-| gbox-013  | Jovision standaard   | 192.168.10.x    | e0:62:90:...      | `rtsp://admin:admin@192.168.10.x:8554/live1.264`   | —              |
+| Box       | Camera type          | IP (vast)       | MAC                  | RTSP URL                                            | Status   |
+|-----------|----------------------|-----------------|----------------------|-----------------------------------------------------|----------|
+| gbox-012  | Jovision standaard   | 192.168.10.110  | e0:62:90:0e:89:ec    | `rtsp://admin:admin@192.168.10.110:8554/live1.264`  | Werkend  |
+| gbox-013  | Jovision standaard   | 192.168.10.111  | e0:62:90:0e:89:ff    | `rtsp://admin:admin@192.168.10.111:8554/live1.264`  | Werkend  |
+
+> **Let op (2026-05-01):** De camera-assignments van gbox-012 en gbox-015 waren verwisseld in Firestore. Hersteld via handmatige Firestore-swap.
 
 ### Geel
 
-| Box       | Camera type          | IP (vast)       | MAC               | RTSP URL                                           | Status         |
-|-----------|----------------------|-----------------|-------------------|----------------------------------------------------|----------------|
-| gbox-014  | Vatilon              | 192.168.10.x    | e8:b7:23:...      | n.v.t.                                             | Geblokkeerd    |
-| gbox-015  | Jovision XVR         | 192.168.10.x    | e0:62:90:...      | `rtsp://admin:admin@192.168.10.x:5544/live0.264`   | Geconfigureerd |
-| gbox-024  | Jovision standaard   | 192.168.10.x    | e0:62:90:...      | `rtsp://admin:admin@192.168.10.x:8554/live1.264`   | —              |
-| gbox-025  | Jovision standaard   | 192.168.10.x    | e0:62:90:...      | `rtsp://admin:admin@192.168.10.x:8554/live1.264`   | —              |
+| Box       | Camera type          | IP (vast)       | MAC                  | RTSP URL                                            | Status   |
+|-----------|----------------------|-----------------|----------------------|-----------------------------------------------------|----------|
+| gbox-014  | Vatilon I3004-HSWA   | 192.168.10.103  | e8:b7:23:13:f5:9f    | `rtsp://admin:admin1@192.168.10.103:554/stream1`    | Werkend  |
+| gbox-015  | Jovision XVR         | 192.168.10.113  | e0:62:90:31:3f:5f    | `rtsp://admin:admin@192.168.10.113:5544/live0.264`  | Werkend  |
+| gbox-024  | Jovision standaard   | 192.168.10.x    | e0:62:90:...         | `rtsp://admin:admin@192.168.10.x:8554/live1.264`    | —        |
+| gbox-025  | Jovision standaard   | 192.168.10.x    | e0:62:90:...         | `rtsp://admin:admin@192.168.10.x:8554/live1.264`    | —        |
 
 > Vul IP en volledige MAC in zodra de camera is gekoppeld via de admin-cockpit.
 
@@ -122,7 +135,8 @@ curl -v http://192.168.10.{ip}/cgi-bin/snapshot.cgi  # Werkt dit?
 |---------------------------------|-------------------------|
 | `<title>` bevat `jovision`      | Jovision standaard      |
 | `ng-app="myApp"` in body        | Jovision XVR-firmware   |
-| Geen HTTP-verbinding            | Vatilon of onbekend     |
+| `/view/player.html` bereikbaar  | Vatilon                 |
+| Geen HTTP-verbinding            | Onbekend — probeer §4   |
 
 ### Stap 4 — Test RTSP stream
 
@@ -133,6 +147,10 @@ ffmpeg -rtsp_transport tcp -i "rtsp://admin:admin@192.168.10.{ip}:8554/live1.264
 
 # Als dat mislukt, probeer poort 5544:
 ffmpeg -rtsp_transport tcp -i "rtsp://admin:admin@192.168.10.{ip}:5544/live0.264" \
+  -frames:v 1 /tmp/test.jpg
+
+# Vatilon (poort 554, wachtwoord admin1):
+ffmpeg -rtsp_transport tcp -i "rtsp://admin:admin1@192.168.10.{ip}:554/stream1" \
   -frames:v 1 /tmp/test.jpg
 ```
 
@@ -158,6 +176,7 @@ ffmpeg -rtsp_transport tcp -i "rtsp://admin:admin@192.168.10.{ip}:5544/live0.264
 | `PI_TIMEOUT`                      | Pi offline of niet gereageerd        | Check heartbeat, herstart service              |
 | Foto's worden niet opgeslagen     | `startup_test` fase niet doorlopen   | Bug opgelost in v1.0.99 (underscore vs hyphen) |
 | Watchdog crasht elke 5 minuten    | `sd_notify` niet aangeroepen         | Opgelost in v1.0.103                           |
+| Vatilon — geen verbinding         | Verkeerd wachtwoord (`admin` i.p.v. `admin1`) | Gebruik `admin1` als wachtwoord         |
 
 ---
 
