@@ -110,15 +110,37 @@ async function fetchProtectedAssetUrl(token: string, path: string): Promise<stri
 }
 
 export default function Home() {
-  const [selectedSiteId, setSelectedSiteId] = useState<string>(() => {
-    if (typeof window === "undefined") return "all";
+  const [selectedSiteId, setSelectedSiteId] = useState<string>("all");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
     const params = new URLSearchParams(window.location.search);
-    return params.get("site") || "all";
-  });
+    const fromUrl = params.get("site");
+
+    if (fromUrl) {
+      setSelectedSiteId(fromUrl);
+      localStorage.setItem("gridbox.selectedSite", fromUrl);
+      return;
+    }
+
+    const stored = localStorage.getItem("gridbox.selectedSite");
+    if (stored && stored !== "all") {
+      setSelectedSiteId(stored);
+      return;
+    }
+
+    setSelectedSiteId("all");
+  }, []);
 
   function setSiteId(id: string) {
     setSelectedSiteId(id);
     if (typeof window === "undefined") return;
+    if (id === "all") {
+      localStorage.removeItem("gridbox.selectedSite");
+    } else {
+      localStorage.setItem("gridbox.selectedSite", id);
+    }
     const url = new URL(window.location.href);
     if (id === "all") {
       url.searchParams.delete("site");
@@ -296,8 +318,16 @@ export default function Home() {
   useEffect(() => {
     if (loading) return;
     if (selectedSiteId === "all") return;
+    if (filterOptions.length === 0) return;
     const stillExists = filterOptions.some((option) => option.siteId === selectedSiteId);
-    if (!stillExists) setSiteId("all");
+    if (!stillExists) {
+      setSelectedSiteId("all");
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("site");
+        window.history.replaceState({}, "", url.toString());
+      }
+    }
   }, [filterOptions, selectedSiteId, loading]);
 
   const visibleGroups = useMemo(() => {
@@ -307,6 +337,7 @@ export default function Home() {
 
   const totalBoxCount = boxes.length;
   const visibleBoxCount = visibleGroups.reduce((sum, group) => sum + group.boxes.length, 0);
+  const isAllSitesActive = selectedSiteId === "all";
 
   async function handleLogin() {
     try {
@@ -439,26 +470,29 @@ export default function Home() {
             <button
               onClick={() => setSiteId("all")}
               className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
-                selectedSiteId === "all"
+                isAllSitesActive
                   ? "bg-slate-900 text-white"
                   : "border border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
               }`}
             >
               Alle sites
             </button>
-            {filterOptions.map((option) => (
-              <button
-                key={option.siteId}
-                onClick={() => setSiteId(option.siteId)}
-                className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
-                  selectedSiteId === option.siteId
-                    ? "bg-slate-900 text-white"
-                    : "border border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
-                }`}
-              >
-                {option.siteName}
-              </button>
-            ))}
+            {filterOptions.map((option) => {
+              const isActive = !isAllSitesActive && selectedSiteId === option.siteId;
+              return (
+                <button
+                  key={option.siteId}
+                  onClick={() => setSiteId(option.siteId)}
+                  className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
+                    isActive
+                      ? "bg-slate-900 text-white"
+                      : "border border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
+                  }`}
+                >
+                  {option.siteName}
+                </button>
+              );
+            })}
             <span className="ml-auto text-sm text-slate-500">
               {visibleBoxCount} van {totalBoxCount} Gridboxen
             </span>
