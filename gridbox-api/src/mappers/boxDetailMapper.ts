@@ -142,6 +142,10 @@ export function mapFirestoreBoxToPortalBoxDetail(
   const boxIsOpen = doc.data.state?.boxIsOpen === true;
   const isBoxVisibleAndActive = doc.data.active !== false && doc.data.ui?.hidden !== true;
 
+  const rawRotation = doc.data.hardware?.camera?.rotationDeg;
+  const validRotations = [0, 90, 180, 270] as const;
+  const rotationDeg: 0 | 90 | 180 | 270 = validRotations.includes(rawRotation) ? rawRotation : 0;
+
   return {
     id: normalizeText(doc.data.boxId) || doc.id,
     displayName: pickDisplayName(doc.id, doc.data, siteName),
@@ -156,6 +160,7 @@ export function mapFirestoreBoxToPortalBoxDetail(
     },
     connectivitySummary: pickConnectivitySummary(doc.data),
     hardwareSummary: pickHardwareSummary(doc.data),
-    recentEvents: buildRecentEvents(doc.data)
+    recentEvents: buildRecentEvents(doc.data),
+    camera: { rotationDeg }
   };
 }

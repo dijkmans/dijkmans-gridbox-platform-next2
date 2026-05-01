@@ -353,27 +353,42 @@ function PageContentRouter() {
           <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 mb-4 flex items-center gap-2">
             <span className="live-dot" /> Live monitoring
           </h3>
-          <div style={{ position: "relative", width: "100%", paddingTop: "177.78%", overflow: "hidden", borderRadius: "16px", border: "4px solid #1e293b", background: "#0f172a" }}>
-            {snapshotUrl && (
-              <img
-                src={snapshotUrl}
-                alt="Real-time feed"
-                style={{
-                  position: "absolute",
-                  top: "0",
-                  left: "0",
-                  width: "56.25%",
-                  height: "100%",
-                  objectFit: "cover",
-                  transform: "rotate(90deg) translateX(77.8%)",
-                  transformOrigin: "top left",
-                }}
-              />
-            )}
-            <div className="absolute top-4 right-4 text-xs font-mono border border-emerald-400 text-emerald-400 px-2 py-1 rounded-lg bg-black/50 backdrop-blur-sm">
-              STREAM_OK // 1080p
-            </div>
-          </div>
+          {(() => {
+            const rotation = (box?.camera?.rotationDeg ?? 0) as 0 | 90 | 180 | 270;
+            const isPortrait = rotation === 90 || rotation === 270;
+            return (
+              <div style={{
+                position: "relative",
+                width: "100%",
+                paddingTop: isPortrait ? "177.78%" : "56.25%",
+                overflow: "hidden",
+                borderRadius: "16px",
+                border: "4px solid #1e293b",
+                background: "#0f172a",
+              }}>
+                {snapshotUrl && (
+                  <img
+                    src={snapshotUrl}
+                    alt="Real-time feed"
+                    style={{
+                      position: "absolute",
+                      top: "50%",
+                      left: "50%",
+                      maxWidth: isPortrait ? "177.78%" : "100%",
+                      maxHeight: isPortrait ? "100%" : "177.78%",
+                      width: "auto",
+                      height: "auto",
+                      transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
+                      objectFit: "contain",
+                    }}
+                  />
+                )}
+                <div className="absolute top-4 right-4 text-xs font-mono border border-emerald-400 text-emerald-400 px-2 py-1 rounded-lg bg-black/50 backdrop-blur-sm">
+                  STREAM_OK // 1080p
+                </div>
+              </div>
+            );
+          })()}
         </section>
 
 

@@ -16,4 +16,7 @@ export interface PortalBoxDetail {
   connectivitySummary?: string;
   hardwareSummary?: string;
   recentEvents: PortalEvent[];
+  camera?: {
+    rotationDeg: 0 | 90 | 180 | 270;
+  };
 }
