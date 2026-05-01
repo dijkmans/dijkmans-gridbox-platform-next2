@@ -14,7 +14,24 @@
       "Bash(gcloud run services describe:*)",
       "Bash(npx tsx *)",
       "Bash(npm run *)",
-      "Bash(firebase deploy *)"
+      "Bash(firebase deploy *)",
+      "Bash(git checkout *)",
+      "Bash(git tag *)",
+      "Bash(git push *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(gh api *)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(npx tsc *)",
+      "Bash(python -m py_compile \"C:\\\\Users\\\\piet\\\\Projects\\\\dijkmans-gridbox-platform-next2\\\\src\\\\listener.py\")",
+      "Bash(npx ts-node *)",
+      "Bash(ssh *)",
+      "Bash(gcloud auth *)",
+      "Bash(python3 -c ' *)",
+      "Bash(git diff *)",
+      "Bash(gcloud config *)",
+      "Bash(gcloud projects *)"
     ]
   }
 }
