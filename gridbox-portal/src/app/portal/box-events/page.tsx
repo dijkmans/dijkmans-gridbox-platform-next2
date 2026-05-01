@@ -69,6 +69,7 @@ function PageContentRouter() {
   const [toast, setToast] = useState({ visible: false, msg: "" });
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [rotationDeg, setRotationDeg] = useState(0);
 
   const notify = useCallback((msg: string) => {
     setToast({ visible: true, msg });
@@ -81,12 +82,20 @@ function PageContentRouter() {
       const user = auth.currentUser;
       if (!user || !boxId) return;
       const token = await user.getIdToken();
-      const res = await fetch(apiUrl(`/portal/boxes/${boxId}/events`), {
-        headers: { Authorization: `Bearer ${token}` }, cache: "no-store"
-      });
-      const data = await res.json();
-      if (res.ok) setEvents(data.items || []);
+      const headers = { Authorization: `Bearer ${token}` };
+      const [resEvents, resBox] = await Promise.all([
+        fetch(apiUrl(`/portal/boxes/${boxId}/events`), { headers, cache: "no-store" }),
+        fetch(apiUrl(`/portal/boxes/${boxId}`), { headers, cache: "no-store" }),
+      ]);
+      const data = await resEvents.json();
+      if (resEvents.ok) setEvents(data.items || []);
       else notify(data.message || "Kon historiek niet ophalen.");
+      if (resBox.ok) {
+        const boxData = await resBox.json();
+        const raw = Number(boxData?.camera?.rotationDeg ?? 0);
+        const valid = [0, 90, 180, 270];
+        setRotationDeg(valid.includes(raw) ? raw : 0);
+      }
     } catch {
       notify("Netwerkfout bij ophalen historiek.");
     } finally {
@@ -100,6 +109,31 @@ function PageContentRouter() {
     void loadEvents();
     return () => { active = false; unsubscribe(); };
   }, [loadEvents]);
+
+  const rotation = ([0, 90, 180, 270] as const).includes(rotationDeg as 0 | 90 | 180 | 270)
+    ? (rotationDeg as 0 | 90 | 180 | 270)
+    : 0;
+  const isPortrait = rotation === 90 || rotation === 270;
+  const visualRotation = rotation === 90 ? -90 : rotation === 270 ? 90 : rotation;
+  const thumbStyle: React.CSSProperties = isPortrait
+    ? {
+        position: "absolute",
+        top: "50%",
+        left: "50%",
+        width: "100%",
+        height: "100%",
+        transform: `translate(-50%, -50%) rotate(${visualRotation}deg) scale(1.55)`,
+        objectFit: "contain",
+        maxWidth: "none",
+      }
+    : {
+        position: "absolute",
+        top: "0",
+        left: "0",
+        width: "100%",
+        height: "100%",
+        objectFit: "contain",
+      };
 
   return (
     <main className="min-h-screen bg-slate-50 p-5 lg:p-8">
@@ -214,20 +248,12 @@ function PageContentRouter() {
                                     <div
                                       key={photo.id || idx}
                                       onClick={() => setSelectedImage(fullImageUrl)}
-                                      className="w-24 h-40 rounded-xl cursor-zoom-in border-2 border-white shadow-sm flex-shrink-0 overflow-hidden relative"
+                                      className={`${isPortrait ? "w-24 h-40" : "w-40 h-24"} rounded-xl cursor-zoom-in border-2 border-white shadow-sm flex-shrink-0 overflow-hidden relative`}
                                     >
                                       <img
                                         src={fullImageUrl}
                                         alt="Opname"
-                                        style={{
-                                          position: "absolute",
-                                          top: "50%",
-                                          left: "50%",
-                                          width: "177.78%",
-                                          height: "56.25%",
-                                          transform: "translate(-50%, -50%) rotate(90deg)",
-                                          objectFit: "cover",
-                                        }}
+                                        style={thumbStyle}
                                       />
                                     </div>
                                   );
@@ -264,7 +290,11 @@ function PageContentRouter() {
             src={selectedImage}
             alt="Vergroot beeld"
             className="rounded-2xl border-4 border-white"
-            style={{ maxHeight: "85vw", maxWidth: "85vh", transform: "rotate(90deg)" }}
+            style={
+              isPortrait
+                ? { maxHeight: "85vw", maxWidth: "85vh", transform: `rotate(${visualRotation}deg)` }
+                : { maxHeight: "85vh", maxWidth: "90vw", transform: rotation !== 0 ? `rotate(${rotation}deg)` : undefined }
+            }
           />
           <p className="text-white mt-4 text-sm font-semibold">Klik ergens om te sluiten</p>
         </div>

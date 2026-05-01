@@ -13,6 +13,7 @@ function PageContentRouter() {
   const [imageUrl, setImageUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [rotationDeg, setRotationDeg] = useState(0);
 
   async function loadPicture() {
     try {
@@ -34,9 +35,18 @@ function PageContentRouter() {
       }
 
       const token = await user.getIdToken();
+      const headers = { Authorization: `Bearer ${token}` };
+
+      const resBox = await fetch(apiUrl(`/portal/boxes/${boxId}`), { headers, cache: "no-store" });
+      if (resBox.ok) {
+        const boxData = await resBox.json();
+        const raw = Number(boxData?.camera?.rotationDeg ?? 0);
+        const valid = [0, 90, 180, 270];
+        setRotationDeg(valid.includes(raw) ? raw : 0);
+      }
 
       const res = await fetch(apiUrl(`/portal/boxes/${boxId}/picture`), {
-        headers: { Authorization: `Bearer ${token}` },
+        headers,
         cache: "no-store"
       });
 
@@ -128,15 +138,51 @@ function PageContentRouter() {
           </div>
         )}
 
-        {!loading && !message && imageUrl && (
-          <div className="bg-white border border-slate-200 rounded-3xl shadow-sm p-4">
-            <img
-              src={imageUrl}
-              alt={`Snapshot van ${boxId}`}
-              className="w-full h-auto rounded-2xl block"
-            />
-          </div>
-        )}
+        {!loading && !message && imageUrl && (() => {
+          const rotation = ([0, 90, 180, 270] as const).includes(rotationDeg as 0 | 90 | 180 | 270)
+            ? (rotationDeg as 0 | 90 | 180 | 270)
+            : 0;
+          const isPortrait = rotation === 90 || rotation === 270;
+          const visualRotation = rotation === 90 ? -90 : rotation === 270 ? 90 : rotation;
+          return (
+            <div className="bg-white border border-slate-200 rounded-3xl shadow-sm p-4">
+              <div style={{
+                position: "relative",
+                width: "100%",
+                aspectRatio: isPortrait ? "9/16" : "16/9",
+                overflow: "hidden",
+                borderRadius: "16px",
+              }}>
+                <img
+                  src={imageUrl}
+                  alt={`Snapshot van ${boxId}`}
+                  style={
+                    isPortrait
+                      ? {
+                          position: "absolute",
+                          top: "50%",
+                          left: "50%",
+                          width: "100%",
+                          height: "100%",
+                          transform: `translate(-50%, -50%) rotate(${visualRotation}deg) scale(1.55)`,
+                          objectFit: "contain",
+                          maxWidth: "none",
+                        }
+                      : {
+                          position: "absolute",
+                          top: "0",
+                          left: "0",
+                          width: "100%",
+                          height: "100%",
+                          transform: rotation !== 0 ? `rotate(${rotation}deg)` : undefined,
+                          objectFit: "contain",
+                        }
+                  }
+                />
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Footer */}
         <footer className="pt-2 pb-4">

@@ -355,7 +355,6 @@ function PageContentRouter() {
           </h3>
           {(() => {
             const raw = Number(box?.camera?.rotationDeg ?? 0);
-            console.log("rotationDeg:", raw, typeof raw);
             const rotation = ([0, 90, 180, 270] as const).includes(raw as 0 | 90 | 180 | 270)
               ? (raw as 0 | 90 | 180 | 270)
               : 0;
