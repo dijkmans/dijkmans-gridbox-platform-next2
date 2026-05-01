@@ -211,13 +211,25 @@ function PageContentRouter() {
                                 {item.photos.map((photo, idx) => {
                                   const fullImageUrl = apiUrl(`/portal/boxes/${boxId}/photos/content?filename=${photo.filename}`);
                                   return (
-                                    <img
+                                    <div
                                       key={photo.id || idx}
-                                      src={fullImageUrl}
-                                      alt="Opname"
                                       onClick={() => setSelectedImage(fullImageUrl)}
-                                      className="w-40 h-24 object-cover rounded-xl cursor-zoom-in border-2 border-white shadow-sm flex-shrink-0"
-                                    />
+                                      className="w-24 h-40 rounded-xl cursor-zoom-in border-2 border-white shadow-sm flex-shrink-0 overflow-hidden relative"
+                                    >
+                                      <img
+                                        src={fullImageUrl}
+                                        alt="Opname"
+                                        style={{
+                                          position: "absolute",
+                                          top: "50%",
+                                          left: "50%",
+                                          width: "177.78%",
+                                          height: "56.25%",
+                                          transform: "translate(-50%, -50%) rotate(90deg)",
+                                          objectFit: "cover",
+                                        }}
+                                      />
+                                    </div>
                                   );
                                 })}
                               </div>
@@ -251,7 +263,8 @@ function PageContentRouter() {
           <img
             src={selectedImage}
             alt="Vergroot beeld"
-            className="max-w-[90%] max-h-[85vh] rounded-2xl border-4 border-white"
+            className="rounded-2xl border-4 border-white"
+            style={{ maxHeight: "85vw", maxWidth: "85vh", transform: "rotate(90deg)" }}
           />
           <p className="text-white mt-4 text-sm font-semibold">Klik ergens om te sluiten</p>
         </div>

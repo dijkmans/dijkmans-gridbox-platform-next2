@@ -353,12 +353,20 @@ function PageContentRouter() {
           <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 mb-4 flex items-center gap-2">
             <span className="live-dot" /> Live monitoring
           </h3>
-          <div className="w-full max-w-3xl aspect-video bg-slate-900 rounded-2xl overflow-hidden border-4 border-slate-800 shadow-xl relative">
+          <div className="bg-slate-900 rounded-2xl overflow-hidden border-4 border-slate-800 shadow-xl relative mx-auto" style={{ width: "min(400px, 100%)", aspectRatio: "9/16" }}>
             {snapshotUrl && (
               <img
                 src={snapshotUrl}
                 alt="Real-time feed"
-                className="w-full h-full object-cover"
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  left: "50%",
+                  width: "177.78%",
+                  height: "56.25%",
+                  transform: "translate(-50%, -50%) rotate(90deg)",
+                  objectFit: "cover",
+                }}
               />
             )}
             <div className="absolute top-4 right-4 text-xs font-mono border border-emerald-400 text-emerald-400 px-2 py-1 rounded-lg bg-black/50 backdrop-blur-sm">
