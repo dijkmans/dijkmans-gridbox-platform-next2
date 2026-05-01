@@ -1,9 +1,11 @@
-[Unit]
+﻿[Unit]
 Description=Gridbox IoT Service
 After=network-online.target
 Wants=network-online.target
 
 [Service]
+Type=notify
+NotifyAccess=main
 User=pi
 Environment=PYTHONUNBUFFERED=1
 WorkingDirectory=/home/pi/dijkmans-gridbox-platform-next2
@@ -16,3 +18,4 @@ WatchdogSec=300
 
 [Install]
 WantedBy=multi-user.target
+
