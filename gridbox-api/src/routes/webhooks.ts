@@ -77,19 +77,31 @@ router.post("/webhooks/bird/inbound", async (req, res) => {
   const phoneNumber =
     payload?.lastMessage?.sender?.contact?.identifierValue ??
     payload?.lastMessage?.sender?.contacts?.[0]?.identifierValue ??
+    body?.sender?.contact?.identifierValue ??
+    body?.sender?.contact?.platformAddress ??
     body?.sender?.contacts?.[0]?.identifierValue ??
-    body?.receiver?.contacts?.[0]?.identifierValue ??
     null;
 
   const text =
     payload?.lastMessage?.preview?.text ??
     payload?.lastMessage?.body?.text?.text ??
     body?.body?.text?.text ??
+    (typeof body?.body?.text === "string" ? body.body.text : null) ??
+    (typeof body?.text === "string" ? body.text : null) ??
+    (typeof payload?.text === "string" ? payload.text : null) ??
     null;
 
+  const direction = body?.direction ?? payload?.direction ?? null;
   const conversationId = payload?.id ?? null;
   const messageId = payload?.lastMessage?.id ?? body?.id ?? null;
   const requestId = req.header("messagebird-request-id") ?? null;
+
+  console.log("[Bird webhook] extracted:", {
+    messageId,
+    direction,
+    extractedPhoneNumber: phoneNumber,
+    extractedText: text,
+  });
 
   if (senderType && senderType !== "contact") {
     return res.status(200).json({
