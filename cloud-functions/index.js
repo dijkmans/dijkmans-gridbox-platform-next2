@@ -6,6 +6,37 @@ const admin = require('firebase-admin');
 admin.initializeApp();
 const db = admin.firestore();
 
+async function upsertBirdConversation(phoneNumber, workspaceId, channelId, apiKey) {
+    const searchUrl = `https://api.bird.com/workspaces/${workspaceId}/conversations?identifierKey=phonenumber&identifierValue=${encodeURIComponent(phoneNumber)}&channelId=${channelId}`;
+
+    const searchRes = await fetch(searchUrl, {
+        headers: { 'Authorization': `AccessKey ${apiKey}`, 'Accept': 'application/json' }
+    });
+
+    if (searchRes.ok) {
+        const data = await searchRes.json();
+        if (data.results && data.results.length > 0) return;
+    }
+
+    const createRes = await fetch(`https://api.bird.com/workspaces/${workspaceId}/conversations`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `AccessKey ${apiKey}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+            channelId,
+            contact: { identifierKey: 'phonenumber', identifierValue: phoneNumber }
+        })
+    });
+
+    if (!createRes.ok) {
+        const err = await createRes.text();
+        console.warn(`[BIRD] upsertConversation mislukt voor ${phoneNumber}: ${err}`);
+    }
+}
+
 // 1. LUISTEREN NAAR SHARE (De "Waakhond" voor Staged Delivery)
 exports.onShareStatusChanged = onDocumentWritten({
     document: 'boxes/{boxId}/shares/{phoneNumber}',
@@ -89,6 +120,10 @@ exports.onShareStatusChanged = onDocumentWritten({
             console.error('Fout bij versturen via Bird API:', errorData);
         } else {
             console.log(`Succesvol SMS verstuurd naar ${phoneNumber}`);
+
+            await upsertBirdConversation(phoneNumber, WORKSPACE_ID, CHANNEL_ID, API_KEY).catch(err => {
+                console.warn('[BIRD] upsertConversation error:', err.message);
+            });
 
             await db.collection('smsLogs').add({
                 phoneNumber,
