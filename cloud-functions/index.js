@@ -1,10 +1,58 @@
-﻿const { onDocumentWritten } = require('firebase-functions/v2/firestore');
+const { onDocumentWritten } = require('firebase-functions/v2/firestore');
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const admin = require('firebase-admin');
 
 admin.initializeApp();
 const db = admin.firestore();
+
+const BIRD_WORKSPACE_ID = '145d3c27-76ac-4d6a-9e10-1f7dff2f6bcb';
+const BIRD_CHANNEL_ID = 'a703f755-7154-532a-89a0-70103633682e';
+
+async function systemLog(type, boxId, details, severity, resolved) {
+    try {
+        await db.collection('systemLogs').add({
+            type,
+            boxId: boxId || null,
+            details: details || '',
+            severity,
+            resolved,
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+    } catch (e) {
+        console.error('[systemLog] schrijven mislukt:', e.message);
+    }
+}
+
+async function sendBirdAlert(phone, text) {
+    const apiKey = process.env.BIRD_API_KEY || '';
+    return fetch(
+        `https://api.bird.com/workspaces/${BIRD_WORKSPACE_ID}/channels/${BIRD_CHANNEL_ID}/messages`,
+        {
+            method: 'POST',
+            headers: {
+                'Authorization': `AccessKey ${apiKey}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                receiver: { contacts: [{ identifierValue: phone }] },
+                body: { type: 'text', text: { text } }
+            })
+        }
+    );
+}
+
+async function getAdminPhone() {
+    const configRef = db.collection('platformConfig').doc('alerts');
+    const snap = await configRef.get();
+    const DEFAULT_PHONE = '+32487389473';
+    if (!snap.exists || !snap.data().adminPhone) {
+        await configRef.set({ adminPhone: DEFAULT_PHONE }, { merge: true });
+        return DEFAULT_PHONE;
+    }
+    return snap.data().adminPhone;
+}
 
 async function upsertBirdConversation(phoneNumber, workspaceId, channelId, apiKey) {
     const searchUrl = `https://api.bird.com/workspaces/${workspaceId}/conversations?identifierKey=phonenumber&identifierValue=${encodeURIComponent(phoneNumber)}&channelId=${channelId}`;
@@ -34,6 +82,8 @@ async function upsertBirdConversation(phoneNumber, workspaceId, channelId, apiKe
     if (!createRes.ok) {
         const err = await createRes.text();
         console.warn(`[BIRD] upsertConversation mislukt voor ${phoneNumber}: ${err}`);
+        await systemLog('conversation-upsert-failed', null,
+            `upsertConversation mislukt voor ${phoneNumber}: ${err}`, 'warning', false);
     }
 }
 
@@ -45,29 +95,23 @@ exports.onShareStatusChanged = onDocumentWritten({
     const beforeData = event.data.before && event.data.before.exists ? event.data.before.data() : null;
     const afterData = event.data.after && event.data.after.exists ? event.data.after.data() : null;
 
-    // Als het document verwijderd is (prullenbak icoon), doe niets
     if (!afterData) return;
 
-    // Controleer of de share hiervoor al actief was, en of hij nu actief is
     const wasActive = beforeData ? (beforeData.active === true || beforeData.status === 'active') : false;
     const isNowActive = afterData.active === true || afterData.status === 'active';
 
-    // LOGISTIEKE REGEL:
-    // We sturen ALLEEN een SMS als de share voorheen NIET actief was, en NU WEL actief is.
-    // Is hij nog "pending" (Klaarzetten)? Dan blijft de code hier stilstaan.
     if (wasActive || !isNowActive) {
         console.log(`[TRIGGER] SMS genegeerd. wasActive: ${wasActive}, isNowActive: ${isNowActive}`);
         return;
     }
 
     let phoneNumber = event.params.phoneNumber;
-    const boxId = event.params.boxId; 
-    const boxNr = boxId.split('-')[1] || boxId; 
-    const shortBoxNr = parseInt(boxNr, 10).toString(); 
+    const boxId = event.params.boxId;
+    const boxNr = boxId.split('-')[1] || boxId;
+    const shortBoxNr = parseInt(boxNr, 10).toString();
     const name = afterData.name || 'Gebruiker';
 
     try {
-        // Haal city op via box â†’ siteId â†’ sites
         let city = '';
         try {
             const boxSnap = await db.collection('boxes').doc(boxId).get();
@@ -91,7 +135,6 @@ exports.onShareStatusChanged = onDocumentWritten({
                 .replace(/\[city\]/g, city);
         }
 
-        // Formatteer telefoonnummer (exact zoals in je originele code)
         phoneNumber = phoneNumber.replace(/\s+/g, '');
         if (phoneNumber.startsWith('0')) phoneNumber = '+32' + phoneNumber.substring(1);
         if (!phoneNumber.startsWith('+')) phoneNumber = '+' + phoneNumber;
@@ -107,10 +150,10 @@ exports.onShareStatusChanged = onDocumentWritten({
 
         const response = await fetch(`https://api.bird.com/workspaces/${WORKSPACE_ID}/channels/${CHANNEL_ID}/messages`, {
             method: 'POST',
-            headers: { 
-                'Authorization': `AccessKey ${API_KEY}`, 
-                'Content-Type': 'application/json', 
-                'Accept': 'application/json' 
+            headers: {
+                'Authorization': `AccessKey ${API_KEY}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
             },
             body: JSON.stringify(payload)
         });
@@ -135,13 +178,12 @@ exports.onShareStatusChanged = onDocumentWritten({
                 templateName: 'invitation'
             });
         }
-        
-        // Log als tekst-string (ISO formaat) zodat de frontend het snapt
+
         await db.collection('boxes').doc(boxId).collection('commands').add({
             command: 'SHARE',
             source: `Uitnodiging naar ${phoneNumber}`,
             status: 'completed',
-            createdAt: new Date().toISOString() 
+            createdAt: new Date().toISOString()
         });
 
     } catch (e) {
@@ -158,11 +200,11 @@ exports.smsHandler = onRequest({ region: 'europe-west1' }, async (_req, res) => 
 // 3. OVERIGE FUNCTIES
 exports.openBox = onCall({ region: 'europe-west1', cors: true }, async (request) => {
     const { boxId } = request.data;
-    await db.collection('boxes').doc(boxId).collection('commands').add({ 
-        command: 'OPEN', 
-        source: 'Web Dashboard', 
-        status: 'pending', 
-        createdAt: new Date().toISOString() 
+    await db.collection('boxes').doc(boxId).collection('commands').add({
+        command: 'OPEN',
+        source: 'Web Dashboard',
+        status: 'pending',
+        createdAt: new Date().toISOString()
     });
     return { success: true };
 });
@@ -172,22 +214,23 @@ exports.inviteUser = onCall({ region: 'europe-west1', cors: true }, async (reque
     return { success: true };
 });
 
-// 4. HEARTBEAT WATCHDOG â€” markeert boxes als offline als Pi meer dan 5 minuten stil is
+// 4. HEARTBEAT WATCHDOG – markeert boxes als offline en stuurt eenmalig alert-SMS
 exports.checkBoxHeartbeats = onSchedule({
     schedule: 'every 5 minutes',
     region: 'europe-west1',
-    timeoutSeconds: 60
+    timeoutSeconds: 120
 }, async (_event) => {
     const now = Date.now();
     const THRESHOLD_MS = 5 * 60 * 1000;
 
+    const adminPhone = await getAdminPhone();
     const snapshot = await db.collection('boxes').get();
-    const batch = db.batch();
     let markedOffline = 0;
+    let markedOnline = 0;
 
     for (const doc of snapshot.docs) {
         const data = doc.data();
-        if (data.status === 'offline') continue;
+        const boxId = doc.id;
 
         const heartbeatStr = data?.software?.lastHeartbeatIso ?? data?.lastHeartbeatAt ?? null;
         if (!heartbeatStr) continue;
@@ -195,13 +238,116 @@ exports.checkBoxHeartbeats = onSchedule({
         const heartbeatTs = new Date(heartbeatStr).getTime();
         if (isNaN(heartbeatTs)) continue;
 
-        if (now - heartbeatTs > THRESHOLD_MS) {
-            batch.update(doc.ref, { status: 'offline' });
+        const isStale = now - heartbeatTs > THRESHOLD_MS;
+
+        if (!isStale && data.status === 'offline') {
+            // Box came back online
+            await doc.ref.update({ status: 'online', alertOfflineSent: false });
+            markedOnline++;
+            console.log(`[checkBoxHeartbeats] ${boxId} is terug online`);
+            await systemLog('box-online', boxId,
+                `Box ${boxId} is terug online. Heartbeat: ${heartbeatStr}`, 'info', true);
+
+        } else if (isStale && data.status !== 'offline') {
+            // Box just went offline
+            await doc.ref.update({ status: 'offline' });
             markedOffline++;
-            console.log(`[checkBoxHeartbeats] ${doc.id} offline (heartbeat: ${heartbeatStr})`);
+            console.log(`[checkBoxHeartbeats] ${boxId} offline (heartbeat: ${heartbeatStr})`);
+            await systemLog('box-offline', boxId,
+                `Box ${boxId} geen heartbeat meer. Laatste heartbeat: ${heartbeatStr}`, 'warning', false);
+
+            if (!data.alertOfflineSent) {
+                const smsText = `⚠️ ${boxId} is OFFLINE. Pi reageert niet meer. Klanten kunnen de box niet openen via SMS.`;
+                try {
+                    const smsRes = await sendBirdAlert(adminPhone, smsText);
+                    if (smsRes.ok) {
+                        await doc.ref.update({ alertOfflineSent: true });
+                        console.log(`[checkBoxHeartbeats] Alert SMS verstuurd voor ${boxId}`);
+                        await systemLog('sms-alert-sent', boxId,
+                            `Offline alert verstuurd naar ${adminPhone} voor ${boxId}`, 'info', true);
+                    } else {
+                        const errText = await smsRes.text();
+                        console.error(`[checkBoxHeartbeats] SMS mislukt voor ${boxId}:`, errText);
+                        await systemLog('sms-alert-failed', boxId,
+                            `Alert SMS mislukt voor ${boxId}: ${errText}`, 'error', false);
+                    }
+                } catch (smsErr) {
+                    console.error(`[checkBoxHeartbeats] SMS exception voor ${boxId}:`, smsErr.message);
+                    await systemLog('sms-alert-failed', boxId,
+                        `Alert SMS exception voor ${boxId}: ${smsErr.message}`, 'error', false);
+                }
+            }
         }
     }
 
-    if (markedOffline > 0) await batch.commit();
-    console.log(`[checkBoxHeartbeats] done â€” ${markedOffline} boxes marked offline`);
+    console.log(`[checkBoxHeartbeats] done — ${markedOffline} offline, ${markedOnline} terug online`);
+});
+
+// 5. COMMAND TIMEOUT WATCHDOG – stuurt alert als commando langer dan 3 min op pending staat
+exports.checkCommandTimeouts = onSchedule({
+    schedule: 'every 5 minutes',
+    region: 'europe-west1',
+    timeoutSeconds: 120
+}, async (_event) => {
+    const TIMEOUT_MS = 3 * 60 * 1000;
+    const now = Date.now();
+
+    const adminPhone = await getAdminPhone();
+    const boxesSnap = await db.collection('boxes').get();
+    let timeoutCount = 0;
+
+    for (const boxDoc of boxesSnap.docs) {
+        const boxId = boxDoc.id;
+        const commandsSnap = await db.collection('boxes').doc(boxId)
+            .collection('commands')
+            .where('status', '==', 'pending')
+            .get();
+
+        for (const cmdDoc of commandsSnap.docs) {
+            const cmdData = cmdDoc.data();
+            const command = cmdData.command || 'UNKNOWN';
+
+            let createdAtMs;
+            if (cmdData.createdAt && typeof cmdData.createdAt.toMillis === 'function') {
+                createdAtMs = cmdData.createdAt.toMillis();
+            } else if (typeof cmdData.createdAt === 'string') {
+                createdAtMs = new Date(cmdData.createdAt).getTime();
+            } else {
+                continue;
+            }
+
+            if (isNaN(createdAtMs) || now - createdAtMs < TIMEOUT_MS) continue;
+
+            const pendingMinutes = Math.floor((now - createdAtMs) / 60000);
+
+            await cmdDoc.ref.update({ status: 'timeout', timedOutAt: new Date().toISOString() });
+
+            await systemLog('command-timeout', boxId,
+                `Commando ${command} (${cmdDoc.id}) stond ${pendingMinutes} min op pending. Status gezet op timeout.`,
+                'warning', false);
+
+            const smsText = `⚠️ ${boxId}: ${command} commando niet uitgevoerd. Pi mogelijk offline. (al ${pendingMinutes} minuten pending)`;
+            try {
+                const smsRes = await sendBirdAlert(adminPhone, smsText);
+                if (smsRes.ok) {
+                    console.log(`[checkCommandTimeouts] Alert verstuurd voor ${boxId}/${command} (${pendingMinutes} min)`);
+                    await systemLog('sms-alert-sent', boxId,
+                        `Timeout alert verstuurd naar ${adminPhone} voor ${boxId}/${command}`, 'info', true);
+                } else {
+                    const errText = await smsRes.text();
+                    console.error(`[checkCommandTimeouts] SMS mislukt voor ${boxId}/${cmdDoc.id}:`, errText);
+                    await systemLog('sms-alert-failed', boxId,
+                        `Timeout alert SMS mislukt voor ${boxId}/${command}: ${errText}`, 'error', false);
+                }
+            } catch (smsErr) {
+                console.error(`[checkCommandTimeouts] SMS exception voor ${boxId}:`, smsErr.message);
+                await systemLog('sms-alert-failed', boxId,
+                    `Timeout alert SMS exception voor ${boxId}/${command}: ${smsErr.message}`, 'error', false);
+            }
+
+            timeoutCount++;
+        }
+    }
+
+    console.log(`[checkCommandTimeouts] done — ${timeoutCount} commando's op timeout gezet`);
 });
