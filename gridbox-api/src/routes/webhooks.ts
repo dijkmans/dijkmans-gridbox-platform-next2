@@ -80,6 +80,9 @@ router.post("/webhooks/bird/inbound", async (req, res) => {
     body?.sender?.contact?.identifierValue ??
     body?.sender?.contact?.platformAddress ??
     body?.sender?.contacts?.[0]?.identifierValue ??
+    payload?.contact?.identifierValue ??
+    payload?.participants?.find((p: any) => p.type === "contact")?.identifierValue ??
+    payload?.participants?.[0]?.identifierValue ??
     null;
 
   const text =
@@ -95,6 +98,11 @@ router.post("/webhooks/bird/inbound", async (req, res) => {
   const conversationId = payload?.id ?? null;
   const messageId = payload?.lastMessage?.id ?? body?.id ?? null;
   const requestId = req.header("messagebird-request-id") ?? null;
+
+  if (direction === "outbound") {
+    console.log("[Bird webhook] outbound bericht genegeerd");
+    return res.status(200).json({ ok: true, ignored: true, reason: "outbound-message" });
+  }
 
   console.log("[Bird webhook] extracted:", {
     messageId,
@@ -118,7 +126,7 @@ router.post("/webhooks/bird/inbound", async (req, res) => {
   try {
     const existingLog = await smsLogRef.get();
 
-    if (existingLog.exists && existingLog.data()?.processedAt) {
+    if (existingLog.exists && existingLog.data()?.processingStatus === "handled") {
       return res.status(200).json({
         ok: true,
         duplicate: true,
@@ -148,7 +156,6 @@ router.post("/webhooks/bird/inbound", async (req, res) => {
         {
           processingStatus: "ignored",
           ignoreReason: "missing-text-or-phone",
-          processedAt: FieldValue.serverTimestamp(),
         },
         { merge: true }
       );
@@ -167,7 +174,6 @@ router.post("/webhooks/bird/inbound", async (req, res) => {
         {
           processingStatus: "ignored",
           ignoreReason: "no-box-number",
-          processedAt: FieldValue.serverTimestamp(),
         },
         { merge: true }
       );
@@ -230,7 +236,6 @@ router.post("/webhooks/bird/inbound", async (req, res) => {
           action,
           processingStatus: "access-denied",
           replyText: noAccessReply,
-          processedAt: FieldValue.serverTimestamp(),
         },
         { merge: true }
       );
