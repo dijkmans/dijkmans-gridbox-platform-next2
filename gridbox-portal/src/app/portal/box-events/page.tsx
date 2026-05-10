@@ -116,7 +116,7 @@ function PageContentRouter() {
     if (occupancyCache[expandedId]) return;
     const item = events.find(e => e.id === expandedId);
     if (!item?.photos?.length) return;
-    const lastPhoto = item.photos[item.photos.length - 1];
+    const lastPhoto = [...item.photos].reverse()[0];
     if (!lastPhoto?.filename) return;
 
     setOccupancyCache(prev => ({ ...prev, [expandedId]: "loading" }));
@@ -282,7 +282,7 @@ function PageContentRouter() {
                           <tr>
                             <td colSpan={5} className="px-6 py-4 bg-slate-50 border-b border-slate-200">
                               <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}>
-                                  {item.photos.map((photo, idx) => {
+                                  {[...item.photos].reverse().map((photo, idx) => {
                                     const fullImageUrl = apiUrl(`/portal/boxes/${boxId}/photos/content?filename=${photo.filename}`);
                                     return (
                                       <div

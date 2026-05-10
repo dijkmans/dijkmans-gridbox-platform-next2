@@ -1335,8 +1335,8 @@ router.get("/portal/boxes/:id/photos/analyze", async (req, res) => {
 
       const client = new Anthropic({ apiKey: env.anthropicApiKey });
       const message = await client.messages.create({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 10,
+        model: "claude-sonnet-4-6",
+        max_tokens: 50,
         messages: [
           {
             role: "user",
@@ -1347,7 +1347,7 @@ router.get("/portal/boxes/:id/photos/analyze", async (req, res) => {
               },
               {
                 type: "text",
-                text: "Is this storage box empty or does it contain items? Answer with only one word: empty, occupied, or uncertain.",
+                text: "You are analyzing a security camera image of a Belgian self-storage box (gridbox). The box is a metal container with corrugated metal walls and a metal floor. Look carefully at the floor and walls. Answer with only one word: 'empty' if the floor is clear with no objects visible, 'occupied' if you can see any items, packages, bicycles, or objects on the floor or leaning against the walls, or 'uncertain' only if the image is completely black or the camera lens is fully obstructed. A slightly dark or grainy image is still analyzable — do not use uncertain just because lighting is imperfect. Be decisive.",
               },
             ],
           },
@@ -1356,7 +1356,7 @@ router.get("/portal/boxes/:id/photos/analyze", async (req, res) => {
 
       const rawAnswer = (message.content[0] as any)?.text?.trim().toLowerCase() ?? "";
       const validAnswers = ["empty", "occupied", "uncertain"];
-      const result = validAnswers.includes(rawAnswer) ? rawAnswer : "uncertain";
+      const result = validAnswers.find(v => rawAnswer.includes(v)) ?? "uncertain";
 
       return res.json({ result });
     } catch (analyzeErr) {
