@@ -2,6 +2,7 @@ const { onDocumentWritten } = require('firebase-functions/v2/firestore');
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const admin = require('firebase-admin');
+const Anthropic = require('@anthropic-ai/sdk').default;
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -350,4 +351,65 @@ exports.checkCommandTimeouts = onSchedule({
     }
 
     console.log(`[checkCommandTimeouts] done — ${timeoutCount} commando's op timeout gezet`);
+});
+
+// 6. OCCUPANCY ANALYSE – vuurt af als Pi pendingOccupancyFilename zet na een post-close sessie
+exports.onPendingOccupancySet = onDocumentWritten({
+    document: 'boxes/{boxId}',
+    region: 'europe-west1',
+    timeoutSeconds: 120
+}, async (event) => {
+    const before = event.data.before?.exists ? event.data.before.data() : null;
+    const after = event.data.after?.exists ? event.data.after.data() : null;
+
+    const filename = after?.pendingOccupancyFilename;
+    const wasPending = before?.pendingOccupancyFilename;
+
+    if (!filename || filename === wasPending) return null;
+
+    const boxId = event.params.boxId;
+    console.log(`[occupancy] trigger voor ${boxId}, bestand: ${filename}`);
+
+    // Verwijder het veld direct zodat herhaalde triggers niet opnieuw vuuren
+    await event.data.after.ref.update({ pendingOccupancyFilename: admin.firestore.FieldValue.delete() });
+
+    try {
+        const bucket = admin.storage().bucket('gridbox-platform.firebasestorage.app');
+        const file = bucket.file(`snapshots/${boxId}/${filename}`);
+        const [exists] = await file.exists();
+        if (!exists) {
+            console.warn(`[occupancy] bestand niet gevonden: snapshots/${boxId}/${filename}`);
+            return null;
+        }
+
+        const [buffer] = await file.download();
+        const base64Image = buffer.toString('base64');
+
+        const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+        const message = await client.messages.create({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 50,
+            messages: [{
+                role: 'user',
+                content: [
+                    { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64Image } },
+                    { type: 'text', text: "You are analyzing a security camera image of a Belgian self-storage box (gridbox). The box is a metal container with corrugated metal walls and a metal floor. Look carefully at the floor and walls. Answer with only one word: 'empty' if the floor is clear with no objects visible, 'occupied' if you can see any items, packages, bicycles, or objects on the floor or leaning against the walls, or 'uncertain' only if the image is completely black or the camera lens is fully obstructed. A slightly dark or grainy image is still analyzable — do not use uncertain just because lighting is imperfect. Be decisive." }
+                ]
+            }]
+        });
+
+        const rawAnswer = ((message.content[0] && message.content[0].text) || '').trim().toLowerCase();
+        const result = ['empty', 'occupied', 'uncertain'].find(v => rawAnswer.includes(v)) ?? 'uncertain';
+
+        if (result === 'empty' || result === 'occupied') {
+            await event.data.after.ref.update({ occupancy: result });
+            console.log(`[occupancy] ${boxId} -> ${result}`);
+        } else {
+            console.log(`[occupancy] ${boxId} -> uncertain, occupancy niet overschreven`);
+        }
+    } catch (err) {
+        console.error(`[occupancy] analyse fout voor ${boxId}/${filename}:`, err.message);
+    }
+
+    return null;
 });

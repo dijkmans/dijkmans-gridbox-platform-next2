@@ -1411,17 +1411,11 @@ def set_rut241_static_lease_via_ssh(ip, username, password, mac, lease_ip, hostn
 
 
 def _trigger_occupancy_analysis(filename):
-    if not isinstance(runtime_config, dict) or not runtime_config:
-        return
-    api_base_url = str(runtime_config.get("apiBaseUrl") or "").strip().rstrip("/")
-    if not api_base_url:
-        return
     try:
-        url = f"{api_base_url}/device/snapshot/finalize"
-        requests.post(url, json={"boxId": DOCUMENT_ID, "filename": filename}, timeout=10)
-        log(f"[occupancy] trigger verstuurd: {filename}")
+        box_doc_ref.set({"pendingOccupancyFilename": filename}, merge=True)
+        log(f"[occupancy] pendingOccupancyFilename gezet: {filename}")
     except Exception as e:
-        log(f"[occupancy] trigger fout: {e}")
+        log(f"[occupancy] Firestore write fout: {e}")
 
 def _handle_test_snapshot_command(cmd_ref, data):
     """Haalt een snapshot op van de camera en schrijft die naar Firebase Storage."""
@@ -2127,8 +2121,7 @@ def snapshot_loop():
         with snapshot_lock:
             last_fn = last_snapshot_id
         if last_fn and last_phase == "post-close":
-            t = threading.Thread(target=_trigger_occupancy_analysis, args=(f"{last_fn}.jpg",), daemon=True)
-            t.start()
+            _trigger_occupancy_analysis(f"{last_fn}.jpg")
         with state_lock:
             snapshot_thread_running = False
 
