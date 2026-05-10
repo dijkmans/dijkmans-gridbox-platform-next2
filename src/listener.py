@@ -2435,6 +2435,7 @@ next_device_detect_at = 0
 next_pending_cmd_at = 0
 _claim_permanently_rejected = False
 
+sd_notify("READY=1")
 try:
     while True:
         now_ts = time.time()
