@@ -1,4 +1,5 @@
 import { Router } from "express";
+import Anthropic from "@anthropic-ai/sdk";
 import { requirePortalUser, verifyBearerToken } from "../auth/verifyBearerToken";
 import { mockEventsByBoxId } from "../data/mockData";
 import { mapFirestoreBoxToPortalBoxDetail } from "../mappers/boxDetailMapper";
@@ -13,6 +14,7 @@ import { getSiteById, listSites } from "../repositories/siteRepository";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { sendBirdSms } from "../services/birdSms";
+import { env } from "../config/env";
 
 const router = Router();
 
@@ -1296,6 +1298,77 @@ router.get("/portal/boxes/:id/photos/content", async (req, res) => {
       error: "PHOTO_CONTENT_FAILED",
       message: "Kon foto niet ophalen"
     });
+  }
+});
+
+router.get("/portal/boxes/:id/photos/analyze", async (req, res) => {
+  try {
+    const portalUser = await requirePortalUser(req.header("Authorization") || undefined);
+    const context = await requireCustomerContext(portalUser.email);
+    const boxId = req.params.id;
+    const filename = typeof req.query.filename === "string" ? req.query.filename.trim() : "";
+
+    if (!filename) {
+      return res.status(400).json({ error: "INVALID_FILENAME", message: "Bestandsnaam is verplicht" });
+    }
+
+    if (filename.includes("/") || filename.includes("\\")) {
+      return res.status(400).json({ error: "INVALID_FILENAME", message: "Ongeldige bestandsnaam" });
+    }
+
+    const hasAccess = await requireBoxAccess(context, boxId);
+    if (!hasAccess) {
+      return res.status(403).json({ error: "FORBIDDEN", message: "Je hebt geen toegang tot deze box" });
+    }
+
+    try {
+      const bucket = getStorage().bucket(STORAGE_BUCKET_NAME);
+      const file = bucket.file(`snapshots/${boxId}/${filename}`);
+      const [exists] = await file.exists();
+
+      if (!exists) {
+        return res.json({ result: "uncertain" });
+      }
+
+      const [buffer] = await file.download();
+      const base64Image = buffer.toString("base64");
+
+      const client = new Anthropic({ apiKey: env.anthropicApiKey });
+      const message = await client.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 10,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: { type: "base64", media_type: "image/jpeg", data: base64Image },
+              },
+              {
+                type: "text",
+                text: "Is this storage box empty or does it contain items? Answer with only one word: empty, occupied, or uncertain.",
+              },
+            ],
+          },
+        ],
+      });
+
+      const rawAnswer = (message.content[0] as any)?.text?.trim().toLowerCase() ?? "";
+      const validAnswers = ["empty", "occupied", "uncertain"];
+      const result = validAnswers.includes(rawAnswer) ? rawAnswer : "uncertain";
+
+      return res.json({ result });
+    } catch (analyzeErr) {
+      console.error("FOUT in analyze inner block", analyzeErr);
+      return res.json({ result: "uncertain" });
+    }
+  } catch (error) {
+    const statusCode = getStatusCode(error);
+    if (statusCode === 401) return res.status(401).json({ error: "UNAUTHORIZED", message: "Niet aangemeld" });
+    if (statusCode === 403) return res.status(403).json({ error: "FORBIDDEN", message: "Geen toegang" });
+    console.error("FOUT in GET /portal/boxes/:id/photos/analyze", error);
+    return res.status(500).json({ error: "ANALYZE_FAILED", message: "Kon analyse niet uitvoeren" });
   }
 });
 

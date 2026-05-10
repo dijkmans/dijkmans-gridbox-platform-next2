@@ -9,6 +9,7 @@
     "start": "node dist/server.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.95.1",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "firebase-admin": "^13.2.0"

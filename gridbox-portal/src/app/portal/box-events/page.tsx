@@ -70,6 +70,7 @@ function PageContentRouter() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [rotationDeg, setRotationDeg] = useState(0);
+  const [occupancyCache, setOccupancyCache] = useState<Record<string, "empty" | "occupied" | "uncertain" | "loading">>({});
 
   const notify = useCallback((msg: string) => {
     setToast({ visible: true, msg });
@@ -109,6 +110,32 @@ function PageContentRouter() {
     void loadEvents();
     return () => { active = false; unsubscribe(); };
   }, [loadEvents]);
+
+  useEffect(() => {
+    if (!expandedId || !boxId) return;
+    if (occupancyCache[expandedId]) return;
+    const item = events.find(e => e.id === expandedId);
+    if (!item?.photos?.length) return;
+    const lastPhoto = item.photos[item.photos.length - 1];
+    if (!lastPhoto?.filename) return;
+
+    setOccupancyCache(prev => ({ ...prev, [expandedId]: "loading" }));
+
+    const user = auth.currentUser;
+    if (!user) return;
+
+    void user.getIdToken().then(token =>
+      fetch(apiUrl(`/portal/boxes/${boxId}/photos/analyze?filename=${encodeURIComponent(lastPhoto.filename)}`), {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      })
+    ).then(r => r.json()).then((data: { result?: string }) => {
+      const result = (["empty", "occupied", "uncertain"].includes(data.result ?? "") ? data.result : "uncertain") as "empty" | "occupied" | "uncertain";
+      setOccupancyCache(prev => ({ ...prev, [expandedId]: result }));
+    }).catch(() => {
+      setOccupancyCache(prev => ({ ...prev, [expandedId]: "uncertain" }));
+    });
+  }, [expandedId, boxId, events, occupancyCache]);
 
   const rotation = ([0, 90, 180, 270] as const).includes(rotationDeg as 0 | 90 | 180 | 270)
     ? (rotationDeg as 0 | 90 | 180 | 270)
@@ -222,17 +249,30 @@ function PageContentRouter() {
                           </td>
                           <td className="px-5 py-4 border-b border-slate-200 text-center whitespace-nowrap">
                             {item.hasPhotos ? (
-                              <button
-                                type="button"
-                                onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
-                                className={`rounded-xl px-3 py-1.5 text-5xl border transition-colors ${
-                                  expandedId === item.id
-                                    ? "bg-slate-100 border-slate-200"
-                                    : "bg-transparent border-transparent hover:bg-slate-50"
-                                }`}
-                              >
-                                📸
-                              </button>
+                              <div className="inline-flex flex-col items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
+                                  className={`rounded-xl px-3 py-1.5 text-5xl border transition-colors ${
+                                    expandedId === item.id
+                                      ? "bg-slate-100 border-slate-200"
+                                      : "bg-transparent border-transparent hover:bg-slate-50"
+                                  }`}
+                                >
+                                  📸
+                                </button>
+                                {expandedId === item.id && (
+                                  occupancyCache[item.id] === "loading" ? (
+                                    <span className="text-xs text-slate-400 font-semibold">⏳ Analyseren…</span>
+                                  ) : occupancyCache[item.id] === "empty" ? (
+                                    <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold bg-emerald-50 border border-emerald-300 text-emerald-800">📦 Leeg</span>
+                                  ) : occupancyCache[item.id] === "occupied" ? (
+                                    <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold bg-amber-50 border border-amber-200 text-amber-800">📦 Bezet</span>
+                                  ) : occupancyCache[item.id] === "uncertain" ? (
+                                    <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold bg-slate-100 border border-slate-200 text-slate-500">🔍 Onduidelijk</span>
+                                  ) : null
+                                )}
+                              </div>
                             ) : (
                               <span className="text-slate-300">—</span>
                             )}

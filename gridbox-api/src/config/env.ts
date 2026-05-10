@@ -13,4 +13,6 @@
 
   rpiConnectToken: process.env.RPI_CONNECT_TOKEN || "",
   rpiConnectApiBaseUrl: "https://api.connect.raspberrypi.com",
+
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
 };
