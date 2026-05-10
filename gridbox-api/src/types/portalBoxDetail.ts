@@ -19,4 +19,5 @@ export interface PortalBoxDetail {
   camera?: {
     rotationDeg: 0 | 90 | 180 | 270;
   };
+  occupancy?: "empty" | "occupied";
 }

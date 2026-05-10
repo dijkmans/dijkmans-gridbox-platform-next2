@@ -21,4 +21,5 @@ export interface PortalBox {
     detail: string;
     history?: string;
   };
+  occupancy?: "empty" | "occupied";
 }

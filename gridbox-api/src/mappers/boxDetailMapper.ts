@@ -161,6 +161,9 @@ export function mapFirestoreBoxToPortalBoxDetail(
     connectivitySummary: pickConnectivitySummary(doc.data),
     hardwareSummary: pickHardwareSummary(doc.data),
     recentEvents: buildRecentEvents(doc.data),
-    camera: { rotationDeg }
+    camera: { rotationDeg },
+    occupancy: doc.data.occupancy === "empty" || doc.data.occupancy === "occupied"
+      ? doc.data.occupancy
+      : undefined
   };
 }

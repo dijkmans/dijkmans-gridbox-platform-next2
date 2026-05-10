@@ -184,6 +184,9 @@ export function mapFirestoreBoxToPortalBox(
     links: {
       detail: `/portal/boxes/${id}`,
       history: `/portal/boxes/${id}/events`
-    }
+    },
+    occupancy: doc.data.occupancy === "empty" || doc.data.occupancy === "occupied"
+      ? doc.data.occupancy
+      : undefined
   };
 }
