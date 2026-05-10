@@ -112,6 +112,7 @@ function PageContentRouter() {
     }
   }, [searchParams]);
 
+
   const handleCreateShare = async (isPending: boolean) => {
     if (!sharePhone.trim() || sharePhone === "+32") { notify("Vul a.u.b. een gsm-nummer in."); return; }
     try {
@@ -184,6 +185,12 @@ function PageContentRouter() {
                   <span className={`w-2.5 h-2.5 rounded-full ${box?.status === "online" ? "bg-emerald-500" : "bg-red-500"}`} />
                   {box?.status?.toUpperCase() || "ONBEKEND"}
                 </span>
+                {box?.occupancy === "empty" && (
+                  <span className="rounded-full px-3 py-0.5 text-xs font-semibold bg-emerald-50 border border-emerald-300 text-emerald-800">📦 Leeg</span>
+                )}
+                {box?.occupancy === "occupied" && (
+                  <span className="rounded-full px-3 py-0.5 text-xs font-semibold bg-amber-50 border border-amber-200 text-amber-800">📦 Bezet</span>
+                )}
                 <span>📍 {box?.siteName}</span>
                 <span>🆔 {boxId}</span>
               </div>

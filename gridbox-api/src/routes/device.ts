@@ -1,6 +1,8 @@
 import { createHash } from "crypto";
 import { Router } from "express";
+import Anthropic from "@anthropic-ai/sdk";
 import { getFirestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 import { env } from "../config/env";
 
 const router = Router();
@@ -508,6 +510,58 @@ router.patch("/device/rpi-connect-register", async (req, res) => {
       message: "Kon deviceId niet opslaan"
     });
   }
+});
+
+async function analyzeOccupancy(boxId: string, filename: string): Promise<void> {
+  const db = getFirestore();
+  try {
+    const bucket = getStorage().bucket("gridbox-platform.firebasestorage.app");
+    const file = bucket.file(`snapshots/${boxId}/${filename}`);
+    const [exists] = await file.exists();
+    if (!exists) return;
+
+    const [buffer] = await file.download();
+    const base64Image = buffer.toString("base64");
+
+    const client = new Anthropic({ apiKey: env.anthropicApiKey });
+    const message = await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 50,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64Image } },
+          { type: "text", text: "You are analyzing a security camera image of a Belgian self-storage box (gridbox). The box is a metal container with corrugated metal walls and a metal floor. Look carefully at the floor and walls. Answer with only one word: 'empty' if the floor is clear with no objects visible, 'occupied' if you can see any items, packages, bicycles, or objects on the floor or leaning against the walls, or 'uncertain' only if the image is completely black or the camera lens is fully obstructed. A slightly dark or grainy image is still analyzable — do not use uncertain just because lighting is imperfect. Be decisive." },
+        ],
+      }],
+    });
+
+    const rawAnswer = (message.content[0] as any)?.text?.trim().toLowerCase() ?? "";
+    const result = ["empty", "occupied", "uncertain"].find(v => rawAnswer.includes(v)) ?? "uncertain";
+
+    if (result === "empty" || result === "occupied") {
+      await db.collection("boxes").doc(boxId).set({ occupancy: result }, { merge: true });
+      console.log(`[occupancy] ${boxId} -> ${result} (${filename})`);
+    }
+  } catch (err) {
+    console.error(`[occupancy] analyse fout voor ${boxId}/${filename}:`, err);
+  }
+}
+
+router.post("/device/snapshot/finalize", async (req, res) => {
+  const body = req.body ?? {};
+  const boxId = typeof body.boxId === "string" ? body.boxId.trim().toLowerCase() : "";
+  const filename = typeof body.filename === "string" ? body.filename.trim() : "";
+
+  if (!boxId || !filename) {
+    return res.status(400).json({ error: "MISSING_FIELDS", message: "boxId en filename zijn verplicht" });
+  }
+
+  analyzeOccupancy(boxId, filename).catch(err =>
+    console.error("[occupancy] fire-and-forget fout:", err)
+  );
+
+  return res.json({ ok: true });
 });
 
 export default router;

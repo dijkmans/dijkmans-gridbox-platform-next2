@@ -26,6 +26,7 @@ type PortalBox = {
     detail: string;
     history?: string;
   };
+  occupancy?: "empty" | "occupied" | string;
 };
 
 type PortalBoxesResponse = {
@@ -284,6 +285,7 @@ export default function Home() {
     return () => window.clearTimeout(timeoutId);
   }, [toast]);
 
+
   const siteGroups = useMemo<SiteGroup[]>(() => {
     const grouped = new Map<string, SiteGroup>();
 
@@ -535,6 +537,12 @@ export default function Home() {
                       <span className={getStatusClasses(box.status)}>
                         {getStatusLabel(box.status)}
                       </span>
+                      {box.occupancy === "empty" && (
+                        <span className="rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-semibold px-3 py-1">📦 Leeg</span>
+                      )}
+                      {box.occupancy === "occupied" && (
+                        <span className="rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold px-3 py-1">📦 Bezet</span>
+                      )}
                     </div>
 
                     {/* Beschrijving + meta */}
