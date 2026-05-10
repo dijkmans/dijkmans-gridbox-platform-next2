@@ -2091,6 +2091,8 @@ def take_snapshot(phase="manual", sequence_number=None):
 def snapshot_loop():
     global snapshot_thread_running
 
+    last_phase = None
+
     try:
         cam = get_camera_config()
         interval = float(cam.get("snapshotIntervalSeconds", 5))
@@ -2115,6 +2117,7 @@ def snapshot_loop():
 
                 phase = "post-close"
 
+            last_phase = phase
             sequence_number += 1
             take_snapshot(phase=phase, sequence_number=sequence_number)
             time.sleep(interval)
@@ -2123,8 +2126,9 @@ def snapshot_loop():
         end_snapshot_session()
         with snapshot_lock:
             last_fn = last_snapshot_id
-        if last_fn:
-            _trigger_occupancy_analysis(f"{last_fn}.jpg")
+        if last_fn and last_phase == "post-close":
+            t = threading.Thread(target=_trigger_occupancy_analysis, args=(f"{last_fn}.jpg",), daemon=True)
+            t.start()
         with state_lock:
             snapshot_thread_running = False
 
