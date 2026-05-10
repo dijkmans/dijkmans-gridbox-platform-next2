@@ -94,19 +94,36 @@ router.post("/webhooks/bird/inbound", async (req, res) => {
     (typeof payload?.text === "string" ? payload.text : null) ??
     null;
 
-  const direction = body?.direction ?? payload?.direction ?? null;
+  const lastMessageDirection =
+    payload?.lastMessage?.direction ??
+    body?.lastMessage?.direction ??
+    null;
   const conversationId = payload?.id ?? null;
   const messageId = payload?.lastMessage?.id ?? body?.id ?? null;
   const requestId = req.header("messagebird-request-id") ?? null;
 
-  if (direction === "outbound") {
+  const db = getFirestore();
+  const docId = requestId || messageId || db.collection("smsLogs").doc().id;
+  const smsLogRef = db.collection("smsLogs").doc(docId);
+
+  if (lastMessageDirection === "outbound") {
     console.log("[Bird webhook] outbound bericht genegeerd");
+    await smsLogRef.set(
+      {
+        richting: "uitgaand",
+        processingStatus: "ignored",
+        ignoreReason: "outbound-message",
+        timestamp: FieldValue.serverTimestamp(),
+        rawPayload: body,
+      },
+      { merge: true }
+    );
     return res.status(200).json({ ok: true, ignored: true, reason: "outbound-message" });
   }
 
   console.log("[Bird webhook] extracted:", {
     messageId,
-    direction,
+    lastMessageDirection,
     extractedPhoneNumber: phoneNumber,
     extractedText: text,
   });
@@ -118,10 +135,6 @@ router.post("/webhooks/bird/inbound", async (req, res) => {
       reason: "non-contact-sender",
     });
   }
-
-  const db = getFirestore();
-  const docId = requestId || messageId || db.collection("smsLogs").doc().id;
-  const smsLogRef = db.collection("smsLogs").doc(docId);
 
   try {
     const existingLog = await smsLogRef.get();

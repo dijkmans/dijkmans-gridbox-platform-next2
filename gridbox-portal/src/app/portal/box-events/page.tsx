@@ -225,7 +225,7 @@ function PageContentRouter() {
                               <button
                                 type="button"
                                 onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
-                                className={`rounded-xl px-3 py-1.5 text-lg border transition-colors ${
+                                className={`rounded-xl px-3 py-1.5 text-5xl border transition-colors ${
                                   expandedId === item.id
                                     ? "bg-slate-100 border-slate-200"
                                     : "bg-transparent border-transparent hover:bg-slate-50"
@@ -241,23 +241,23 @@ function PageContentRouter() {
                         {expandedId === item.id && item.photos && (
                           <tr>
                             <td colSpan={5} className="px-6 py-4 bg-slate-50 border-b border-slate-200">
-                              <div className="flex gap-4 overflow-x-auto pb-2">
-                                {item.photos.map((photo, idx) => {
-                                  const fullImageUrl = apiUrl(`/portal/boxes/${boxId}/photos/content?filename=${photo.filename}`);
-                                  return (
-                                    <div
-                                      key={photo.id || idx}
-                                      onClick={() => setSelectedImage(fullImageUrl)}
-                                      className={`${isPortrait ? "w-24 h-40" : "w-40 h-24"} rounded-xl cursor-zoom-in border-2 border-white shadow-sm flex-shrink-0 overflow-hidden relative`}
-                                    >
-                                      <img
-                                        src={fullImageUrl}
-                                        alt="Opname"
-                                        style={thumbStyle}
-                                      />
-                                    </div>
-                                  );
-                                })}
+                              <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}>
+                                  {item.photos.map((photo, idx) => {
+                                    const fullImageUrl = apiUrl(`/portal/boxes/${boxId}/photos/content?filename=${photo.filename}`);
+                                    return (
+                                      <div
+                                        key={photo.id || idx}
+                                        onClick={() => setSelectedImage(fullImageUrl)}
+                                        className={`${isPortrait ? "h-40" : "h-24"} rounded-xl cursor-zoom-in border-2 border-white shadow-sm overflow-hidden relative`}
+                                      >
+                                        <img
+                                          src={fullImageUrl}
+                                          alt="Opname"
+                                          style={thumbStyle}
+                                        />
+                                      </div>
+                                    );
+                                  })}
                               </div>
                             </td>
                           </tr>
