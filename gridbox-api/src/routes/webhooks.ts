@@ -103,6 +103,25 @@ router.post("/webhooks/bird/inbound", async (req, res) => {
   const requestId = req.header("messagebird-request-id") ?? null;
 
   const db = getFirestore();
+
+  try {
+    await db.collection("birdWebhookEvents").add({
+      receivedAt: FieldValue.serverTimestamp(),
+      event,
+      conversationId,
+      messageId,
+      rawBody: body,
+      headers: {
+        "messagebird-request-id": requestId,
+        "user-agent": req.header("user-agent") ?? null,
+        "content-type": req.header("content-type") ?? null,
+      },
+      processingStatus: "received",
+    });
+  } catch (rawLogErr) {
+    console.error("[Bird webhook] failed to write raw event log:", rawLogErr);
+  }
+
   const docId = requestId || messageId || db.collection("smsLogs").doc().id;
   const smsLogRef = db.collection("smsLogs").doc(docId);
 
