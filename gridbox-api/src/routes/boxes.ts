@@ -51,34 +51,6 @@ async function readStorageFileContent(storagePath?: string): Promise<{ buffer: B
   };
 }
 
-function applyPortalOverrides(box: any) {
-  if (box.id === "gbox-005") {
-    return {
-      ...box,
-      displayName: "Gridbox Geel (actief)",
-      status: "online",
-      connectivitySummary: "Online en operationeel"
-    };
-  }
-
-  if (box.id === "gbox-004") {
-    return {
-      ...box,
-      displayName: "Gridbox Geel (oud model)",
-      status: "offline",
-      canOpen: false,
-      connectivitySummary: "Niet actief",
-      hardwareSummary: "Legacy box",
-      availableActions: {
-        ...(box.availableActions || {}),
-        open: false
-      }
-    };
-  }
-
-  return box;
-}
-
 function getStatusCode(error: unknown): number {
   if (typeof error === "object" && error !== null && "statusCode" in error) {
     const value = (error as any).statusCode;
@@ -207,7 +179,7 @@ router.get("/portal/boxes", async (req, res) => {
           }
         };
       })
-      .map(applyPortalOverrides);
+;
 
     return res.json({
       items,
@@ -280,9 +252,7 @@ router.get("/portal/boxes/:id", async (req, res) => {
 
     const siteDoc = rawSiteId ? await getSiteById(rawSiteId) : null;
 
-    const detail = applyPortalOverrides(
-      mapFirestoreBoxToPortalBoxDetail(boxDoc, siteDoc || undefined)
-    );
+    const detail = mapFirestoreBoxToPortalBoxDetail(boxDoc, siteDoc || undefined);
 
     return res.json({
       ...detail,
@@ -962,19 +932,19 @@ router.post("/portal/boxes/:id/open", async (req, res) => {
       });
     }
 
-    if (boxId === "gbox-004") {
-      return res.status(403).json({
-        error: "OPEN_NOT_ALLOWED",
-        message: "Open-actie niet toegelaten"
-      });
-    }
-
     const boxDoc = await getBoxById(boxId);
 
     if (!boxDoc) {
       return res.status(404).json({
         error: "BOX_NOT_FOUND",
         message: "Box niet gevonden"
+      });
+    }
+
+    if (boxDoc.data.active === false) {
+      return res.status(403).json({
+        error: "BOX_INACTIVE",
+        message: "Deze box is niet actief"
       });
     }
 
@@ -1054,19 +1024,19 @@ router.post("/portal/boxes/:id/close", async (req, res) => {
       });
     }
 
-    if (boxId === "gbox-004") {
-      return res.status(403).json({
-        error: "CLOSE_NOT_ALLOWED",
-        message: "Close-actie niet toegelaten"
-      });
-    }
-
     const boxDoc = await getBoxById(boxId);
 
     if (!boxDoc) {
       return res.status(404).json({
         error: "BOX_NOT_FOUND",
         message: "Box niet gevonden"
+      });
+    }
+
+    if (boxDoc.data.active === false) {
+      return res.status(403).json({
+        error: "BOX_INACTIVE",
+        message: "Deze box is niet actief"
       });
     }
 

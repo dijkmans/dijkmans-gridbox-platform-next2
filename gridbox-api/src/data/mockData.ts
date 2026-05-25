@@ -73,31 +73,6 @@ export const mockEventsByBoxId: Record<string, PortalEvent[]> = {
       severity: "warning"
     }
   ],
-  "gbox-004": [
-    {
-      id: "evt-2001",
-      type: "heartbeat_delayed",
-      timestamp: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
-      label: "Heartbeat vertraagd",
-      severity: "warning"
-    }
-  ],
-  "gbox-005": [
-    {
-      id: "evt-1001",
-      type: "heartbeat",
-      timestamp: new Date().toISOString(),
-      label: "Heartbeat ontvangen",
-      severity: "info"
-    },
-    {
-      id: "evt-1002",
-      type: "relay_open",
-      timestamp: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
-      label: "Relais geopend",
-      severity: "info"
-    }
-  ]
 };
 
 export const mockBoxDetailsById: Record<string, PortalBoxDetail> = {
