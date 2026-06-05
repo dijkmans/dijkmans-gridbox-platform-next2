@@ -165,6 +165,32 @@ exports.onShareStatusChanged = onDocumentWritten({
         } else {
             console.log(`Succesvol SMS verstuurd naar ${phoneNumber}`);
 
+            let smsMessageId = null;
+            try {
+                const sendResult = await response.json();
+                smsMessageId = sendResult && sendResult.id ? sendResult.id : null;
+            } catch (parseErr) {
+                console.warn('[BIRD] kon send-response niet parsen:', parseErr.message);
+            }
+
+            // Bewaar de Bird message-id + initiële delivery-status op het share-document zelf.
+            // De delivery-webhook werkt smsStatus later bij naar delivered/failed.
+            await event.data.after.ref.set({
+                smsMessageId,
+                smsStatus: 'sent',
+                smsStatusAt: admin.firestore.FieldValue.serverTimestamp(),
+                smsStatusReason: null
+            }, { merge: true });
+
+            // Mapping messageId -> share zodat /webhooks/bird/delivery de share direct terugvindt.
+            if (smsMessageId) {
+                await db.collection('smsDeliveryIndex').doc(smsMessageId).set({
+                    boxId,
+                    phoneNumber: event.params.phoneNumber,
+                    createdAt: admin.firestore.FieldValue.serverTimestamp()
+                });
+            }
+
             await upsertBirdConversation(phoneNumber, WORKSPACE_ID, CHANNEL_ID, API_KEY).catch(err => {
                 console.warn('[BIRD] upsertConversation error:', err.message);
             });
@@ -176,7 +202,8 @@ exports.onShareStatusChanged = onDocumentWritten({
                 timestamp: admin.firestore.FieldValue.serverTimestamp(),
                 boxId,
                 trigger: 'share-invitation',
-                templateName: 'invitation'
+                templateName: 'invitation',
+                smsMessageId
             });
         }
 

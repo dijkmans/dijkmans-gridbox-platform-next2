@@ -364,4 +364,144 @@ router.post("/webhooks/bird/inbound", async (req, res) => {
   }
 });
 
+// Map een ruwe Bird message-status naar de drie UI-statussen.
+function mapBirdDeliveryStatus(raw: string | null): "delivered" | "sent" | "failed" | null {
+  if (!raw) return null;
+  const s = raw.toLowerCase();
+
+  if (s.includes("deliver") && s.includes("fail")) return "failed";
+  if (s.includes("fail") || s.includes("reject") || s.includes("undeliver")) return "failed";
+  if (s.includes("deliver")) return "delivered";
+  if (s.includes("sent") || s.includes("accept") || s.includes("send") || s.includes("process")) {
+    return "sent";
+  }
+  return null;
+}
+
+// Rang om out-of-order delivery-events af te handelen: terminale status niet
+// terugzetten naar een eerdere fase.
+function statusRank(status: string | null | undefined): number {
+  if (status === "delivered" || status === "failed") return 2;
+  if (status === "sent") return 1;
+  return 0;
+}
+
+router.post("/webhooks/bird/delivery", async (req, res) => {
+  console.log("[Bird delivery] raw body:", JSON.stringify(req.body, null, 2));
+
+  const body = req.body ?? {};
+  const payload = body?.payload ?? body;
+
+  const messageId =
+    payload?.id ??
+    payload?.message?.id ??
+    payload?.messageId ??
+    body?.message?.id ??
+    body?.id ??
+    null;
+
+  const rawStatus =
+    payload?.status ??
+    payload?.message?.status ??
+    body?.status ??
+    null;
+
+  const reason =
+    payload?.reason ??
+    payload?.statusReason ??
+    payload?.failureReason ??
+    payload?.error?.message ??
+    null;
+
+  const db = getFirestore();
+  const requestId = req.header("messagebird-request-id") ?? null;
+
+  try {
+    await db.collection("birdWebhookEvents").add({
+      receivedAt: FieldValue.serverTimestamp(),
+      kind: "delivery",
+      messageId,
+      rawStatus,
+      rawBody: body,
+      headers: {
+        "messagebird-request-id": requestId,
+        "user-agent": req.header("user-agent") ?? null,
+        "content-type": req.header("content-type") ?? null,
+      },
+    });
+  } catch (rawLogErr) {
+    console.error("[Bird delivery] failed to write raw event log:", rawLogErr);
+  }
+
+  if (!messageId) {
+    return res.status(200).json({ ok: true, ignored: true, reason: "no-message-id" });
+  }
+
+  const mappedStatus = mapBirdDeliveryStatus(rawStatus);
+  if (!mappedStatus) {
+    return res
+      .status(200)
+      .json({ ok: true, ignored: true, reason: "unmapped-status", rawStatus });
+  }
+
+  try {
+    const indexSnap = await db.collection("smsDeliveryIndex").doc(messageId).get();
+
+    if (!indexSnap.exists) {
+      return res
+        .status(200)
+        .json({ ok: true, ignored: true, reason: "unknown-message-id", messageId });
+    }
+
+    const { boxId, phoneNumber } = indexSnap.data() as {
+      boxId?: string;
+      phoneNumber?: string;
+    };
+
+    if (!boxId || !phoneNumber) {
+      return res
+        .status(200)
+        .json({ ok: true, ignored: true, reason: "incomplete-index", messageId });
+    }
+
+    const shareRef = db
+      .collection("boxes")
+      .doc(boxId)
+      .collection("shares")
+      .doc(phoneNumber);
+    const shareSnap = await shareRef.get();
+
+    if (!shareSnap.exists) {
+      return res
+        .status(200)
+        .json({ ok: true, ignored: true, reason: "share-not-found", messageId });
+    }
+
+    const currentStatus = shareSnap.data()?.smsStatus as string | undefined;
+    if (statusRank(mappedStatus) < statusRank(currentStatus)) {
+      return res.status(200).json({
+        ok: true,
+        ignored: true,
+        reason: "stale-status",
+        currentStatus,
+        mappedStatus,
+      });
+    }
+
+    await shareRef.set(
+      {
+        smsStatus: mappedStatus,
+        smsStatusAt: FieldValue.serverTimestamp(),
+        smsStatusReason: reason ?? null,
+      },
+      { merge: true }
+    );
+
+    return res.status(200).json({ ok: true, boxId, smsStatus: mappedStatus });
+  } catch (err) {
+    console.error("[Bird delivery] processing failed:", err);
+    return res.status(500).json({ ok: false });
+  }
+});
+
 export default router;

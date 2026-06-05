@@ -340,7 +340,14 @@ router.get("/portal/boxes/:id/shares", async (req, res) => {
           email: typeof data.email === "string" ? data.email : null,
           role: typeof data.role === "string" ? data.role : null,
           addedBy: typeof data.addedBy === "string" ? data.addedBy : null,
-          createdAt: typeof data.createdAt === "string" ? data.createdAt : null
+          createdAt: typeof data.createdAt === "string" ? data.createdAt : null,
+          smsStatus: typeof data.smsStatus === "string" ? data.smsStatus : null,
+          smsStatusAt:
+            data.smsStatusAt && typeof data.smsStatusAt.toMillis === "function"
+              ? data.smsStatusAt.toMillis()
+              : null,
+          smsStatusReason:
+            typeof data.smsStatusReason === "string" ? data.smsStatusReason : null
         };
       })
       .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));

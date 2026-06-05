@@ -327,6 +327,30 @@ function PageContentRouter() {
                     }`}>
                       {s.active ? "Actief" : "Klaargezet"}
                     </span>
+                    {s.smsStatus === "delivered" && (
+                      <span
+                        title={s.smsStatusReason || undefined}
+                        className="rounded-full px-3 py-1 text-sm font-semibold bg-emerald-50 border border-emerald-300 text-emerald-800"
+                      >
+                        Bezorgd
+                      </span>
+                    )}
+                    {s.smsStatus === "sent" && (
+                      <span
+                        title={s.smsStatusReason || undefined}
+                        className="rounded-full px-3 py-1 text-sm font-semibold bg-slate-100 border border-slate-300 text-slate-600"
+                      >
+                        Verzonden
+                      </span>
+                    )}
+                    {s.smsStatus === "failed" && (
+                      <span
+                        title={s.smsStatusReason || undefined}
+                        className="rounded-full px-3 py-1 text-sm font-semibold bg-red-50 border border-red-300 text-red-800"
+                      >
+                        Bezorging mislukt
+                      </span>
+                    )}
                     {!s.active && (
                       <button
                         onClick={() => handleActivateShare(s.id)}
